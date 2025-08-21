@@ -9,7 +9,9 @@ interface AuthLayoutProps {
 }
 
 export default function AuthSplitLayout({ children, title, description }: PropsWithChildren<AuthLayoutProps>) {
-    const { name, quote } = usePage<SharedData>().props;
+    // props may include custom page fields (name, quote) — cast to any for now
+    const pageProps: any = usePage<SharedData>().props as any;
+    const { name, quote } = pageProps;
 
     return (
         <div className="relative grid h-dvh flex-col items-center justify-center px-8 sm:px-0 lg:max-w-none lg:grid-cols-2 lg:px-0">

@@ -49,6 +49,17 @@ class LoginRequest extends FormRequest
             ]);
         }
 
+        // 追加: ログイン成功後にユーザーのステータスをチェックし、退職ユーザーはログイン不可とする
+        $user = Auth::user();
+        if ($user && isset($user->status) && $user->status === 'retired') {
+            // ログアウトしてセッションをクリア
+            Auth::guard()->logout();
+
+            throw ValidationException::withMessages([
+                'email' => 'すでに退職しているためログインできません。',
+            ]);
+        }
+
         RateLimiter::clear($this->throttleKey());
     }
 
@@ -80,6 +91,6 @@ class LoginRequest extends FormRequest
      */
     public function throttleKey(): string
     {
-        return Str::transliterate(Str::lower($this->string('email')).'|'.$this->ip());
+        return Str::transliterate(Str::lower($this->string('email')) . '|' . $this->ip());
     }
 }

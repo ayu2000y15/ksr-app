@@ -3,13 +3,13 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+// ...existing code...
 import { Textarea } from '@/components/ui/textarea';
-import AuthenticatedLayout from '@/layouts/app-layout'; // 修正
-import { PageProps } from '@/types';
+import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
+// ...existing code...
 import { Head, Link, useForm } from '@inertiajs/react';
 
-export default function Create({ auth }: PageProps) {
+export default function Create() {
     const { data, setData, post, processing, errors, reset } = useForm({
         name: '',
         email: '',
@@ -26,8 +26,16 @@ export default function Create({ auth }: PageProps) {
         });
     };
 
+    // create page は認証情報を別ページで表示するため、ここではコピーロジックを持たない
+
+    const breadcrumbs = [
+        { title: 'ダッシュボード', href: route('dashboard') },
+        { title: 'ユーザー管理', href: route('users.index') },
+        { title: '新規作成', href: '' },
+    ];
+
     return (
-        <AuthenticatedLayout user={auth.user} header={<h2 className="text-xl leading-tight font-semibold text-gray-800">ユーザー新規作成</h2>}>
+        <AppSidebarLayout breadcrumbs={breadcrumbs}>
             <Head title="ユーザー新規作成" />
 
             <div className="py-12">
@@ -58,16 +66,40 @@ export default function Create({ auth }: PageProps) {
                                     <Label htmlFor="status">
                                         ステータス <span className="text-red-500">*</span>
                                     </Label>
-                                    <Select value={data.status} onValueChange={(value) => setData('status', value)}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="ステータスを選択" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="active">アクティブ</SelectItem>
-                                            <SelectItem value="retired">退職</SelectItem>
-                                            <SelectItem value="shared">共有アカウント</SelectItem>
-                                        </SelectContent>
-                                    </Select>
+                                    <div className="mt-2 flex items-center gap-6">
+                                        <label className="flex items-center gap-2">
+                                            <input
+                                                type="radio"
+                                                name="status"
+                                                value="active"
+                                                checked={data.status === 'active'}
+                                                onChange={() => setData('status', 'active')}
+                                            />
+                                            <span>アクティブ</span>
+                                        </label>
+
+                                        <label className="flex items-center gap-2">
+                                            <input
+                                                type="radio"
+                                                name="status"
+                                                value="retired"
+                                                checked={data.status === 'retired'}
+                                                onChange={() => setData('status', 'retired')}
+                                            />
+                                            <span>退職</span>
+                                        </label>
+
+                                        <label className="flex items-center gap-2">
+                                            <input
+                                                type="radio"
+                                                name="status"
+                                                value="shared"
+                                                checked={data.status === 'shared'}
+                                                onChange={() => setData('status', 'shared')}
+                                            />
+                                            <span>共有アカウント</span>
+                                        </label>
+                                    </div>
                                     <InputError message={errors.status} className="mt-2" />
                                 </div>
 
@@ -99,8 +131,10 @@ export default function Create({ auth }: PageProps) {
                             </CardFooter>
                         </Card>
                     </form>
+
+                    {/* 登録完了の認証情報は専用ページに表示するため、ここでは表示しない */}
                 </div>
             </div>
-        </AuthenticatedLayout>
+        </AppSidebarLayout>
     );
 }

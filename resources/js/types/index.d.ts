@@ -46,6 +46,8 @@ export interface User {
     must_change_password: boolean;
     created_at: string;
     updated_at: string;
+    // optional UI fields
+    avatar?: string | undefined;
 }
 
 export interface Role {
@@ -361,4 +363,24 @@ export interface Attachment {
     original_name: string;
     created_at: string;
     updated_at: string;
+}
+
+// --- 3. UI / layout helper types ---
+
+// ナビゲーション項目
+export interface NavItem {
+    title: string;
+    href: string;
+    icon?: any; // lucide-react component or similar
+}
+
+// パンくずデータ
+export interface BreadcrumbItem {
+    title: string;
+    href?: string;
+}
+
+// ページ共有データ（usePage の generic に使用する想定）
+export interface SharedData extends PageProps<Record<string, unknown>> {
+    sidebarOpen?: boolean;
 }

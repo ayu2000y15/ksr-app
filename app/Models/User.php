@@ -14,6 +14,7 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'temporary_password',
         'phone_number',
         'line_name',
         'status',
@@ -31,6 +32,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'temporary_password_expires_at' => 'datetime',
             'must_change_password' => 'boolean',
         ];
     }
@@ -38,5 +40,13 @@ class User extends Authenticatable
     public function roles()
     {
         return $this->belongsToMany(Role::class);
+    }
+
+    /**
+     * Send the password reset notification using our custom notification (Japanese subject/body).
+     */
+    public function sendPasswordResetNotification($token)
+    {
+        $this->notify(new \App\Notifications\ResetPasswordNotification($token));
     }
 }

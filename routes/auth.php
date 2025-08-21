@@ -9,6 +9,8 @@ use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Auth\VerifyEmailController;
 use Illuminate\Support\Facades\Route;
+use Inertia\Inertia;
+use App\Http\Controllers\Auth\ChangePasswordController;
 
 Route::middleware('guest')->group(function () {
     Route::get('register', [RegisteredUserController::class, 'create'])
@@ -54,4 +56,12 @@ Route::middleware('auth')->group(function () {
 
     Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])
         ->name('logout');
+
+    // 初回パスワード変更用ページ
+    Route::get('password/change', function () {
+        return Inertia::render('auth/change-password');
+    })->name('password.change');
+
+    // 初回パスワード変更の POST ハンドラ
+    Route::post('password/change', [ChangePasswordController::class, 'update'])->name('password.change.store');
 });

@@ -5,7 +5,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AuthLayout from '@/layouts/auth-layout';
-import { Form, Head } from '@inertiajs/react';
+import { Form, Head, usePage } from '@inertiajs/react';
 import { LoaderCircle } from 'lucide-react';
 
 interface LoginProps {
@@ -14,6 +14,8 @@ interface LoginProps {
 }
 
 export default function Login({ status, canResetPassword }: LoginProps) {
+    const pageProps: any = usePage().props;
+    const flash = pageProps.flash || null;
     return (
         <AuthLayout title="ログイン" description="メールアドレスとパスワードを入力してください">
             <Head title="ログイン" />
@@ -69,7 +71,7 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                             </Button>
                         </div>
 
-                        <div className="text-muted-foreground text-center text-sm">
+                        <div className="text-center text-sm text-muted-foreground">
                             アカウントをお持ちでないですか？{' '}
                             <TextLink href={route('register')} tabIndex={5}>
                                 新規登録
@@ -80,6 +82,7 @@ export default function Login({ status, canResetPassword }: LoginProps) {
             </Form>
 
             {status && <div className="mb-4 text-center text-sm font-medium text-green-600">{status}</div>}
+            {flash && flash.error && <div className="mb-4 text-center text-sm font-medium text-red-600">{flash.error}</div>}
         </AuthLayout>
     );
 }
