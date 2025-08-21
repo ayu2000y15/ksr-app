@@ -44,7 +44,7 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                                     <Label htmlFor="password">パスワード</Label>
                                     {canResetPassword && (
                                         <TextLink href={route('password.request')} className="ml-auto text-sm" tabIndex={5}>
-                                            パスワードを忘れましたか？
+                                            パスワードを忘れた場合はこちら
                                         </TextLink>
                                     )}
                                 </div>
@@ -71,12 +71,12 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                             </Button>
                         </div>
 
-                        <div className="text-center text-sm text-muted-foreground">
+                        {/* <div className="text-center text-sm text-muted-foreground">
                             アカウントをお持ちでないですか？{' '}
                             <TextLink href={route('register')} tabIndex={5}>
                                 新規登録
                             </TextLink>
-                        </div>
+                        </div> */}
                     </>
                 )}
             </Form>

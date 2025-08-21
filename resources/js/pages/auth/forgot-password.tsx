@@ -10,7 +10,7 @@ import AuthLayout from '@/layouts/auth-layout';
 
 export default function ForgotPassword({ status }: { status?: string }) {
     return (
-        <AuthLayout title="パスワードを忘れましたか？" description="パスワードリセット用のリンクを送信します">
+        <AuthLayout title="パスワードを忘れた場合" description="パスワードリセット用のリンクを送信します">
             <Head title="パスワードリセット" />
 
             {status && <div className="mb-4 text-center text-sm font-medium text-green-600">{status}</div>}
@@ -36,7 +36,7 @@ export default function ForgotPassword({ status }: { status?: string }) {
                     )}
                 </Form>
 
-                <div className="text-muted-foreground space-x-1 text-center text-sm">
+                <div className="space-x-1 text-center text-sm text-muted-foreground">
                     <span>または、</span>
                     <TextLink href={route('login')}>ログイン画面に戻る</TextLink>
                 </div>
