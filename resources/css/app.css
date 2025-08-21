@@ -45,7 +45,7 @@
     --popover-foreground: oklch(0.145 0 0);
 
     /* Primary: ボタン背景を紺色、文字を白に設定 */
-    --primary: oklch(0.29 0.05 258); /* 紺色 */
+    --primary: oklch(0% 0 0); /* 黒 */
     --primary-foreground: oklch(1 0 0); /* 白 */
 
     --secondary: oklch(0.97 0 0);
