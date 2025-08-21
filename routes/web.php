@@ -17,18 +17,15 @@ use Inertia\Inertia;
 |
 */
 
+// ルートURLにアクセスされたら、ログイン画面にリダイレクト
 Route::get('/', function () {
-    return Inertia::render('welcome', [
-        'canLogin' => Route::has('login'),
-        'canRegister' => Route::has('register'),
-        'laravelVersion' => Application::VERSION,
-        'phpVersion' => PHP_VERSION,
-    ]);
+    return redirect()->route('login');
 });
 
 Route::get('/dashboard', function () {
-    return Inertia::render('dashboard');
+    return Inertia::render('dashboard'); // ファイル名を小文字に
 })->middleware(['auth', 'verified'])->name('dashboard');
+
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
