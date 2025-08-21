@@ -41,7 +41,7 @@ export default function EditUserPage() {
         } else {
             // fallback to post with method override by including _method in payload
             // cast to any to satisfy useForm typings
-            post(route('users.update', user.id), ( { data: { ...data, _method: 'PATCH' } } as any ));
+            post(route('users.update', user.id), { data: { ...data, _method: 'PATCH' } } as any);
         }
     };
 
