@@ -17,7 +17,7 @@ class DatabaseSeeder extends Seeder
         $this->call(PermissionsSeeder::class);
 
         // 👈 次に管理者ユーザーを作成
-        User::factory()->create([
+        User::create([
             'name' => '管理者',
             'email' => 'ayuka.n@cosplatform.co.jp',
             'password' => bcrypt('password'),
