@@ -343,8 +343,8 @@ export default function Index({
                                     const isToday = tDate.getTime() === todayDate.getTime();
                                     const isPastOnly = tDate.getTime() < todayDate.getTime();
                                     if (isToday) rowBg = 'bg-green-100';
-                                    // show time when it's past/today, when already marked as leave, or when the action is '休暇申請' (i.e. not immediate)
-                                    const showTime = pastOrToday || (isUserLeave ?? false) || (!immediate && !pastOrToday);
+                                    // show time only when NOT marked as leave, and when it's past/today or a non-immediate application for future
+                                    const showTime = !isUserLeave && (pastOrToday || (!immediate && !pastOrToday));
 
                                     // build a responsive row: left=date(+mobile info), center=desktop info (badge/time), right=actions
                                     const sd = shiftDetailsMap[iso];
