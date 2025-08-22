@@ -13,11 +13,17 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        // 最初に権限を作成
+        $this->call(PermissionsSeeder::class);
 
+        // 👈 次に管理者ユーザーを作成
         User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
+            'name' => '管理者',
+            'email' => 'ayuka.n@cosplatform.co.jp',
+            'password' => bcrypt('password'),
         ]);
+
+        // 👈 最後に、作成したユーザーに管理者ロールを割り当て
+        $this->call(RoleSeeder::class);
     }
 }

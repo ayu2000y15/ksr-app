@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use Spatie\Permission\Models\Permission;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -43,10 +44,31 @@ class HandleInertiaRequests extends Middleware
             ...parent::share($request),
             'name' => config('app.name'),
             'quote' => ['message' => trim($message), 'author' => trim($author)],
-            'auth' => [
-                'user' => $request->user(),
-            ],
-            'ziggy' => fn (): array => [
+            'auth' => function () use ($request) {
+                $user = $request->user();
+
+                if (!$user) {
+                    return null;
+                }
+
+                // ユーザーが「システム管理者」ロールを持っているか確認
+                $isSuperAdmin = $user->roles()->where('name', 'システム管理者')->exists();
+
+                return [
+                    'user' => [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'email' => $user->email,
+                    ],
+                    // Whether the user is a system administrator (frontend can bypass checks)
+                    'isSuperAdmin' => $isSuperAdmin,
+                    // システム管理者なら全ての権限を、そうでなければそのユーザーが持つ権限を渡す
+                    'permissions' => $isSuperAdmin
+                        ? Permission::pluck('name')->toArray() // 全ての権限名を取得
+                        : $user->getAllPermissions()->pluck('name'), // ユーザーが持つ権限を取得
+                ];
+            },
+            'ziggy' => fn(): array => [
                 ...(new Ziggy)->toArray(),
                 'location' => $request->url(),
             ],

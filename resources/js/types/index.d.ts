@@ -4,6 +4,8 @@
 export type PageProps<T extends Record<string, unknown> = Record<string, unknown>> = T & {
     auth: {
         user: User;
+        permissions?: string[];
+        isSuperAdmin?: boolean;
     };
     flash: {
         success?: string;
@@ -48,6 +50,8 @@ export interface User {
     updated_at: string;
     // optional UI fields
     avatar?: string | undefined;
+    // relations
+    roles?: Role[];
 }
 
 export interface Role {
@@ -55,6 +59,8 @@ export interface Role {
     name: string;
     description: string | null;
     order_column: number;
+    // relations
+    permissions?: Permission[];
 }
 
 export interface Permission {
@@ -371,7 +377,10 @@ export interface Attachment {
 export interface NavItem {
     title: string;
     href: string;
-    icon?: any; // lucide-react component or similar
+    // Icon components from lucide-react are renderable in JSX
+    icon?: import('react').ComponentType<any>;
+    // Optional permission name required to view this nav item
+    permission?: string;
 }
 
 // パンくずデータ

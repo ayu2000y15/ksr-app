@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Mail;
@@ -20,12 +21,19 @@ class UserController extends Controller
      */
     public function index(Request $request)
     {
+        if (Auth::user()->hasRole('システム管理者')) {
+            // システム管理者の場合は権限チェックをバイパス
+        } else {
+            $this->authorize('viewAny', User::class);
+        }
+        
         // 並び替えの対象となるカラムをホワイトリストで定義
         $sortableColumns = ['id', 'name', 'email', 'status', 'created_at'];
         $sort = in_array($request->query('sort', 'id'), $sortableColumns) ? $request->query('sort', 'id') : 'id';
         $direction = in_array($request->query('direction', 'asc'), ['asc', 'desc']) ? $request->query('direction', 'asc') : 'asc';
 
-        $users = User::orderBy($sort, $direction)
+        $users = User::with('roles')
+            ->orderBy($sort, $direction)
             ->simplePaginate(50) // ページネーションを追加
             ->withQueryString(); // クエリパラメータを維持
 
@@ -40,6 +48,11 @@ class UserController extends Controller
      */
     public function create()
     {
+        if (Auth::user()->hasRole('システム管理者')) {
+            // システム管理者の場合は権限チェックをバイパス
+        } else {
+            $this->authorize('create', User::class);
+        }
         // セッションにフラッシュされた credentials があれば props として渡す
         $credentials = session('credentials') ?: null;
         return Inertia::render('users/create', [
@@ -96,7 +109,7 @@ class UserController extends Controller
 
         // send mail
         try {
-            \Mail::to($user->email)->send(new \App\Mail\TemporaryCredentialsMail($user, $temporary));
+            Mail::to($user->email)->send(new \App\Mail\TemporaryCredentialsMail($user, $temporary));
         } catch (\Throwable $e) {
             if (request()->wantsJson()) {
                 return response()->json(['error' => 'メール送信に失敗しました。'], 500);
@@ -156,6 +169,11 @@ class UserController extends Controller
      */
     public function edit(User $user)
     {
+        if (Auth::user()->hasRole('システム管理者')) {
+            // システム管理者の場合は権限チェックをバイパス
+        } else {
+            $this->authorize('view', $user);
+        }
         return Inertia::render('users/edit', [
             'user' => $user,
         ]);
@@ -166,6 +184,11 @@ class UserController extends Controller
      */
     public function store(Request $request)
     {
+        if (Auth::user()->hasRole('システム管理者')) {
+            // システム管理者の場合は権限チェックをバイパス
+        } else {
+            $this->authorize('create', User::class);
+        }
         $messages = [
             'name.required' => '名前は必須です。',
             'name.string' => '名前は文字列で指定してください。',
@@ -231,6 +254,11 @@ class UserController extends Controller
      */
     public function update(Request $request, User $user)
     {
+        if (Auth::user()->hasRole('システム管理者')) {
+            // システム管理者の場合は権限チェックをバイパス
+        } else {
+            $this->authorize('update', $user);
+        }
         $messages = [
             'name.required' => '名前は必須です。',
             'name.string' => '名前は文字列で指定してください。',
@@ -268,7 +296,11 @@ class UserController extends Controller
      */
     public function destroy(User $user)
     {
-        // ここで必要なら権限チェックや関連データの処理を追加
+        if (Auth::user()->hasRole('システム管理者')) {
+            // システム管理者の場合は権限チェックをバイパス
+        } else {
+            $this->authorize('delete', $user);
+        }
         $user->delete();
 
         return Redirect::route('users.index')->with('success', 'ユーザーを削除しました。');

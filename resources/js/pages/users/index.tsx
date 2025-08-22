@@ -1,11 +1,12 @@
+import HeadingSmall from '@/components/heading-small';
 import { Badge } from '@/components/ui/badge'; // Badgeコンポーネントをインポート
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { BreadcrumbItem, PageProps, PaginatedResponse, User } from '@/types';
-import { Head, Link, router } from '@inertiajs/react';
-import { ArrowDown, ArrowUp, ArrowUpDown, LoaderCircle, Trash } from 'lucide-react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
+import { ArrowDown, ArrowUp, ArrowUpDown, LoaderCircle, Plus, Trash } from 'lucide-react';
 import { ReactNode, useEffect, useState } from 'react';
 
 // パンくずリストの定義
@@ -96,17 +97,34 @@ export default function Index({ users: initialUsers, queryParams = {} }: PagePro
         }
     };
 
+    const page = usePage();
+    const { permissions } = page.props as any;
+
+    // 権限チェック関数
+    const canViewUsers = permissions?.user?.view || permissions?.is_system_admin;
+    const canCreateUsers = permissions?.user?.create || permissions?.is_system_admin;
+    const canUpdateUsers = permissions?.user?.update || permissions?.is_system_admin;
+    const canDeleteUsers = permissions?.user?.delete || permissions?.is_system_admin;
+
     return (
         <AppSidebarLayout breadcrumbs={breadcrumbs}>
             <Head title="ユーザー管理" />
 
             <div className="p-4 sm:p-6 lg:p-8">
+                <div className="mb-6">
+                    <HeadingSmall title="ユーザー管理" description="ユーザーの一覧・編集・削除を行う。" />
+                </div>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between">
                         <CardTitle>ユーザー一覧</CardTitle>
-                        <Link href={route('users.create')}>
-                            <Button>ユーザー新規作成</Button>
-                        </Link>
+                        {canCreateUsers && (
+                            <Link href={route('users.create')}>
+                                <Button>
+                                    <Plus className="mr-0 h-4 w-4 sm:mr-2" />
+                                    <span className="hidden sm:inline">ユーザー新規作成</span>
+                                </Button>
+                            </Link>
+                        )}
                     </CardHeader>
                     <CardContent>
                         <Table>
@@ -143,39 +161,52 @@ export default function Index({ users: initialUsers, queryParams = {} }: PagePro
                                 {users.map((user) => (
                                     <TableRow key={user.id} className="hover:bg-gray-50">
                                         <TableCell
-                                            className="cursor-pointer"
-                                            onClick={() => router.get(route('users.edit', user.id), {}, { preserveScroll: true })}
+                                            className={canUpdateUsers ? 'cursor-pointer' : ''}
+                                            onClick={() =>
+                                                canUpdateUsers && router.get(route('users.edit', user.id), {}, { preserveScroll: true })
+                                            }
                                         >
                                             {user.id}
                                         </TableCell>
                                         <TableCell
-                                            className="cursor-pointer"
-                                            onClick={() => router.get(route('users.edit', user.id), {}, { preserveScroll: true })}
+                                            className={canUpdateUsers ? "cursor-pointer" : ""}
+                                            onClick={() => canUpdateUsers && router.get(route('users.edit', user.id), {}, { preserveScroll: true })}
                                         >
-                                            {user.name}
+                                            <div className="flex items-center gap-3">
+                                                <span>{user.name}</span>
+                                                <span className="text-sm text-muted-foreground">
+                                                    {user.roles && user.roles.length > 0 ? (
+                                                        user.roles.map((r) => r.name).join(', ')
+                                                    ) : (
+                                                        <span className="text-xs">未登録</span>
+                                                    )}
+                                                </span>
+                                            </div>
                                         </TableCell>
                                         <TableCell
-                                            className="cursor-pointer"
-                                            onClick={() => router.get(route('users.edit', user.id), {}, { preserveScroll: true })}
+                                            className={canUpdateUsers ? "cursor-pointer" : ""}
+                                            onClick={() => canUpdateUsers && router.get(route('users.edit', user.id), {}, { preserveScroll: true })}
                                         >
                                             {user.line_name}
                                         </TableCell>
                                         <TableCell
-                                            className="cursor-pointer"
-                                            onClick={() => router.get(route('users.edit', user.id), {}, { preserveScroll: true })}
+                                            className={canUpdateUsers ? "cursor-pointer" : ""}
+                                            onClick={() => canUpdateUsers && router.get(route('users.edit', user.id), {}, { preserveScroll: true })}
                                         >
                                             {renderStatusBadge(user.status)}
                                         </TableCell>
                                         <TableCell
-                                            className="cursor-pointer"
-                                            onClick={() => router.get(route('users.edit', user.id), {}, { preserveScroll: true })}
+                                            className={canUpdateUsers ? "cursor-pointer" : ""}
+                                            onClick={() => canUpdateUsers && router.get(route('users.edit', user.id), {}, { preserveScroll: true })}
                                         >
                                             {new Date(user.created_at).toLocaleDateString()}
                                         </TableCell>
                                         <TableCell className="text-right">
-                                            <Button variant="destructive" size="sm" onClick={() => confirmAndDelete(user)}>
-                                                <Trash className="mr-2 h-4 w-4" /> 削除
-                                            </Button>
+                                            {canDeleteUsers && (
+                                                <Button variant="destructive" size="sm" onClick={() => confirmAndDelete(user)}>
+                                                    <Trash className="mr-2 h-4 w-4" /> 削除
+                                                </Button>
+                                            )}
                                         </TableCell>
                                     </TableRow>
                                 ))}

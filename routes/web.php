@@ -6,6 +6,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Middleware\EnsureNotRetired;
+use App\Http\Middleware\EnsurePasswordChanged;
 
 /*
 |--------------------------------------------------------------------------
@@ -29,7 +30,7 @@ Route::get('/dashboard', function () {
 
 
 
-Route::middleware(['auth', EnsureNotRetired::class])->group(function () {
+Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class])->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
@@ -51,6 +52,13 @@ Route::middleware(['auth', EnsureNotRetired::class])->group(function () {
     Route::get('/users/{user}/edit', [UserController::class, 'edit'])->name('users.edit');
     Route::patch('/users/{user}', [UserController::class, 'update'])->name('users.update');
     Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
+
+    // --- 管理画面（Inertiaページ） ---
+    Route::inertia('/admin/roles', 'admin/roles')->name('admin.roles');
+    Route::inertia('/admin/roles/create', 'admin/roles/create')->name('admin.roles.create');
+    Route::inertia('/admin/roles/{role}/edit', 'admin/roles/[id]/edit')->name('admin.roles.edit');
+    Route::inertia('/admin/role-permissions', 'admin/role-permissions')->name('admin.role-permissions');
+    Route::inertia('/admin/user-roles', 'admin/user-roles')->name('admin.user-roles');
 });
 
 require __DIR__ . '/auth.php';
