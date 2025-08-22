@@ -63,6 +63,44 @@ export default function RolePermissionsPage() {
         setToast({ message: '保存しました', type: 'success' });
     };
 
+    // グループ化: permission.name の最初の '.' まででグルーピング
+    const groupedPermissions = permissions.reduce((acc: Record<string, Permission[]>, perm) => {
+        const prefix = perm.name.split('.')[0] || 'その他';
+        if (!acc[prefix]) acc[prefix] = [];
+        acc[prefix].push(perm);
+        return acc;
+    }, {});
+
+    // グループキー -> 日本語ラベル
+    const GROUP_LABELS: Record<string, string> = {
+        user: 'ユーザー',
+        role: 'ロール',
+        permission: '権限',
+        shift: 'シフト管理',
+        shift_application: '休暇申請',
+        default_shift: 'デフォルトシフト',
+        user_shift_setting: 'ユーザー別休暇上限',
+        // 必要に応じてここに追加
+    };
+
+    const allSelected = permissions.length > 0 && permissions.every((p) => !!checked[p.id]);
+
+    const toggleAll = (value: boolean) => {
+        const map: Record<number, boolean> = {};
+        permissions.forEach((p) => (map[p.id] = value));
+        setChecked(map);
+    };
+
+    const toggleGroup = (groupKey: string, value: boolean) => {
+        setChecked((prev) => {
+            const next = { ...prev };
+            (groupedPermissions[groupKey] || []).forEach((p) => {
+                next[p.id] = value;
+            });
+            return next;
+        });
+    };
+
     const page = usePage();
     const authProps = page.props?.auth as unknown as { permissions?: string[] } | undefined;
     const authPermissions: string[] = authProps?.permissions ?? [];
@@ -100,27 +138,69 @@ export default function RolePermissionsPage() {
                             <div className="md:col-span-2">
                                 {selectedRole ? (
                                     <div>
-                                        <h3 className="mb-4 text-lg font-medium">{selectedRole.name} の権限</h3>
-                                        <div className="space-y-3">
-                                            {permissions.map((perm) => (
-                                                <div key={perm.id} className="flex items-center space-x-2">
-                                                    <Checkbox
-                                                        id={`perm-${perm.id}`}
-                                                        checked={!!checked[perm.id]}
-                                                        onCheckedChange={() => setChecked((prev) => ({ ...prev, [perm.id]: !prev[perm.id] }))}
-                                                    />
-                                                    <Label htmlFor={`perm-${perm.id}`} className="font-normal">
-                                                        {perm.name}
+                                        <div className="mb-4 flex items-center justify-between">
+                                            <h3 className="text-lg font-medium">{selectedRole.name} の権限</h3>
+                                            <div className="flex items-center space-x-4">
+                                                <div className="flex items-center space-x-2">
+                                                    <Checkbox id={`select-all`} checked={allSelected} onCheckedChange={(v) => toggleAll(!!v)} />
+                                                    <Label htmlFor={`select-all`} className="font-normal">
+                                                        全て選択
                                                     </Label>
                                                 </div>
-                                            ))}
+                                                {can('role.update') && (
+                                                    <Button onClick={handleSave} disabled={isSaving}>
+                                                        {isSaving ? '保存中...' : '保存'}
+                                                    </Button>
+                                                )}
+                                            </div>
                                         </div>
-                                        <div className="mt-6 flex justify-end">
-                                            {can('role.update') && (
-                                                <Button onClick={handleSave} disabled={isSaving}>
-                                                    {isSaving ? '保存中...' : '保存'}
-                                                </Button>
-                                            )}
+
+                                        <div className="space-y-3">
+                                            {Object.keys(groupedPermissions).map((groupKey) => {
+                                                const group = groupedPermissions[groupKey];
+                                                const groupChecked = group.every((p) => !!checked[p.id]);
+                                                const groupSome = group.some((p) => !!checked[p.id]);
+
+                                                return (
+                                                    <div key={groupKey} className="rounded border p-3">
+                                                        <div className="mb-2 flex items-center justify-between">
+                                                            <div className="flex items-center space-x-2">
+                                                                <Checkbox
+                                                                    id={`group-${groupKey}`}
+                                                                    checked={groupChecked}
+                                                                    onCheckedChange={(v) => toggleGroup(groupKey, !!v)}
+                                                                />
+                                                                <div className="flex items-center space-x-2">
+                                                                    <Label htmlFor={`group-${groupKey}`} className="font-medium">
+                                                                        {GROUP_LABELS[groupKey] || groupKey}
+                                                                    </Label>
+                                                                    {groupSome && !groupChecked && (
+                                                                        <span className="text-sm text-muted-foreground">(一部選択)</span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-sm text-muted-foreground">{group.length} 件</div>
+                                                        </div>
+
+                                                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                                            {group.map((perm) => (
+                                                                <div key={perm.id} className="flex items-center space-x-2">
+                                                                    <Checkbox
+                                                                        id={`perm-${perm.id}`}
+                                                                        checked={!!checked[perm.id]}
+                                                                        onCheckedChange={() =>
+                                                                            setChecked((prev) => ({ ...prev, [perm.id]: !prev[perm.id] }))
+                                                                        }
+                                                                    />
+                                                                    <Label htmlFor={`perm-${perm.id}`} className="font-normal">
+                                                                        {perm.name}
+                                                                    </Label>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                 ) : (

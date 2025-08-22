@@ -8,9 +8,14 @@ use Illuminate\Support\Facades\Log;
 use App\Models\User;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\Models\Permission;
+use App\Models\DefaultShift;
 use App\Policies\UserPolicy;
 use App\Policies\RolePolicy;
 use App\Policies\PermissionPolicy;
+use App\Policies\ShiftPolicy;
+use App\Policies\ShiftApplicationPolicy;
+use App\Policies\UserShiftSettingPolicy;
+use App\Policies\DefaultShiftPolicy;
 
 class AuthServiceProvider extends ServiceProvider
 {
@@ -23,6 +28,10 @@ class AuthServiceProvider extends ServiceProvider
         User::class => UserPolicy::class,
         Role::class => RolePolicy::class,
         Permission::class => PermissionPolicy::class,
+        \App\Models\Shift::class => ShiftPolicy::class,
+        \App\Models\ShiftApplication::class => ShiftApplicationPolicy::class,
+        \App\Models\UserShiftSetting::class => UserShiftSettingPolicy::class,
+        DefaultShift::class => DefaultShiftPolicy::class,
     ];
 
     /**

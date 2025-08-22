@@ -121,7 +121,7 @@ export default function Index({ users: initialUsers, queryParams = {} }: PagePro
                             <Link href={route('users.create')}>
                                 <Button>
                                     <Plus className="mr-0 h-4 w-4 sm:mr-2" />
-                                    <span className="hidden sm:inline">ユーザー新規作成</span>
+                                    <span className="hidden sm:inline">新規作成</span>
                                 </Button>
                             </Link>
                         )}
@@ -162,14 +162,12 @@ export default function Index({ users: initialUsers, queryParams = {} }: PagePro
                                     <TableRow key={user.id} className="hover:bg-gray-50">
                                         <TableCell
                                             className={canUpdateUsers ? 'cursor-pointer' : ''}
-                                            onClick={() =>
-                                                canUpdateUsers && router.get(route('users.edit', user.id), {}, { preserveScroll: true })
-                                            }
+                                            onClick={() => canUpdateUsers && router.get(route('users.edit', user.id), {}, { preserveScroll: true })}
                                         >
                                             {user.id}
                                         </TableCell>
                                         <TableCell
-                                            className={canUpdateUsers ? "cursor-pointer" : ""}
+                                            className={canUpdateUsers ? 'cursor-pointer' : ''}
                                             onClick={() => canUpdateUsers && router.get(route('users.edit', user.id), {}, { preserveScroll: true })}
                                         >
                                             <div className="flex items-center gap-3">
@@ -184,19 +182,19 @@ export default function Index({ users: initialUsers, queryParams = {} }: PagePro
                                             </div>
                                         </TableCell>
                                         <TableCell
-                                            className={canUpdateUsers ? "cursor-pointer" : ""}
+                                            className={canUpdateUsers ? 'cursor-pointer' : ''}
                                             onClick={() => canUpdateUsers && router.get(route('users.edit', user.id), {}, { preserveScroll: true })}
                                         >
                                             {user.line_name}
                                         </TableCell>
                                         <TableCell
-                                            className={canUpdateUsers ? "cursor-pointer" : ""}
+                                            className={canUpdateUsers ? 'cursor-pointer' : ''}
                                             onClick={() => canUpdateUsers && router.get(route('users.edit', user.id), {}, { preserveScroll: true })}
                                         >
                                             {renderStatusBadge(user.status)}
                                         </TableCell>
                                         <TableCell
-                                            className={canUpdateUsers ? "cursor-pointer" : ""}
+                                            className={canUpdateUsers ? 'cursor-pointer' : ''}
                                             onClick={() => canUpdateUsers && router.get(route('users.edit', user.id), {}, { preserveScroll: true })}
                                         >
                                             {new Date(user.created_at).toLocaleDateString()}

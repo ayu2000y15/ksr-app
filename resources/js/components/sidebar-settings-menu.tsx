@@ -1,6 +1,6 @@
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { Link, usePage } from '@inertiajs/react';
-import { Key, Shield, Users } from 'lucide-react';
+import { Calendar, Key, Shield, Users } from 'lucide-react';
 import * as React from 'react';
 
 export function SidebarSettingsMenu({ isCollapsed, currentPath }: { isCollapsed: boolean; currentPath: string }) {
@@ -19,6 +19,8 @@ export function SidebarSettingsMenu({ isCollapsed, currentPath }: { isCollapsed:
         { title: 'ロール管理', href: '/admin/roles', icon: Shield, permission: 'role.view' },
         { title: '権限設定', href: '/admin/role-permissions', icon: Key, permission: 'permission.view' },
         { title: 'ユーザーロール割当', href: '/admin/user-roles', icon: Users, permission: 'role.assign' },
+        { title: 'デフォルトシフト設定', href: '/admin/default-shifts', icon: Calendar, permission: 'default_shift.view' },
+        { title: 'ユーザー別休暇上限設定', href: '/admin/user-shift-settings', icon: Calendar, permission: 'user_shift_setting.view' },
         // 今後ここに追加
     ];
     return (

@@ -59,6 +59,55 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
     Route::inertia('/admin/roles/{role}/edit', 'admin/roles/[id]/edit')->name('admin.roles.edit');
     Route::inertia('/admin/role-permissions', 'admin/role-permissions')->name('admin.role-permissions');
     Route::inertia('/admin/user-roles', 'admin/user-roles')->name('admin.user-roles');
+
+    // --- 管理: デフォルトシフト設定 ---
+    Route::get('/admin/default-shifts', [App\Http\Controllers\DefaultShiftController::class, 'index'])->name('admin.default-shifts.index');
+    Route::get('/admin/default-shifts/create', [App\Http\Controllers\DefaultShiftController::class, 'create'])->name('admin.default-shifts.create');
+    Route::post('/admin/default-shifts', [App\Http\Controllers\DefaultShiftController::class, 'store'])->name('admin.default-shifts.store');
+    Route::get('/admin/default-shifts/{default_shift}/edit', [App\Http\Controllers\DefaultShiftController::class, 'edit'])->name('admin.default-shifts.edit');
+    Route::patch('/admin/default-shifts/{default_shift}', [App\Http\Controllers\DefaultShiftController::class, 'update'])->name('admin.default-shifts.update');
+    Route::delete('/admin/default-shifts/{default_shift}', [App\Http\Controllers\DefaultShiftController::class, 'destroy'])->name('admin.default-shifts.destroy');
+
+    // --- 管理: ユーザー別休暇上限設定 ---
+    Route::get('/admin/user-shift-settings', [App\Http\Controllers\UserShiftSettingController::class, 'index'])->name('admin.user-shift-settings.index');
+    Route::get('/admin/user-shift-settings/create', [App\Http\Controllers\UserShiftSettingController::class, 'create'])->name('admin.user-shift-settings.create');
+    Route::post('/admin/user-shift-settings', [App\Http\Controllers\UserShiftSettingController::class, 'store'])->name('admin.user-shift-settings.store');
+    Route::get('/admin/user-shift-settings/{user_shift_setting}/edit', [App\Http\Controllers\UserShiftSettingController::class, 'edit'])->name('admin.user-shift-settings.edit');
+    Route::patch('/admin/user-shift-settings/{user_shift_setting}', [App\Http\Controllers\UserShiftSettingController::class, 'update'])->name('admin.user-shift-settings.update');
+    Route::delete('/admin/user-shift-settings/{user_shift_setting}', [App\Http\Controllers\UserShiftSettingController::class, 'destroy'])->name('admin.user-shift-settings.destroy');
+
+    // --- シフト管理 ---
+    Route::resource('shifts', App\Http\Controllers\ShiftController::class)->only([
+        'index',
+        'create',
+        'store',
+        'show',
+        'edit',
+        'update',
+        'destroy'
+    ]);
+
+    // バルク更新エンドポイント（カレンダーからまとめて更新する用）
+    Route::post('/shifts/bulk-update', [App\Http\Controllers\ShiftController::class, 'bulkUpdate'])->name('shifts.bulk_update');
+    // 即時休にする（Shift + ShiftDetail(type=break) を作る）
+    Route::post('/shifts/mark-break', [App\Http\Controllers\ShiftController::class, 'markBreak'])->name('shifts.mark_break');
+    // 既に休がある日を解除する（休のキャンセル）
+    Route::post('/shifts/unmark-break', [App\Http\Controllers\ShiftController::class, 'unmarkBreak'])->name('shifts.unmark_break');
+
+    // ShiftDetail 単体更新（開始/終了時刻の編集）
+    Route::patch('/shift-details/{shift_detail}', [App\Http\Controllers\ShiftDetailController::class, 'update'])->name('shift-details.update');
+    // ShiftDetail 削除（勤務詳細の削除）
+    Route::delete('/shift-details/{shift_detail}', [App\Http\Controllers\ShiftDetailController::class, 'destroy'])->name('shift-details.destroy');
+
+    // --- 休暇申請（シフト申請） ---
+    Route::resource('shift-applications', App\Http\Controllers\ShiftApplicationController::class)->only([
+        'index',
+        'create',
+        'store',
+        'show',
+        'update',
+        'destroy'
+    ]);
 });
 
 require __DIR__ . '/auth.php';

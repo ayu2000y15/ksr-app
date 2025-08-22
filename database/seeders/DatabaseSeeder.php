@@ -25,5 +25,7 @@ class DatabaseSeeder extends Seeder
 
         // 👈 最後に、作成したユーザーに管理者ロールを割り当て
         $this->call(RoleSeeder::class);
+        // seed sample holidays
+        $this->call(HolidaySeeder::class);
     }
 }

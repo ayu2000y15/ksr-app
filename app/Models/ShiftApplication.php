@@ -9,5 +9,19 @@ class ShiftApplication extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['user_id', 'date', 'status', 'reason'];
+    protected $fillable = [
+        'user_id',
+        'date',
+        'status',
+        'reason',
+    ];
+
+    protected $casts = [
+        'date' => 'date',
+    ];
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
 }
