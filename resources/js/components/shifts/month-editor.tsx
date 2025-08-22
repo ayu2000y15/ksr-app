@@ -318,12 +318,12 @@ export default function MonthEditor({
                                             <td key={d} className="p-1 text-center">
                                                 <div className="flex flex-col items-center gap-1">
                                                     <div className="text-[11px]">
-                                                        <span className="inline-block rounded bg-yellow-100 px-2 py-0.5 text-yellow-800">
+                                                        <span className="inline-block rounded bg-yellow-100 px-2 py-0.5 text-black">
                                                             昼 {dayCount}
                                                         </span>
                                                     </div>
                                                     <div className="text-[11px]">
-                                                        <span className="inline-block rounded bg-blue-100 px-2 py-0.5 text-blue-800">
+                                                        <span className="inline-block rounded bg-blue-100 px-2 py-0.5 text-black">
                                                             夜 {nightCount}
                                                         </span>
                                                     </div>

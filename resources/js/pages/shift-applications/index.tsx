@@ -270,7 +270,7 @@ export default function Index({
                                                         }
                                                     })()}
                                                 </TableCell>
-                                                <TableCell className="max-w-xs truncate">{a.reason || '—'}</TableCell>
+                                                <TableCell className="max-w-xs break-words whitespace-pre-line">{a.reason || '—'}</TableCell>
                                                 <TableCell className="text-right">
                                                     {(canDelete || (authUser && a.user_id === authUser.id)) && (
                                                         <Button variant="destructive" size="sm" onClick={() => confirmAndDelete(a)}>

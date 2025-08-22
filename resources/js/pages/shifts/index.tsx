@@ -164,7 +164,7 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                                 {upcomingApplications
                                     .filter((a: any) => new Date(a.date) > new Date(new Date().setHours(0, 0, 0, 0)))
                                     .map((a: any) => (
-                                        <li key={a.id} className="flex items-center gap-4">
+                                        <li key={a.id} className="flex items-center gap-4 border-b border-sky-100 py-2 last:border-b-0">
                                             <div className="flex-1 font-medium">{a.user ? a.user.name : '—'}</div>
                                             <div className="flex-1 text-sm">
                                                 {(() => {
@@ -179,7 +179,9 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                                                     }
                                                 })()}
                                             </div>
-                                            <div className="flex-1 truncate text-sm text-muted-foreground">{a.reason || '—'}</div>
+                                            <div className="flex-1 text-sm break-words whitespace-pre-line text-muted-foreground">
+                                                {a.reason || '—'}
+                                            </div>
                                         </li>
                                     ))}
                             </ul>
