@@ -33,6 +33,7 @@ export default function Daily() {
 
     const [mode, setMode] = useState<'shift' | 'break'>('shift');
     const [breakType, setBreakType] = useState<'planned' | 'actual'>('planned');
+    const [breakLocked, setBreakLocked] = useState<boolean>(true);
 
     // persist selected tab and break type across page reloads
     useEffect(() => {
@@ -44,6 +45,10 @@ export default function Daily() {
             const savedBreakType = typeof window !== 'undefined' ? localStorage.getItem('daily.breakType') : null;
             if (savedBreakType === 'planned' || savedBreakType === 'actual') {
                 setBreakType(savedBreakType as 'planned' | 'actual');
+            }
+            const savedLocked = typeof window !== 'undefined' ? localStorage.getItem('daily.breakLocked') : null;
+            if (savedLocked === '0' || savedLocked === '1') {
+                setBreakLocked(savedLocked === '1');
             }
         } catch {
             // ignore
@@ -65,6 +70,14 @@ export default function Daily() {
             // ignore
         }
     }, [breakType]);
+
+    useEffect(() => {
+        try {
+            if (typeof window !== 'undefined') localStorage.setItem('daily.breakLocked', breakLocked ? '1' : '0');
+        } catch {
+            // ignore
+        }
+    }, [breakLocked]);
     const permissions = props?.permissions || {};
     const canUpdateBreak = permissions?.shift?.update || permissions?.is_system_admin;
     const canDeleteBreak = permissions?.shift?.delete || permissions?.is_system_admin;
@@ -73,6 +86,9 @@ export default function Daily() {
     const [editStartVal, setEditStartVal] = useState<string>('');
     const [editEndVal, setEditEndVal] = useState<string>('');
     const [editStatus, setEditStatus] = useState<'scheduled' | 'actual' | 'absent'>('scheduled');
+    // break list sorting state
+    const [breakSortBy, setBreakSortBy] = useState<'user' | 'time' | 'status'>('user');
+    const [breakSortDir, setBreakSortDir] = useState<'asc' | 'desc'>('asc');
 
     const handleCreateBreak = async (payload: {
         shift_detail_id: number;
@@ -115,6 +131,12 @@ export default function Daily() {
                 );
 
                 if (existing) {
+                    // If locked, prevent deletion via toggle
+                    if (breakLocked) {
+                        setToast({ message: '休憩はロックされています。ロックを解除してください。', type: 'error' });
+                        return;
+                    }
+
                     // If user lacks delete permission, show message and abort
                     if (!canDeleteBreak) {
                         setToast({ message: '休憩を削除する権限がありません', type: 'error' });
@@ -139,6 +161,11 @@ export default function Daily() {
         }
 
         try {
+            if (breakLocked) {
+                setToast({ message: '休憩はロックされています。ロックを解除してください。', type: 'error' });
+                return;
+            }
+
             const res = await axios.post(route('shift-details.store'), body);
             const created = res && res.data && (res.data.shiftDetail || res.data.shift_detail) ? res.data.shiftDetail || res.data.shift_detail : null;
             if (created) {
@@ -157,6 +184,20 @@ export default function Daily() {
                     : '休憩の登録に失敗しました';
             setToast({ message: msg, type: 'error' });
         }
+    };
+
+    const promptToUnlock = () => {
+        if (!breakLocked) return true;
+        console.log('[debug] promptToUnlock called; breakLocked=', breakLocked);
+        // show a quick toast so the user sees feedback even if browser blocks confirm()
+        setToast({ message: '休憩はロックされています。ロック解除の確認を表示します...', type: 'info' });
+        if (confirm('休憩は現在ロックされています。ロックを解除して編集しますか？')) {
+            setBreakLocked(false);
+            setToast({ message: 'ロックを解除しました。編集できます。', type: 'info' });
+            return true;
+        }
+        setToast({ message: '操作はキャンセルされました（ロック中）', type: 'info' });
+        return false;
     };
 
     return (
@@ -185,9 +226,70 @@ export default function Daily() {
                                 <option value="planned">予定</option>
                                 <option value="actual">実績</option>
                             </select>
+                            <button
+                                className={`rounded px-2 py-1 text-sm ${breakLocked ? 'bg-gray-200 text-gray-700' : 'bg-green-600 text-white'}`}
+                                title={
+                                    breakLocked ? '休憩はロックされています。クリックで解除します。' : '休憩は編集可能です。クリックでロックします。'
+                                }
+                                onClick={() => setBreakLocked((s) => !s)}
+                            >
+                                {breakLocked ? (
+                                    <span className="inline-flex items-center">
+                                        <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+                                            <rect x="3" y="11" width="18" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                                            <path
+                                                d="M7 11V8a5 5 0 0110 0v3"
+                                                stroke="currentColor"
+                                                strokeWidth="1.5"
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                fill="none"
+                                            />
+                                        </svg>
+                                        <span>ロック中</span>
+                                    </span>
+                                ) : (
+                                    <span className="inline-flex items-center">
+                                        <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+                                            <rect x="3" y="11" width="18" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                                            <path
+                                                d="M16 11V8a4 4 0 00-8 0"
+                                                stroke="currentColor"
+                                                strokeWidth="1.5"
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                fill="none"
+                                            />
+                                            <path
+                                                d="M9 16h6"
+                                                stroke="currentColor"
+                                                strokeWidth="1.5"
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                fill="none"
+                                            />
+                                        </svg>
+                                        <span>編集可</span>
+                                    </span>
+                                )}
+                            </button>
                         </div>
                     )}
                 </div>
+
+                {/* Informational banner shown when in break mode */}
+                {mode === 'break' && (
+                    <div className="mb-4 flex justify-center">
+                        <div
+                            role="status"
+                            className={`rounded px-4 py-2 text-sm font-medium ${
+                                breakType === 'actual' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
+                            }`}
+                        >
+                            休憩編集モード: {breakType === 'actual' ? '実績' : '予定'}
+                        </div>
+                    </div>
+                )}
 
                 {mode === 'shift' ? (
                     <ShiftTimeline
@@ -210,6 +312,8 @@ export default function Daily() {
                         shiftDetails={shiftDetails}
                         initialInterval={15}
                         breakType={breakType}
+                        locked={breakLocked}
+                        onRequireUnlock={promptToUnlock}
                         onCreateBreak={handleCreateBreak}
                         breaks={(shiftDetails || []).filter((s: any) => (s.type ?? '') === 'break')}
                         canDeleteBreak={canDeleteBreak}
@@ -330,9 +434,138 @@ export default function Daily() {
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead>ユーザー</TableHead>
-                                            <TableHead>時間</TableHead>
-                                            <TableHead>種別</TableHead>
+                                            <TableHead>
+                                                <button
+                                                    className={`flex items-center gap-2 font-medium ${breakSortBy === 'user' ? 'text-indigo-600' : ''}`}
+                                                    onClick={() => {
+                                                        if (breakSortBy === 'user') setBreakSortDir(breakSortDir === 'asc' ? 'desc' : 'asc');
+                                                        else {
+                                                            setBreakSortBy('user');
+                                                            setBreakSortDir('asc');
+                                                        }
+                                                    }}
+                                                >
+                                                    <span>ユーザー</span>
+                                                    <svg className="h-3 w-3" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                        {breakSortBy === 'user' ? (
+                                                            breakSortDir === 'asc' ? (
+                                                                <path
+                                                                    d="M5 12l5-5 5 5"
+                                                                    stroke="currentColor"
+                                                                    strokeWidth="1.8"
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                />
+                                                            ) : (
+                                                                <path
+                                                                    d="M5 8l5 5 5-5"
+                                                                    stroke="currentColor"
+                                                                    strokeWidth="1.8"
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                />
+                                                            )
+                                                        ) : (
+                                                            <path
+                                                                d="M5 12l5-5 5 5"
+                                                                stroke="currentColor"
+                                                                strokeWidth="1"
+                                                                strokeLinecap="round"
+                                                                strokeLinejoin="round"
+                                                                opacity="0.4"
+                                                            />
+                                                        )}
+                                                    </svg>
+                                                </button>
+                                            </TableHead>
+                                            <TableHead>
+                                                <button
+                                                    className={`flex items-center gap-2 font-medium ${breakSortBy === 'time' ? 'text-indigo-600' : ''}`}
+                                                    onClick={() => {
+                                                        if (breakSortBy === 'time') setBreakSortDir(breakSortDir === 'asc' ? 'desc' : 'asc');
+                                                        else {
+                                                            setBreakSortBy('time');
+                                                            setBreakSortDir('asc');
+                                                        }
+                                                    }}
+                                                >
+                                                    <span>時間</span>
+                                                    <svg className="h-3 w-3" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                        {breakSortBy === 'time' ? (
+                                                            breakSortDir === 'asc' ? (
+                                                                <path
+                                                                    d="M5 12l5-5 5 5"
+                                                                    stroke="currentColor"
+                                                                    strokeWidth="1.8"
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                />
+                                                            ) : (
+                                                                <path
+                                                                    d="M5 8l5 5 5-5"
+                                                                    stroke="currentColor"
+                                                                    strokeWidth="1.8"
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                />
+                                                            )
+                                                        ) : (
+                                                            <path
+                                                                d="M5 12l5-5 5 5"
+                                                                stroke="currentColor"
+                                                                strokeWidth="1"
+                                                                strokeLinecap="round"
+                                                                strokeLinejoin="round"
+                                                                opacity="0.4"
+                                                            />
+                                                        )}
+                                                    </svg>
+                                                </button>
+                                            </TableHead>
+                                            <TableHead>
+                                                <button
+                                                    className={`flex items-center gap-2 font-medium ${breakSortBy === 'status' ? 'text-indigo-600' : ''}`}
+                                                    onClick={() => {
+                                                        if (breakSortBy === 'status') setBreakSortDir(breakSortDir === 'asc' ? 'desc' : 'asc');
+                                                        else {
+                                                            setBreakSortBy('status');
+                                                            setBreakSortDir('asc');
+                                                        }
+                                                    }}
+                                                >
+                                                    <span>種別</span>
+                                                    <svg className="h-3 w-3" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                        {breakSortBy === 'status' ? (
+                                                            breakSortDir === 'asc' ? (
+                                                                <path
+                                                                    d="M5 12l5-5 5 5"
+                                                                    stroke="currentColor"
+                                                                    strokeWidth="1.8"
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                />
+                                                            ) : (
+                                                                <path
+                                                                    d="M5 8l5 5 5-5"
+                                                                    stroke="currentColor"
+                                                                    strokeWidth="1.8"
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                />
+                                                            )
+                                                        ) : (
+                                                            <path
+                                                                d="M5 12l5-5 5 5"
+                                                                stroke="currentColor"
+                                                                strokeWidth="1"
+                                                                strokeLinecap="round"
+                                                                strokeLinejoin="round"
+                                                                opacity="0.4"
+                                                            />
+                                                        )}
+                                                    </svg>
+                                                </button>
+                                            </TableHead>
                                             <TableHead className="text-right">操作</TableHead>
                                         </TableRow>
                                     </TableHeader>
@@ -425,7 +658,34 @@ export default function Daily() {
                                                 return String(st);
                                             };
 
-                                            return combined.map((b) => {
+                                            const sortedByHeader = combined.slice().sort((a: any, b: any) => {
+                                                const dir = breakSortDir === 'asc' ? 1 : -1;
+                                                if (breakSortBy === 'user') {
+                                                    const au = String(a.user_id ?? '') || '';
+                                                    const bu = String(b.user_id ?? '') || '';
+                                                    if (au < bu) return -1 * dir;
+                                                    if (au > bu) return 1 * dir;
+                                                    return 0;
+                                                }
+                                                if (breakSortBy === 'time') {
+                                                    const at = a.start_time ?? '';
+                                                    const bt = b.start_time ?? '';
+                                                    if (!at && !bt) return 0;
+                                                    if (!at) return 1 * dir;
+                                                    if (!bt) return -1 * dir;
+                                                    if (at < bt) return -1 * dir;
+                                                    if (at > bt) return 1 * dir;
+                                                    return 0;
+                                                }
+                                                // status
+                                                const ast = a.status ?? 'scheduled';
+                                                const bst = b.status ?? 'scheduled';
+                                                if (ast < bst) return -1 * dir;
+                                                if (ast > bst) return 1 * dir;
+                                                return 0;
+                                            });
+
+                                            return sortedByHeader.map((b) => {
                                                 const isEditing = editingBreakId === b.id;
                                                 return (
                                                     <TableRow key={b.id}>
@@ -546,6 +806,7 @@ export default function Daily() {
                                                                         <Button
                                                                             variant="outline"
                                                                             onClick={() => {
+                                                                                if (breakLocked && !promptToUnlock()) return;
                                                                                 setEditingBreakId(b.id);
                                                                                 setEditStartVal(padTimeForInput(timeValueFromRaw(b.start_time)));
                                                                                 setEditEndVal(padTimeForInput(timeValueFromRaw(b.end_time)));
@@ -559,6 +820,7 @@ export default function Daily() {
                                                                         <Button
                                                                             variant="destructive"
                                                                             onClick={async () => {
+                                                                                if (breakLocked && !promptToUnlock()) return;
                                                                                 if (!confirm('この休憩を削除しますか？')) return;
                                                                                 try {
                                                                                     await axios.delete(route('shift-details.destroy', b.id));

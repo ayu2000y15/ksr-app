@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { BreadcrumbItem, PageProps, PaginatedResponse, User } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { ArrowDown, ArrowUp, ArrowUpDown, LoaderCircle, Plus, Trash } from 'lucide-react';
+import { LoaderCircle, Plus, Trash } from 'lucide-react';
 import { ReactNode, useEffect, useState } from 'react';
 
 // パンくずリストの定義
@@ -23,17 +23,22 @@ const SortableHeader = ({ children, sort_key, queryParams }: { children: ReactNo
     const isCurrentSort = currentSort === sort_key;
     const newDirection = isCurrentSort && currentDirection === 'asc' ? 'desc' : 'asc';
 
-    const Icon = isCurrentSort ? (currentDirection === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
-
     return (
-        <Link
-            href={route('users.index', { sort: sort_key, direction: newDirection })}
-            preserveState
-            preserveScroll
-            className="flex items-center gap-2"
-        >
-            {children}
-            <Icon className={`h-4 w-4 ${isCurrentSort ? 'text-primary' : 'text-muted-foreground'}`} />
+        <Link href={route('users.index', { sort: sort_key, direction: newDirection })} preserveState preserveScroll>
+            <div className={`flex items-center gap-2 ${isCurrentSort ? 'text-indigo-600' : 'text-muted-foreground'}`}>
+                <span>{children}</span>
+                <svg className="h-3 w-3" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    {isCurrentSort ? (
+                        currentDirection === 'asc' ? (
+                            <path d="M5 12l5-5 5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        ) : (
+                            <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        )
+                    ) : (
+                        <path d="M5 12l5-5 5 5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" opacity="0.4" />
+                    )}
+                </svg>
+            </div>
         </Link>
     );
 };

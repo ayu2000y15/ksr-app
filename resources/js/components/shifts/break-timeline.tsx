@@ -34,6 +34,8 @@ export default function BreakTimeline(props: {
     shiftDetails?: ShiftDetail[];
     initialInterval?: number;
     breakType?: 'planned' | 'actual';
+    locked?: boolean;
+    onRequireUnlock?: () => void;
     onBarClick?: (id: number) => void;
     onCreateBreak?: (p: BreakPayload) => void;
     breaks?: Break[];
@@ -42,7 +44,7 @@ export default function BreakTimeline(props: {
     // optional callback when a break is deleted (pass id)
     onDeleteBreak?: (id: number) => void;
 }) {
-    const { date, shiftDetails = [], initialInterval = 15, breakType = 'planned', onCreateBreak, breaks = [] } = props;
+    const { date, shiftDetails = [], initialInterval = 15, breakType = 'planned', onCreateBreak, breaks = [], locked = false } = props;
 
     const [interval, setInterval] = useState<number>(initialInterval);
     useEffect(() => setInterval(initialInterval), [initialInterval]);
@@ -345,11 +347,17 @@ export default function BreakTimeline(props: {
                                                         key={`${it.id}-slot-${idx}`}
                                                         className={cellClasses}
                                                         onMouseEnter={() => {
+                                                            // do not trigger unlock prompt on hover; only allow hover behavior when unlocked
+                                                            if (locked) return;
                                                             if (selTarget && selTarget.id === it.id && !slotBlocked) {
                                                                 setHoverIndex(idx);
                                                             }
                                                         }}
                                                         onClick={() => {
+                                                            if (locked) {
+                                                                if (props.onRequireUnlock) props.onRequireUnlock();
+                                                                return;
+                                                            }
                                                             if (!isWithinShift || slotBlocked) return;
                                                             if (!selTarget || selTarget.id !== it.id) {
                                                                 setSelTarget({ id: it.id, startIndex: idx });
@@ -429,12 +437,14 @@ export default function BreakTimeline(props: {
                                                             !!props.canDeleteBreak &&
                                                             !!props.onDeleteBreak &&
                                                             ((currentType === 'actual' && barStatus === 'actual') ||
-                                                                (currentType === 'planned' && barStatus === 'scheduled'));
+                                                                (currentType === 'planned' && barStatus === 'scheduled')) &&
+                                                            !locked;
 
+                                                        // Always allow pointer events so we can show an unlock prompt when locked.
                                                         const barStyle: React.CSSProperties = {
                                                             ...breakStyle,
-                                                            pointerEvents: deletionAllowedForThisBar ? 'auto' : 'none',
-                                                            cursor: deletionAllowedForThisBar ? 'pointer' : 'default',
+                                                            pointerEvents: 'auto',
+                                                            cursor: deletionAllowedForThisBar ? 'pointer' : locked ? 'not-allowed' : 'default',
                                                         };
 
                                                         return (
@@ -442,24 +452,27 @@ export default function BreakTimeline(props: {
                                                                 key={`br-${b.id}`}
                                                                 className={`absolute top-1 h-8 rounded-sm border border-gray-200/50`}
                                                                 style={barStyle}
-                                                                onClick={
-                                                                    deletionAllowedForThisBar
-                                                                        ? async (e: React.MouseEvent<HTMLDivElement>) => {
-                                                                              e.stopPropagation();
-                                                                              if (!b.id) return;
-                                                                              try {
-                                                                                  await axios.delete(route('shift-details.destroy', b.id));
-                                                                                  try {
-                                                                                      props.onDeleteBreak!(b.id as number);
-                                                                                  } catch (err) {
-                                                                                      console.error(err);
-                                                                                  }
-                                                                              } catch (err) {
-                                                                                  console.error('failed to delete break', err);
-                                                                              }
-                                                                          }
-                                                                        : undefined
-                                                                }
+                                                                onClick={async (e: React.MouseEvent<HTMLDivElement>) => {
+                                                                    e.stopPropagation();
+                                                                    // If currently locked, request unlock prompt from parent.
+                                                                    if (locked) {
+                                                                        if (props.onRequireUnlock) props.onRequireUnlock();
+                                                                        return;
+                                                                    }
+                                                                    // If deletion is not allowed (different status/type or no permission), ignore.
+                                                                    if (!deletionAllowedForThisBar) return;
+                                                                    if (!b.id) return;
+                                                                    try {
+                                                                        await axios.delete(route('shift-details.destroy', b.id));
+                                                                        try {
+                                                                            if (props.onDeleteBreak) props.onDeleteBreak(b.id as number);
+                                                                        } catch (err) {
+                                                                            console.error(err);
+                                                                        }
+                                                                    } catch (err) {
+                                                                        console.error('failed to delete break', err);
+                                                                    }
+                                                                }}
                                                             />
                                                         );
                                                     })}

@@ -7,11 +7,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import Toast from '@/components/ui/toast';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { BreadcrumbItem, PageProps, PaginatedResponse } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import axios from 'axios';
-import { ArrowDown, ArrowUp, ArrowUpDown, LoaderCircle, Trash } from 'lucide-react';
+import { LoaderCircle, Trash } from 'lucide-react';
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -26,17 +27,22 @@ const SortableHeader = ({ children, sort_key, queryParams }: { children: ReactNo
     const isCurrentSort = currentSort === sort_key;
     const newDirection = isCurrentSort && currentDirection === 'asc' ? 'desc' : 'asc';
 
-    const Icon = isCurrentSort ? (currentDirection === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
-
     return (
-        <Link
-            href={route('shifts.index', { sort: sort_key, direction: newDirection })}
-            preserveState
-            preserveScroll
-            className="flex items-center gap-2"
-        >
-            {children}
-            <Icon className={`h-4 w-4 ${isCurrentSort ? 'text-primary' : 'text-muted-foreground'}`} />
+        <Link href={route('shifts.index', { sort: sort_key, direction: newDirection })} preserveState preserveScroll>
+            <div className={`flex items-center gap-2 ${isCurrentSort ? 'text-indigo-600' : 'text-muted-foreground'}`}>
+                <span>{children}</span>
+                <svg className="h-3 w-3" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    {isCurrentSort ? (
+                        currentDirection === 'asc' ? (
+                            <path d="M5 12l5-5 5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        ) : (
+                            <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        )
+                    ) : (
+                        <path d="M5 12l5-5 5 5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" opacity="0.4" />
+                    )}
+                </svg>
+            </div>
         </Link>
     );
 };
@@ -133,6 +139,8 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
     const [editingShift, setEditingShift] = useState<any | null>(null);
     const [editStart, setEditStart] = useState(''); // datetime-local value: yyyy-MM-ddTHH:mm
     const [editEnd, setEditEnd] = useState('');
+    const [localShiftDetails, setLocalShiftDetails] = useState<any[]>(() => (page.props as any).shiftDetails || []);
+    const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' | 'info' } | null>(null);
 
     const toServerDateTime = (dtLocal: string) => {
         // convert 'yyyy-MM-ddTHH:mm' -> 'yyyy-MM-dd HH:mm:00'
@@ -172,6 +180,11 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
             setModalOpen(false);
         }
     };
+
+    // keep a local copy of shiftDetails so we can update UI optimistically without full page reload
+    useEffect(() => {
+        setLocalShiftDetails(queryDate ? timelineShiftDetails : (page.props as any).shiftDetails || []);
+    }, [page.props, timelineShiftDetails, queryDate]);
 
     return (
         <AppSidebarLayout breadcrumbs={breadcrumbs}>
@@ -306,7 +319,7 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                                 {/** render sorted shiftDetails by date then start_time */}
                                 {useMemo(() => {
                                     // if we're viewing a specific date (daily timeline), only render timelineShiftDetails
-                                    const raw = (queryDate ? timelineShiftDetails || [] : (page.props as any).shiftDetails || []).slice();
+                                    const raw = (queryDate ? timelineShiftDetails || [] : localShiftDetails || []).slice();
                                     raw.sort((a: any, b: any) => {
                                         // compare by date (YYYY-MM-DD from either explicit date or start_time)
                                         const aDate = String(a.date ?? a.start_time ?? '').slice(0, 10);
@@ -410,19 +423,12 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                                                             if (!confirm('この勤務詳細を削除しますか？')) return;
                                                             try {
                                                                 await axios.delete(route('shift-details.destroy', sd.id));
-                                                                // refresh only the props we need (same month)
-                                                                const month = (page.props as any).queryParams?.month ?? null;
-                                                                router.get(
-                                                                    route('shifts.index'),
-                                                                    { month },
-                                                                    {
-                                                                        preserveState: true,
-                                                                        only: ['shiftDetails', 'existingShifts', 'holidays', 'users', 'queryParams'],
-                                                                    },
-                                                                );
+                                                                // optimistic UI: remove from local list and show toast
+                                                                setLocalShiftDetails((prev) => prev.filter((x) => x.id !== sd.id));
+                                                                setToast({ message: '勤務詳細を削除しました。', type: 'success' });
                                                             } catch (err) {
                                                                 console.error(err);
-                                                                alert('勤務詳細の削除に失敗しました。');
+                                                                setToast({ message: '勤務詳細の削除に失敗しました。', type: 'error' });
                                                             }
                                                         }}
                                                     >
@@ -432,7 +438,7 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                                             </TableCell>
                                         </TableRow>
                                     ));
-                                }, [(page.props as any).shiftDetails, timelineShiftDetails, queryDate])}
+                                }, [localShiftDetails, timelineShiftDetails, queryDate])}
                             </TableBody>
                         </Table>
 
@@ -446,6 +452,8 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                         )}
                     </CardContent>
                 </Card>
+
+                {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
                 {/* Edit modal for shift detail */}
                 <Dialog open={modalOpen} onOpenChange={setModalOpen}>
