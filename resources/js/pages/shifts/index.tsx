@@ -89,8 +89,9 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
         if (!queryDate) return [];
         return all.filter((sd: any) => {
             try {
-                const d = sd.date ? sd.date : sd.start_time;
-                return d && d.startsWith(queryDate);
+                // prefer start_time so shifts that span multiple dates appear only on their start date
+                const d = sd.start_time ? sd.start_time : sd.date;
+                return d && String(d).startsWith(queryDate);
             } catch (e) {
                 return false;
             }
@@ -304,7 +305,8 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                             <TableBody>
                                 {/** render sorted shiftDetails by date then start_time */}
                                 {useMemo(() => {
-                                    const raw = ((page.props as any).shiftDetails || []).slice();
+                                    // if we're viewing a specific date (daily timeline), only render timelineShiftDetails
+                                    const raw = (queryDate ? timelineShiftDetails || [] : (page.props as any).shiftDetails || []).slice();
                                     raw.sort((a: any, b: any) => {
                                         // compare by date (YYYY-MM-DD from either explicit date or start_time)
                                         const aDate = String(a.date ?? a.start_time ?? '').slice(0, 10);
@@ -430,7 +432,7 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                                             </TableCell>
                                         </TableRow>
                                     ));
-                                }, [(page.props as any).shiftDetails])}
+                                }, [(page.props as any).shiftDetails, timelineShiftDetails, queryDate])}
                             </TableBody>
                         </Table>
 

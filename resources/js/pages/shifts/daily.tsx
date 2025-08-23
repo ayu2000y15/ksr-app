@@ -65,8 +65,19 @@ export default function Daily() {
                                 </TableHeader>
                                 <TableBody>
                                     {(() => {
+                                        // Filter to only the shiftDetails that start on the requested date
+                                        const filtered = (shiftDetails || []).filter((sd: any) => {
+                                            try {
+                                                if (sd.start_time) return String(sd.start_time).startsWith(String(date));
+                                                if (sd.date) return String(sd.date).startsWith(String(date));
+                                                return false;
+                                            } catch {
+                                                return false;
+                                            }
+                                        });
+
                                         // sort by user_id (asc) then by start_time (asc) for the daily list
-                                        const sorted = (shiftDetails || []).slice().sort((a: any, b: any) => {
+                                        const sorted = (filtered || []).slice().sort((a: any, b: any) => {
                                             // rank shift type: day first, others middle, night last
                                             const rank = (sd: any) => {
                                                 const t = (sd.shift_type || sd.type || '').toString();
