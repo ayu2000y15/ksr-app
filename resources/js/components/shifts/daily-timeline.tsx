@@ -1,168 +1,236 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
-export default function DailyTimeline({
-    date,
-    shiftDetails = [],
-    initialInterval = 15,
-    onBarClick,
-}: {
+type BreakPayload = { shift_detail_id: number; start_time: string; end_time: string; type?: string };
+
+type ShiftDetail = {
+    id: number;
+    start_time?: string | null;
+    end_time?: string | null;
+    date?: string | null;
+    user_id?: number | null;
+    user?: { id?: number; name?: string } | null;
+    shift_type?: string | null;
+    type?: string | null;
+    [key: string]: unknown;
+};
+
+type Break = {
+    id?: number;
+    shift_detail_id?: number;
+    start_time?: string | null;
+    end_time?: string | null;
+    type?: string | null;
+    [key: string]: unknown;
+};
+
+type Item = ShiftDetail & { sMin?: number | null; eMin?: number | null; startRaw?: string | null; endRaw?: string | null };
+
+export default function DailyTimeline(props: {
     date: string;
-    shiftDetails?: any[];
+    shiftDetails?: ShiftDetail[];
     initialInterval?: number;
     onBarClick?: (id: number) => void;
+    mode?: 'shift' | 'break';
+    breakType?: 'planned' | 'actual';
+    onCreateBreak?: (p: BreakPayload) => void;
+    breaks?: Break[];
 }) {
+    const { date, shiftDetails = [], initialInterval = 15, onBarClick, mode, breakType, onCreateBreak, breaks = [] } = props;
+
     const [interval, setInterval] = useState<number>(initialInterval);
+    // keep internal interval in sync when parent changes initialInterval (mode switch)
+    useEffect(() => {
+        setInterval(initialInterval);
+    }, [initialInterval]);
+    const [selTarget, setSelTarget] = useState<{ id: number | null; startIndex: number | null } | null>(null);
 
-    // include shifts whose interval overlaps the selected date window
-    const items = useMemo(() => {
-        if (!date) return [];
-
-        // parse YYYY-MM-DD into local Date midnight safely
-        const parseLocalDay = (iso: string) => {
-            const parts = iso.split('-').map((p) => parseInt(p, 10));
-            if (parts.length < 3 || parts.some(isNaN)) return null;
-            return new Date(parts[0], parts[1] - 1, parts[2], 0, 0, 0);
-        };
-
-        const dayStart = parseLocalDay(date);
-        if (!dayStart) return [];
-        const dayEnd = new Date(dayStart.getTime());
-        dayEnd.setHours(23, 59, 59, 999);
-
-        // Parse DB datetime string into components (date + hh/mm/ss) without applying client TZ.
-        // This preserves the DB wall-clock time so UI shows exactly what's stored.
-        const parseDbDateTimeParts = (dt?: string | null) => {
-            if (!dt) return null;
-            const s = String(dt).trim();
-            // match YYYY-MM-DD HH:MM:SS or YYYY/MM/DD HH:MM:SS
-            const m = s.match(/(\d{4})[-\/]?(\d{2})[-\/]?(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?/);
-            if (!m) return null;
-            return {
-                year: Number(m[1]),
-                month: Number(m[2]),
-                day: Number(m[3]),
-                hour: Number(m[4]),
-                minute: Number(m[5]),
-                second: m[6] ? Number(m[6]) : 0,
-            };
-        };
-
-        // Filter by start date only: include items whose start_time's date equals `date`.
-        const filtered = (shiftDetails || []).filter((sd: any) => {
-            try {
-                if (sd.start_time) {
-                    // compare raw DB string prefix (YYYY-MM-DD) to selected date
-                    const s = String(sd.start_time);
-                    return s.startsWith(date);
-                }
-                // If no start_time, fall back to `date` column (YYYY-MM-DD prefix match)
-                if (sd.date) {
-                    return String(sd.date).startsWith(date);
-                }
-                return false;
-            } catch {
-                return false;
-            }
-        });
-
-        const mapped = filtered.map((sd: any) => {
-            // compute minutes from midnight directly from DB strings to avoid TZ shifts
-            const startParts = sd.start_time ? parseDbDateTimeParts(sd.start_time) : null;
-            const endParts = sd.end_time ? parseDbDateTimeParts(sd.end_time) : null;
-            let sMin = null as number | null;
-            if (startParts) sMin = startParts.hour * 60 + startParts.minute;
-            let eMin = null as number | null;
-            if (endParts) {
-                // treat 24:00 as 1440 minutes (end of day)
-                if (endParts.hour === 24) {
-                    eMin = 24 * 60;
-                } else {
-                    eMin = endParts.hour * 60 + endParts.minute;
-                }
-            }
-            if (endParts && startParts) {
-                // if end is on a later date than start (cross-midnight), or end time is earlier, add 24h
-                if (
-                    endParts.year > startParts.year ||
-                    endParts.month > startParts.month ||
-                    endParts.day > startParts.day ||
-                    (eMin !== null && sMin !== null && eMin < sMin)
-                ) {
-                    eMin = (eMin ?? 0) + 24 * 60;
-                }
-            }
-            // keep raw strings for labels; don't create Date objects that shift with TZ
-            return { ...sd, startRaw: sd.start_time ?? null, endRaw: sd.end_time ?? null, sMin, eMin };
-        });
-
-        // sort: day shifts first, then by user_id asc, then by start minutes asc
-        const rank = (sd: any) => {
-            const t = (sd.shift_type || sd.type || '').toString();
-            if (t === 'day') return 0;
-            if (t === 'night') return 2;
-            return 1;
-        };
-
-        mapped.sort((a: any, b: any) => {
-            const ra = rank(a);
-            const rb = rank(b);
-            if (ra !== rb) return ra - rb;
-            const aUid = Number(a.user_id ?? (a.user && a.user.id) ?? 0);
-            const bUid = Number(b.user_id ?? (b.user && b.user.id) ?? 0);
-            if (aUid !== bUid) return aUid - bUid;
-            const aS = a.sMin === null || a.sMin === undefined ? Number.MAX_SAFE_INTEGER : a.sMin;
-            const bS = b.sMin === null || b.sMin === undefined ? Number.MAX_SAFE_INTEGER : b.sMin;
-            return aS - bS;
-        });
-
-        return mapped;
-    }, [shiftDetails, date]);
-
-    // compute timeline window: earliest start -1h, latest end +2h, clamp to 0..1440
-    const [timelineStartMin, timelineEndMin] = useMemo(() => {
-        if (!items || items.length === 0) return [9 * 60, 18 * 60];
-        const starts = items.map((it: any) => it.sMin).filter((v: any) => v !== null) as number[];
-        const ends = items.map((it: any) => it.eMin).filter((v: any) => v !== null) as number[];
-        const minStart = Math.min(...starts);
-        const maxEnd = Math.max(...ends);
-        const start = Math.max(0, minStart - 60);
-        // Allow end to extend past midnight so cross-midnight shifts are fully visible on start date
-        const end = maxEnd + 120;
-        // ensure at least 2 hours window
-        if (end - start < 60 * 2) return [Math.max(0, start - 60), Math.min(24 * 60, end + 60)];
-        return [start, end];
-    }, [items]);
-
-    const totalMinutes = timelineEndMin - timelineStartMin;
-    const stepCount = Math.ceil(totalMinutes / interval);
-
-    const timeSlots = Array.from({ length: stepCount + 1 }, (_, i) => timelineStartMin + i * interval);
-
-    const formatHM = (m: number) => {
-        const hh = Math.floor(m / 60) % 24;
-        const mm = m % 60;
-        return `${hh}:${String(mm).padStart(2, '0')}`;
+    const parseDbTime = (dt?: string | null) => {
+        if (!dt) return null;
+        const m = String(dt).match(/(\d{4})[-/ ]?(\d{2})[-/ ]?(\d{2})[T\s](\d{1,2}):(\d{2})/);
+        if (!m) return null;
+        return { hh: Number(m[4]), mm: Number(m[5]) };
     };
 
-    // compute unique user counts for day/night shifts (unique by user_id)
+    const items = useMemo((): Item[] => {
+        if (!date) return [];
+        // helper to extract YYYY-MM-DD (date part) safely
+        const datePart = (dt?: string | null) => (dt ? String(dt).slice(0, 10) : null);
+        const parseDateOnly = (d?: string | null) => {
+            const p = datePart(d);
+            if (!p) return null;
+            const m = p.match(/(\d{4})-(\d{2})-(\d{2})/);
+            if (!m) return null;
+            return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+        };
+
+        const baseDateObj = parseDateOnly(date);
+
+        // Only include work-type records whose START DATE equals the selected date.
+        // This intentionally excludes shifts that start on a previous day even if they span into the selected date.
+        const sdArray = (shiftDetails || []).filter((sd: ShiftDetail) => String(sd.type ?? '') === 'work');
+        return sdArray
+            .filter((sd: ShiftDetail) => {
+                try {
+                    const sDate = datePart(sd.start_time ?? sd.date ?? null);
+                    return sDate === date;
+                } catch {
+                    return false;
+                }
+            })
+            .map((sd: ShiftDetail) => {
+                const s = parseDbTime(sd.start_time ?? null);
+                const e = parseDbTime(sd.end_time ?? null);
+                const sDateStr = datePart(sd.start_time ?? null);
+                const eDateStr = datePart(sd.end_time ?? null);
+
+                const sDateObj = parseDateOnly(sDateStr);
+                const eDateObj = parseDateOnly(eDateStr);
+
+                const dayOffset = (d?: Date | null) => {
+                    if (!d || !baseDateObj) return 0;
+                    const diff = Math.round((d.getTime() - baseDateObj.getTime()) / 86400000);
+                    return diff;
+                };
+
+                let sMin: number | null = s ? s.hh * 60 + s.mm : null;
+                let eMin: number | null = e ? e.hh * 60 + e.mm : null;
+
+                // apply day offsets so times on the next day become >1440, previous day <0
+                if (sMin !== null && sDateObj) sMin = sMin + dayOffset(sDateObj) * 1440;
+                if (eMin !== null && eDateObj) eMin = eMin + dayOffset(eDateObj) * 1440;
+
+                return { ...(sd as ShiftDetail), sMin, eMin, startRaw: sd.start_time ?? null, endRaw: sd.end_time ?? null } as Item;
+            })
+            .sort((a: Item, b: Item) => {
+                const rank = (sd: Item) => {
+                    const t = String(sd.shift_type ?? sd.type ?? '');
+                    if (t === 'day') return 0;
+                    if (t === 'night') return 2;
+                    return 1;
+                };
+                const ra = rank(a);
+                const rb = rank(b);
+                if (ra !== rb) return ra - rb;
+
+                const aUid = Number(a.user_id ?? (a.user && (a.user as { id?: number }).id) ?? 0);
+                const bUid = Number(b.user_id ?? (b.user && (b.user as { id?: number }).id) ?? 0);
+                if (aUid !== bUid) return aUid - bUid;
+
+                const aStart = String(a.startRaw ?? '');
+                const bStart = String(b.startRaw ?? '');
+                if (aStart < bStart) return -1;
+                if (aStart > bStart) return 1;
+                return 0;
+            });
+    }, [shiftDetails, date]);
+
+    const [timelineStartMin, timelineEndMin] = useMemo(() => {
+        if (!items || items.length === 0) return [9 * 60, 18 * 60];
+        const starts = items.map((it: Item) => it.sMin ?? 24 * 60);
+        const ends = items.map((it: Item) => it.eMin ?? 0);
+        const minStart = Math.min(...starts);
+        const maxEnd = Math.max(...ends);
+        const padBefore = mode === 'break' ? 120 : 60;
+        const padAfter = mode === 'break' ? 240 : 120;
+        const start = Math.max(0, minStart - padBefore);
+        const end = maxEnd + padAfter;
+        return end - start < 120 ? [Math.max(0, start - 60), Math.min(24 * 60, end + 60)] : [start, end];
+    }, [items, mode]);
+
+    const totalMinutes = timelineEndMin - timelineStartMin;
+    const stepCount = Math.max(1, Math.ceil(totalMinutes / interval));
+    const timeSlots = Array.from({ length: stepCount + 1 }, (_, i) => timelineStartMin + i * interval);
+    // column width in px: wider in break mode to allow horizontal scroll and easier 15min clicks
+    const columnWidth = mode === 'break' ? 40 : 24;
+
     const counts = useMemo(() => {
-        const daySet = new Set<number>();
-        const nightSet = new Set<number>();
-        (items || []).forEach((it: any) => {
-            try {
-                const t = (it.shift_type || it.type || '').toString();
-                const uid = Number(it.user_id ?? (it.user && it.user.id) ?? NaN);
-                if (!Number.isFinite(uid)) return;
-                if (t === 'day') daySet.add(uid);
-                else if (t === 'night') nightSet.add(uid);
-            } catch (e) {
-                // ignore
-            }
+        const day = new Set<number>();
+        const night = new Set<number>();
+        (items || []).forEach((it: Item) => {
+            const t = String(it.shift_type ?? it.type ?? '');
+            const uid = Number(it.user_id ?? (it.user && (it.user as { id?: number }).id) ?? NaN);
+            if (!Number.isFinite(uid)) return;
+            if (t === 'day') day.add(uid);
+            else if (t === 'night') night.add(uid);
         });
-        return { dayCount: daySet.size, nightCount: nightSet.size };
-    }, [items]);
+
+        // subtract users who have breaks (so header counts reflect people temporarily not attending)
+        const sdBreaks = (shiftDetails || []).filter((s: ShiftDetail) => String(s.type ?? '') === 'break');
+        const combinedBreaks = [
+            ...(props.breaks || []),
+            ...sdBreaks.map((s) => ({ id: s.id, shift_detail_id: s.id, start_time: s.start_time, end_time: s.end_time })),
+        ];
+        const breakUsers = new Set<number>();
+        for (const b of combinedBreaks) {
+            // try to map break to a shiftDetail to get user_id
+            const owner = (shiftDetails || []).find((sd) => sd.id === (b.shift_detail_id ?? b.id));
+            const uid = owner ? Number(owner.user_id ?? (owner.user && owner.user.id) ?? NaN) : NaN;
+            if (Number.isFinite(uid)) breakUsers.add(uid);
+        }
+
+        for (const uid of breakUsers) {
+            if (day.has(uid)) day.delete(uid);
+            if (night.has(uid)) night.delete(uid);
+        }
+
+        return { dayCount: day.size, nightCount: night.size };
+    }, [items, shiftDetails, props.breaks]);
+
+    // per-slot attendance counts = number of work shifts covering the slot minus any breaks overlapping the slot
+    const attendanceCounts = useMemo(() => {
+        const countsArr: number[] = Array(timeSlots.length).fill(0);
+
+        if (!items || items.length === 0) return countsArr;
+
+        // combine breaks from prop and any shiftDetails entries of type 'break'
+        const sdBreaks = (shiftDetails || []).filter((s: ShiftDetail) => String(s.type ?? '') === 'break');
+        const combinedBreaks = [
+            ...(props.breaks || []),
+            ...sdBreaks.map((s) => ({ id: s.id, shift_detail_id: s.id, start_time: s.start_time, end_time: s.end_time })),
+        ];
+
+        for (let idx = 0; idx < timeSlots.length; idx++) {
+            const slotMin = timelineStartMin + idx * interval;
+            const slotEndMin = slotMin + interval;
+
+            // count work shifts covering this slot
+            let workCount = 0;
+            for (const it of items) {
+                const sMin = it.sMin ?? 0;
+                const eMin = it.eMin ?? sMin + 60;
+                if (sMin < slotEndMin && slotMin < eMin) workCount += 1;
+            }
+
+            // count breaks (from props + shiftDetails) that overlap this slot
+            const breakCount = combinedBreaks.filter((b: Break) => {
+                const parse = (dt?: string | null) => {
+                    if (!dt) return null;
+                    const m = String(dt).match(/(\d{4})[-/ ]?(\d{2})[-/ ]?(\d{2})[T\s](\d{1,2}):(\d{2})/);
+                    if (!m) return null;
+                    return { hh: Number(m[4]), mm: Number(m[5]) };
+                };
+                const bs = parse(b.start_time ?? null);
+                const be = parse(b.end_time ?? null);
+                if (!bs || !be) return false;
+                const bsMin = bs.hh * 60 + bs.mm;
+                const beMin = be.hh * 60 + be.mm;
+                return bsMin < slotEndMin && slotMin < beMin;
+            }).length;
+
+            countsArr[idx] = Math.max(0, workCount - breakCount);
+        }
+
+        return countsArr;
+    }, [items, shiftDetails, props.breaks, timelineStartMin, interval, timeSlots]);
 
     const displayDate = date ? String(date).slice(0, 10).replace(/-/g, '/') : '';
+
+    const toDbString = (m: number) => {
+        const hh = String(Math.floor((m % (24 * 60)) / 60)).padStart(2, '0');
+        const mm = String(m % 60).padStart(2, '0');
+        const d = String(date).slice(0, 10);
+        return `${d} ${hh}:${mm}:00`;
+    };
 
     return (
         <div className="rounded border bg-white p-4">
@@ -180,113 +248,211 @@ export default function DailyTimeline({
             </div>
 
             <div className="overflow-x-auto">
-                <div className="min-w-full">
-                    {/* header timeline labels */}
-                    <div className="flex items-stretch border-b">
-                        <div className="w-48" />
-                        <div className="grid flex-1" style={{ gridTemplateColumns: `repeat(${timeSlots.length}, minmax(0, 1fr))` }}>
-                            {timeSlots.map((t, i) => {
-                                const absolute = timelineStartMin + i * interval;
-                                const wall = ((absolute % (24 * 60)) + 24 * 60) % (24 * 60);
-                                const label = wall % 60 === 0 ? String(Math.floor(wall / 60)) : '';
-                                return (
-                                    <div key={t + ':' + i} className="border-l py-1 text-center text-xs text-muted-foreground">
-                                        {label}
+                {/* Header/time ruler: use fixed wide columns only in break mode; keep original flexible grid for shift mode */}
+                {mode === 'break' ? (
+                    <div className="min-w-full">
+                        <div className="flex items-stretch border-b">
+                            <div className="w-48" />
+                            <div className="flex-1">
+                                <div style={{ minWidth: `${timeSlots.length * columnWidth}px` }}>
+                                    <div className="grid" style={{ gridTemplateColumns: `repeat(${timeSlots.length}, ${columnWidth}px)` }}>
+                                        {timeSlots.map((t, i) => (
+                                            <div key={t + ':' + i} className="border-l py-1 text-center text-xs text-muted-foreground">
+                                                {i % Math.max(1, Math.floor(60 / interval)) === 0 ? String(Math.floor((t % 1440) / 60)) : ''}
+                                            </div>
+                                        ))}
                                     </div>
-                                );
-                            })}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <div className={`min-w-full ${String(mode) === 'break' ? 'min-w-[1600px]' : ''}`}>
+                        <div className="flex items-stretch border-b">
+                            <div className="w-48" />
+                            <div className="grid flex-1" style={{ gridTemplateColumns: `repeat(${timeSlots.length}, minmax(0, 1fr))` }}>
+                                {timeSlots.map((t, i) => (
+                                    <div key={t + ':' + i} className="border-l py-1 text-center text-xs text-muted-foreground">
+                                        {i % Math.max(1, Math.floor(60 / interval)) === 0 ? String(Math.floor((t % 1440) / 60)) : ''}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                <div className="mt-2 space-y-2">
+                    {items.map((it: Item) => {
+                        const sMin = it.sMin ?? 0;
+                        const eMin = it.eMin ?? sMin + 60;
+                        const rawLeft = ((sMin - timelineStartMin) / totalMinutes) * 100;
+                        const rawWidth = ((eMin - sMin) / totalMinutes) * 100;
+                        const leftPercent = Number.isFinite(rawLeft) ? Math.max(0, Math.min(100, rawLeft)) : 0;
+                        const widthPercent = Number.isFinite(rawWidth) ? Math.max(0, Math.min(100 - leftPercent, rawWidth)) : 0;
+                        const totalPixelWidth = timeSlots.length * columnWidth;
+                        // when in break mode we render the grid with fixed pixel columns; compute px positions
+                        const barLeftPx = ((sMin - timelineStartMin) / totalMinutes) * totalPixelWidth;
+                        const barWidthPx = ((eMin - sMin) / totalMinutes) * totalPixelWidth;
+                        const startLabel = parseDbTime(it.startRaw);
+                        const endLabel = parseDbTime(it.endRaw);
+
+                        return (
+                            <div key={it.id} className="flex items-center gap-4">
+                                <div className="flex w-48 items-center font-medium">
+                                    <span className="mr-2 w-6 text-right font-mono text-sm">{it.user_id ?? (it.user && it.user.id) ?? '—'}</span>
+                                    <span className="truncate">{it.user ? it.user.name : '—'}</span>
+                                </div>
+
+                                <div className="relative h-10 flex-1">
+                                    <div
+                                        className="absolute inset-0 bg-gray-50"
+                                        style={mode === 'break' ? { minWidth: `${timeSlots.length * columnWidth}px` } : undefined}
+                                    >
+                                        {mode === 'break' && (
+                                            <div className="grid" style={{ gridTemplateColumns: `repeat(${timeSlots.length}, ${columnWidth}px)` }}>
+                                                {timeSlots.map((t, idx) => {
+                                                    const slotMin = timelineStartMin + idx * interval;
+                                                    const within = slotMin >= sMin && slotMin <= eMin;
+                                                    const clickable = mode === 'break' && within;
+                                                    return (
+                                                        <div
+                                                            key={`${it.id}-slot-${idx}`}
+                                                            className={`border-l ${clickable ? 'cursor-pointer' : 'pointer-events-none'}`}
+                                                            onClick={() => {
+                                                                if (!clickable) return;
+                                                                if (!selTarget || selTarget.id !== it.id) {
+                                                                    setSelTarget({ id: it.id, startIndex: idx });
+                                                                    return;
+                                                                }
+                                                                const sIndex = selTarget.startIndex ?? idx;
+                                                                const eIndex = idx;
+                                                                const s = timelineStartMin + Math.min(sIndex, eIndex) * interval;
+                                                                const e = timelineStartMin + Math.max(sIndex, eIndex) * interval;
+                                                                if (onCreateBreak) {
+                                                                    onCreateBreak({
+                                                                        shift_detail_id: it.id as number,
+                                                                        start_time: toDbString(s),
+                                                                        end_time: toDbString(e),
+                                                                        type: breakType,
+                                                                    });
+                                                                    setSelTarget(null);
+                                                                }
+                                                            }}
+                                                        />
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* shift bar: in break mode make bars more muted */}
+                                    <div
+                                        className={`absolute top-1 flex h-8 items-center overflow-hidden rounded ${mode === 'break' ? (it.shift_type === 'night' ? 'bg-indigo-200 text-indigo-800/60' : 'bg-yellow-200 text-yellow-900/60') : it.shift_type === 'night' ? 'bg-indigo-700/60 text-white' : 'bg-yellow-400/80 text-black'}`}
+                                        style={
+                                            mode === 'break'
+                                                ? {
+                                                      left: `${Math.max(0, barLeftPx)}px`,
+                                                      width: `${Math.max(0, barWidthPx)}px`,
+                                                      zIndex: 10,
+                                                      pointerEvents: 'none',
+                                                  }
+                                                : { left: `${leftPercent}%`, width: `${widthPercent}%`, zIndex: 10, pointerEvents: 'auto' }
+                                        }
+                                        onClick={() => onBarClick && onBarClick(it.id)}
+                                    >
+                                        <div className="px-2 text-sm" style={{ cursor: onBarClick ? 'pointer' : undefined }}>
+                                            {mode === 'break'
+                                                ? ''
+                                                : startLabel && endLabel
+                                                  ? `${String(startLabel.hh).padStart(2, '0')}:${String(startLabel.mm).padStart(2, '0')} - ${String(endLabel.hh).padStart(2, '0')}:${String(endLabel.mm).padStart(2, '0')}`
+                                                  : '時間未設定'}
+                                        </div>
+
+                                        {/* render breaks on bar (lighter color) */}
+                                        {breaks &&
+                                            breaks
+                                                .filter((b: Break) => Number(b.shift_detail_id) === Number(it.id))
+                                                .map((b: Break) => {
+                                                    const bs = parseDbTime(b.start_time ?? null);
+                                                    const be = parseDbTime(b.end_time ?? null);
+                                                    if (!bs || !be) return null;
+                                                    const bsMin = bs.hh * 60 + bs.mm;
+                                                    const beMin = be.hh * 60 + be.mm;
+                                                    const bgColor = it.shift_type === 'night' ? 'rgba(79,70,229,0.7)' : 'rgba(245,158,11,0.7)';
+                                                    if (mode === 'break') {
+                                                        const breakLeftPx = ((bsMin - timelineStartMin) / totalMinutes) * totalPixelWidth;
+                                                        const breakWidthPx = ((beMin - bsMin) / totalMinutes) * totalPixelWidth;
+                                                        const relLeft = breakLeftPx - barLeftPx;
+                                                        return (
+                                                            <div
+                                                                key={b.id}
+                                                                className="absolute top-0 h-full border-r border-l border-white/40"
+                                                                style={{
+                                                                    left: `${Math.max(0, relLeft)}px`,
+                                                                    width: `${Math.max(0, Math.min(totalPixelWidth, breakWidthPx))}px`,
+                                                                    zIndex: 20,
+                                                                    backgroundColor: bgColor,
+                                                                }}
+                                                            />
+                                                        );
+                                                    }
+                                                    const left = ((bsMin - timelineStartMin) / totalMinutes) * 100 - leftPercent;
+                                                    const width = ((beMin - bsMin) / totalMinutes) * 100;
+                                                    return (
+                                                        <div
+                                                            key={b.id}
+                                                            className="absolute top-0 h-full border-r border-l border-white/40"
+                                                            style={{
+                                                                left: `${Math.max(0, left)}%`,
+                                                                width: `${Math.max(0, Math.min(100, width))}%`,
+                                                                zIndex: 20,
+                                                                backgroundColor: bgColor,
+                                                            }}
+                                                        />
+                                                    );
+                                                })}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+
+                <div className="mt-4 border-t pt-3">
+                    <div className="flex justify-start gap-6 text-sm text-muted-foreground">
+                        <div className="font-medium">出勤人数</div>
+                        <div>
+                            <span className="text-xs text-muted-foreground">昼 </span>
+                            <span className="ml-1 font-medium text-yellow-800">{counts.dayCount}人</span>
+                        </div>
+                        <div>
+                            <span className="text-xs text-muted-foreground">夜 </span>
+                            <span className="ml-1 font-medium text-indigo-700">{counts.nightCount}人</span>
                         </div>
                     </div>
 
-                    {/* items */}
-                    <div className="mt-2 space-y-2">
-                        {items.map((it: any) => {
-                            if (it.sMin === null || it.eMin === null) return null;
-                            const rawLeft = ((it.sMin - timelineStartMin) / totalMinutes) * 100;
-                            const rawWidth = ((it.eMin - it.sMin) / totalMinutes) * 100;
-                            // clamp and ensure reasonable minimum width so 24:00 end shows
-                            const leftPercent = Number.isFinite(rawLeft) ? Math.max(0, Math.min(100, rawLeft)) : 0;
-                            let widthPercent = Number.isFinite(rawWidth) ? Math.max(0, rawWidth) : 0;
-                            // prevent bars from collapsing to 0 width; limit to available space
-                            const maxAvailable = Math.max(0, 100 - leftPercent);
-                            const minWidth = Math.min(0.5, maxAvailable); // 0.5% min or available
-                            if (widthPercent < minWidth) widthPercent = Math.min(minWidth, maxAvailable);
-                            widthPercent = Math.min(widthPercent, maxAvailable);
-
-                            // derive label times from raw DB strings to avoid TZ conversion
-                            const parseLabelFromRaw = (raw?: string | null) => {
-                                if (!raw) return null;
-                                const m = String(raw).match(/(\d{4})[-\/]?(\d{2})[-\/]?(\d{2})[T\s](\d{1,2}):(\d{2})(?::(\d{2}))?/);
-                                if (!m) return null;
-                                const hh = Number(m[4]);
-                                const mm = Number(m[5]);
-                                return `${hh}:${String(mm).padStart(2, '0')}`;
-                            };
-
-                            const startLabel = parseLabelFromRaw(it.startRaw);
-                            const endLabel = parseLabelFromRaw(it.endRaw);
-
-                            return (
-                                <div key={it.id} className="flex items-center gap-4">
-                                    <div className="flex w-48 items-center font-medium">
-                                        <span className="mr-2 w-6 text-right font-mono text-sm">{it.user_id ?? (it.user && it.user.id) ?? '—'}</span>
-                                        <span className="truncate">{it.user ? it.user.name : '—'}</span>
-                                    </div>
-                                    <div className="relative h-10 flex-1">
-                                        <div className="absolute inset-0 bg-gray-50">
-                                            {/* grid lines */}
-                                            <div
-                                                className="pointer-events-none absolute inset-0 grid"
-                                                style={{ gridTemplateColumns: `repeat(${timeSlots.length}, minmax(0, 1fr))` }}
-                                            >
-                                                {timeSlots.map((t) => (
-                                                    <div key={t} className="border-l" />
-                                                ))}
-                                            </div>
-                                        </div>
-                                        <div
-                                            className={`absolute top-1 flex h-8 items-center overflow-hidden rounded ${(() => {
-                                                const st = it.shift_type || it.type || '';
-                                                if (st === 'night') return 'bg-indigo-700/60 text-white';
-                                                if (st === 'day') return 'bg-yellow-400/80 text-black';
-                                                return 'bg-yellow-400/80 text-black';
-                                            })()}`}
-                                            style={{ left: `${leftPercent}%`, width: `${widthPercent}%`, zIndex: 10, pointerEvents: 'auto' }}
-                                            role={onBarClick ? 'button' : undefined}
-                                            tabIndex={onBarClick ? 0 : undefined}
-                                            onClick={() => onBarClick && onBarClick(it.id)}
-                                            onKeyDown={(e) => {
-                                                if (!onBarClick) return;
-                                                if (e.key === 'Enter' || e.key === ' ') onBarClick(it.id);
-                                            }}
-                                        >
-                                            <div className="px-2 text-sm" style={{ cursor: onBarClick ? 'pointer' : undefined }}>
-                                                {startLabel && endLabel ? `${startLabel} - ${endLabel}` : '時間未設定'}
-                                            </div>
+                    {/* per-slot attendance counts only visible in break mode */}
+                    {mode === 'break' && (
+                        <div className="mt-2">
+                            <div className="flex items-center">
+                                <div className="w-48" />
+                                <div className="flex-1 overflow-x-auto">
+                                    <div style={{ minWidth: `${timeSlots.length * columnWidth}px` }}>
+                                        <div className="grid" style={{ gridTemplateColumns: `repeat(${timeSlots.length}, ${columnWidth}px)` }}>
+                                            {attendanceCounts.map((c, i) => (
+                                                <div key={`att-${i}`} className="h-6 border-l text-center text-sm font-medium">
+                                                    {c}
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
                                 </div>
-                            );
-                        })}
-                    </div>
-
-                    {/* footer: staff counts */}
-                    <div className="mt-4 border-t pt-3">
-                        <div className="flex justify-start gap-6 text-sm text-muted-foreground">
-                            <div className="font-medium">出勤人数</div>
-                            <div>
-                                <span className="text-xs text-muted-foreground">昼 </span>
-                                <span className="ml-1 font-medium text-yellow-800">{counts.dayCount}人</span>
-                            </div>
-                            <div>
-                                <span className="text-xs text-muted-foreground">夜 </span>
-                                <span className="ml-1 font-medium text-indigo-700">{counts.nightCount}人</span>
                             </div>
                         </div>
-                    </div>
-
-                    {items.length === 0 && <div className="mt-4 text-sm text-muted-foreground">この日の勤務詳細はありません。</div>}
+                    )}
                 </div>
+
+                {items.length === 0 && <div className="mt-4 text-sm text-muted-foreground">この日の勤務詳細はありません。</div>}
             </div>
         </div>
     );

@@ -1,4 +1,5 @@
-import DailyTimeline from '@/components/shifts/daily-timeline';
+import BreakTimeline from '@/components/shifts/break-timeline';
+import ShiftTimeline from '@/components/shifts/shift-timeline';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,35 +31,133 @@ export default function Daily() {
         setShiftDetails(props?.shiftDetails || []);
     }, [props?.shiftDetails]);
 
+    const [mode, setMode] = useState<'shift' | 'break'>('shift');
+    const [breakType, setBreakType] = useState<'planned' | 'actual'>('planned');
+    const permissions = props?.permissions || {};
+    const canUpdateBreak = permissions?.shift?.update || permissions?.is_system_admin;
+    const canDeleteBreak = permissions?.shift?.delete || permissions?.is_system_admin;
+
+    const [editingBreakId, setEditingBreakId] = useState<number | null>(null);
+    const [editStartVal, setEditStartVal] = useState<string>('');
+    const [editEndVal, setEditEndVal] = useState<string>('');
+    const [editStatus, setEditStatus] = useState<'scheduled' | 'actual' | 'absent'>('scheduled');
+
+    const handleCreateBreak = async (payload: {
+        shift_detail_id: number;
+        start_time: string;
+        end_time: string;
+        type?: string;
+        user_id?: number;
+        date?: string;
+    }) => {
+        // determine user_id and date for creating ShiftDetail if not provided
+        const body = {
+            user_id: payload.user_id || null,
+            date: payload.date || date,
+            start_time: payload.start_time,
+            end_time: payload.end_time,
+            type: 'break',
+            status: 'scheduled',
+        } as any;
+
+        // If no user_id available, try to derive from shiftDetails map
+        if (!body.user_id && payload.shift_detail_id) {
+            const found = shiftDetails.find((s) => s.id === payload.shift_detail_id);
+            if (found) body.user_id = found.user_id ?? (found.user && found.user.id);
+            if (!body.date) body.date = found ? found.date : body.date;
+        }
+
+        try {
+            const res = await axios.post(route('shift-details.store'), body);
+            const created = res && res.data && (res.data.shiftDetail || res.data.shift_detail) ? res.data.shiftDetail || res.data.shift_detail : null;
+            if (created) {
+                // add server-created break to local shiftDetails so UI updates immediately
+                setShiftDetails((prev) => [...prev, created]);
+            }
+            setToast({ message: `${payload.type === 'actual' ? '休憩（実績）' : '休憩（予定）'} を登録しました`, type: 'success' });
+        } catch (e: any) {
+            console.error('failed to create break', e);
+            // try to show server-provided validation message (e.g. 重複エラー)
+            const msg =
+                e &&
+                e.response &&
+                (e.response.data?.message || (e.response.data?.errors && e.response.data.errors.start_time && e.response.data.errors.start_time[0]))
+                    ? e.response.data.message || e.response.data.errors.start_time[0]
+                    : '休憩の登録に失敗しました';
+            setToast({ message: msg, type: 'error' });
+        }
+    };
+
     return (
         <AppSidebarLayout breadcrumbs={breadcrumbs}>
             <Head title={`日間タイムライン ${displayDate || ''}`} />
             <div className="p-4 sm:p-6 lg:p-8">
-                <DailyTimeline
-                    date={date}
-                    shiftDetails={shiftDetails}
-                    initialInterval={15}
-                    onBarClick={(id: number) => {
-                        // open edit for the shift detail with id, scroll into view
-                        setShiftDetails((prev) => prev.map((p) => (p.id === id ? { ...p, _openEdit: true } : { ...p, _openEdit: false })));
-                        setTimeout(() => {
-                            const el = document.getElementById(`sd-row-${id}`);
-                            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        }, 120);
-                    }}
-                />
+                <div className="mb-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <button
+                            className={`rounded px-3 py-1 text-sm ${mode === 'shift' ? 'bg-indigo-600 text-white' : 'bg-gray-100'}`}
+                            onClick={() => setMode('shift')}
+                        >
+                            出勤編集
+                        </button>
+                        <button
+                            className={`rounded px-3 py-1 text-sm ${mode === 'break' ? 'bg-indigo-600 text-white' : 'bg-gray-100'}`}
+                            onClick={() => setMode('break')}
+                        >
+                            休憩登録
+                        </button>
+                    </div>
+                    {mode === 'break' && (
+                        <div className="flex items-center gap-2">
+                            <label className="text-sm">種別:</label>
+                            <select value={breakType} onChange={(e) => setBreakType(e.target.value as any)} className="rounded border p-1 text-sm">
+                                <option value="planned">予定</option>
+                                <option value="actual">実績</option>
+                            </select>
+                        </div>
+                    )}
+                </div>
+
+                {mode === 'shift' ? (
+                    <ShiftTimeline
+                        date={date}
+                        shiftDetails={shiftDetails}
+                        initialInterval={30}
+                        breaks={(shiftDetails || [])
+                            .filter((s: any) => (s.type ?? '') === 'break')
+                            .map((s: any) => ({ id: s.id, shift_detail_id: s.id, start_time: s.start_time, end_time: s.end_time, type: 'actual' }))}
+                        onCreateBreak={handleCreateBreak}
+                        onBarClick={(id: number) => {
+                            setShiftDetails((prev) => prev.map((p) => (p.id === id ? { ...p, _openEdit: true } : { ...p, _openEdit: false })));
+                            setTimeout(() => {
+                                const el = document.getElementById(`sd-row-${id}`);
+                                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }, 120);
+                        }}
+                    />
+                ) : (
+                    <BreakTimeline
+                        date={date}
+                        shiftDetails={shiftDetails}
+                        initialInterval={15}
+                        breakType={breakType}
+                        onCreateBreak={handleCreateBreak}
+                        breaks={(shiftDetails || [])
+                            .filter((s: any) => (s.type ?? '') === 'break')
+                            .map((s: any) => ({ id: s.id, shift_detail_id: s.id, start_time: s.start_time, end_time: s.end_time, type: 'actual' }))}
+                    />
+                )}
 
                 {/* editable list below the timeline (same design as シフト一覧) */}
                 <div className="mt-6">
                     <Card>
-                        <CardHeader className="flex items-center justify-between">
+                        <CardHeader>
                             <CardTitle>シフト一覧</CardTitle>
                         </CardHeader>
                         <CardContent>
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead>ユーザーID</TableHead>
                                         <TableHead>ユーザー</TableHead>
                                         <TableHead>時間</TableHead>
                                         <TableHead>昼/夜</TableHead>
@@ -68,15 +167,21 @@ export default function Daily() {
                                 <TableBody>
                                     {(() => {
                                         // Filter to only the shiftDetails that start on the requested date
-                                        const filtered = (shiftDetails || []).filter((sd: any) => {
-                                            try {
-                                                if (sd.start_time) return String(sd.start_time).startsWith(String(date));
-                                                if (sd.date) return String(sd.date).startsWith(String(date));
-                                                return false;
-                                            } catch {
-                                                return false;
-                                            }
-                                        });
+                                        // and only show records of type 'work' in the main shift list
+                                        const filtered = (shiftDetails || [])
+                                            .filter((sd: any) => (sd.type ?? '') === 'work')
+                                            .filter((sd: any) => {
+                                                try {
+                                                    const startDate = sd.start_time
+                                                        ? String(sd.start_time).slice(0, 10)
+                                                        : sd.date
+                                                          ? String(sd.date).slice(0, 10)
+                                                          : null;
+                                                    return startDate === date;
+                                                } catch {
+                                                    return false;
+                                                }
+                                            });
 
                                         // sort by user_id (asc) then by start_time (asc) for the daily list
                                         const sorted = (filtered || []).slice().sort((a: any, b: any) => {
@@ -139,6 +244,213 @@ export default function Daily() {
                             </Table>
                         </CardContent>
                     </Card>
+                    {mode === 'break' && (
+                        <Card className="mt-4">
+                            <CardHeader>
+                                <CardTitle>休憩一覧</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>ユーザー</TableHead>
+                                            <TableHead>時間</TableHead>
+                                            <TableHead>種別</TableHead>
+                                            <TableHead className="text-right">操作</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {(() => {
+                                            // build break entries directly from shiftDetails (server source-of-truth)
+                                            const sdBreaks = (shiftDetails || []).filter((s: any) => String(s.type ?? '') === 'break');
+                                            const combined = sdBreaks.map((s: any) => ({
+                                                id: s.id,
+                                                // show the user id next to the name; fall back to user.id from nested user object
+                                                user_id: s.user_id ?? (s.user && s.user.id) ?? '—',
+                                                start_time: s.start_time,
+                                                end_time: s.end_time,
+                                                status: s.status ?? 'scheduled',
+                                                user_name: s.user ? s.user.name : '—',
+                                            }));
+
+                                            if (combined.length === 0) {
+                                                return (
+                                                    <TableRow>
+                                                        <TableCell colSpan={3} className="px-4 py-6 text-center text-sm text-muted-foreground">
+                                                            休憩は登録されていません。
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            }
+
+                                            const statusLabel = (st?: string | null) => {
+                                                if (!st) return '予定';
+                                                if (st === 'actual') return '実績';
+                                                if (st === 'scheduled') return '予定';
+                                                if (st === 'absent') return '欠席';
+                                                return String(st);
+                                            };
+
+                                            return combined.map((b) => {
+                                                const isEditing = editingBreakId === b.id;
+                                                return (
+                                                    <TableRow key={b.id}>
+                                                        <TableCell>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="w-10 text-right font-mono text-sm">{b.user_id ?? '—'}</span>
+                                                                <span className="truncate">{b.user_name}</span>
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            {isEditing ? (
+                                                                <div className="flex items-center gap-2">
+                                                                    <input
+                                                                        type="time"
+                                                                        className="rounded border p-1 text-sm"
+                                                                        value={editStartVal}
+                                                                        onChange={(e) => setEditStartVal(e.target.value)}
+                                                                    />
+                                                                    <span>〜</span>
+                                                                    <input
+                                                                        type="time"
+                                                                        className="rounded border p-1 text-sm"
+                                                                        value={editEndVal}
+                                                                        onChange={(e) => setEditEndVal(e.target.value)}
+                                                                    />
+                                                                </div>
+                                                            ) : (
+                                                                (timeValueFromRaw(b.start_time) || '—') + '〜' + (timeValueFromRaw(b.end_time) || '—')
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            {isEditing ? (
+                                                                <select
+                                                                    value={editStatus}
+                                                                    onChange={(e) => setEditStatus(e.target.value as any)}
+                                                                    className="rounded border p-1 text-sm"
+                                                                >
+                                                                    <option value="scheduled">予定</option>
+                                                                    <option value="actual">実績</option>
+                                                                    <option value="absent">欠席</option>
+                                                                </select>
+                                                            ) : (
+                                                                statusLabel(b.status)
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell className="text-right">
+                                                            {isEditing ? (
+                                                                <div className="flex items-center justify-end gap-2">
+                                                                    <Button
+                                                                        variant="outline"
+                                                                        onClick={() => {
+                                                                            setEditingBreakId(null);
+                                                                        }}
+                                                                    >
+                                                                        キャンセル
+                                                                    </Button>
+                                                                    <Button
+                                                                        onClick={async () => {
+                                                                            // save changes
+                                                                            try {
+                                                                                const sd = shiftDetails.find((s: any) => s.id === b.id) as any;
+                                                                                const baseDate = sd
+                                                                                    ? (sd.date ??
+                                                                                      (sd.start_time ? String(sd.start_time).slice(0, 10) : date))
+                                                                                    : date;
+                                                                                let addDays = 0;
+                                                                                if (editStartVal && editEndVal) {
+                                                                                    const [sh, sm] = editStartVal.split(':').map((v) => Number(v));
+                                                                                    const [eh, em] = editEndVal.split(':').map((v) => Number(v));
+                                                                                    if (eh < sh || (eh === sh && em <= sm)) addDays = 1;
+                                                                                }
+                                                                                const sdt = toServerDateTimeFromDateAndTime(
+                                                                                    baseDate,
+                                                                                    editStartVal,
+                                                                                    0,
+                                                                                );
+                                                                                const edt = toServerDateTimeFromDateAndTime(
+                                                                                    baseDate,
+                                                                                    editEndVal,
+                                                                                    addDays,
+                                                                                );
+                                                                                const payload: any = {
+                                                                                    start_time: sdt,
+                                                                                    end_time: edt,
+                                                                                    status: editStatus,
+                                                                                };
+                                                                                const res = await axios.patch(
+                                                                                    route('shift-details.update', b.id),
+                                                                                    payload,
+                                                                                );
+                                                                                const returned =
+                                                                                    res && res.data && (res.data.shiftDetail || res.data.shift_detail)
+                                                                                        ? res.data.shiftDetail || res.data.shift_detail
+                                                                                        : null;
+                                                                                if (returned)
+                                                                                    setShiftDetails((prev) =>
+                                                                                        prev.map((p) => (p.id === b.id ? { ...p, ...returned } : p)),
+                                                                                    );
+                                                                                setToast({ message: '保存しました', type: 'success' });
+                                                                                setEditingBreakId(null);
+                                                                            } catch (e: any) {
+                                                                                console.error(e);
+                                                                                // If validation overlap (422), show specific message
+                                                                                if (e && e.response && e.response.status === 422) {
+                                                                                    setToast({ message: '休憩時間が重複しています', type: 'error' });
+                                                                                } else {
+                                                                                    setToast({ message: '保存に失敗しました', type: 'error' });
+                                                                                }
+                                                                            }
+                                                                        }}
+                                                                    >
+                                                                        保存
+                                                                    </Button>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="flex items-center justify-end gap-2">
+                                                                    {canUpdateBreak && (
+                                                                        <Button
+                                                                            variant="outline"
+                                                                            onClick={() => {
+                                                                                setEditingBreakId(b.id);
+                                                                                setEditStartVal(padTimeForInput(timeValueFromRaw(b.start_time)));
+                                                                                setEditEndVal(padTimeForInput(timeValueFromRaw(b.end_time)));
+                                                                                setEditStatus((b.status as any) ?? 'scheduled');
+                                                                            }}
+                                                                        >
+                                                                            編集
+                                                                        </Button>
+                                                                    )}
+                                                                    {canDeleteBreak && (
+                                                                        <Button
+                                                                            variant="destructive"
+                                                                            onClick={async () => {
+                                                                                if (!confirm('この休憩を削除しますか？')) return;
+                                                                                try {
+                                                                                    await axios.delete(route('shift-details.destroy', b.id));
+                                                                                    setShiftDetails((prev) => prev.filter((p) => p.id !== b.id));
+                                                                                    setToast({ message: '削除しました', type: 'success' });
+                                                                                } catch (e) {
+                                                                                    console.error(e);
+                                                                                    setToast({ message: '削除に失敗しました', type: 'error' });
+                                                                                }
+                                                                            }}
+                                                                        >
+                                                                            削除
+                                                                        </Button>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            });
+                                        })()}
+                                    </TableBody>
+                                </Table>
+                            </CardContent>
+                        </Card>
+                    )}
                     {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
                 </div>
             </div>
@@ -150,7 +462,17 @@ function timeValueFromRaw(raw?: string | null) {
     if (!raw) return '';
     const m = String(raw).match(/(\d{2}):(\d{2})(?::(\d{2}))?$/);
     if (!m) return '';
-    return `${m[1]}:${m[2]}`;
+    // remove leading zero from hour for display (e.g. '09:05' -> '9:05')
+    const hh = m[1].replace(/^0/, '');
+    return `${hh}:${m[2]}`;
+}
+
+// pad single-digit hour to two digits for time input value (e.g. '9:05' -> '09:05')
+function padTimeForInput(tv?: string | null) {
+    if (!tv) return '';
+    const m = String(tv).match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return '';
+    return `${m[1].padStart(2, '0')}:${m[2]}`;
 }
 
 function toServerDateTimeFromDateAndTime(dateIso?: string | null, timeHHMM?: string | null, addDays = 0) {
@@ -199,13 +521,13 @@ function EditableShiftRow({
     const canDelete = permissions?.shift?.delete || permissions?.is_system_admin;
 
     const [editing, setEditing] = useState(false);
-    const [startVal, setStartVal] = useState<string>(timeValueFromRaw(sd.start_time ?? sd.startRaw ?? null));
-    const [endVal, setEndVal] = useState<string>(timeValueFromRaw(sd.end_time ?? sd.endRaw ?? null));
+    const [startVal, setStartVal] = useState<string>(padTimeForInput(timeValueFromRaw(sd.start_time ?? sd.startRaw ?? null)));
+    const [endVal, setEndVal] = useState<string>(padTimeForInput(timeValueFromRaw(sd.end_time ?? sd.endRaw ?? null)));
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
-        setStartVal(timeValueFromRaw(sd.start_time ?? sd.startRaw ?? null));
-        setEndVal(timeValueFromRaw(sd.end_time ?? sd.endRaw ?? null));
+        setStartVal(padTimeForInput(timeValueFromRaw(sd.start_time ?? sd.startRaw ?? null)));
+        setEndVal(padTimeForInput(timeValueFromRaw(sd.end_time ?? sd.endRaw ?? null)));
     }, [sd]);
 
     const save = async () => {
@@ -263,8 +585,12 @@ function EditableShiftRow({
 
     return (
         <TableRow id={`sd-row-${sd.id}`} className="hover:bg-gray-50">
-            <TableCell className="font-mono text-sm">{sd.user_id ?? (sd.user && sd.user.id) ?? '—'}</TableCell>
-            <TableCell>{sd.user ? sd.user.name : '—'}</TableCell>
+            <TableCell>
+                <div className="flex items-center gap-2">
+                    <span className="w-10 text-right font-mono text-sm">{sd.user_id ?? (sd.user && sd.user.id) ?? '—'}</span>
+                    <span className="truncate">{sd.user ? sd.user.name : '—'}</span>
+                </div>
+            </TableCell>
             <TableCell>
                 {editing ? (
                     <div className="flex items-center gap-2">

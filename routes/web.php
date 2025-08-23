@@ -99,6 +99,8 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
 
     // ShiftDetail 単体更新（開始/終了時刻の編集）
     Route::patch('/shift-details/{shift_detail}', [App\Http\Controllers\ShiftDetailController::class, 'update'])->name('shift-details.update');
+    // ShiftDetail 作成（休憩などの勤務詳細を追加）
+    Route::post('/shift-details', [App\Http\Controllers\ShiftDetailController::class, 'store'])->name('shift-details.store');
     // ShiftDetail 削除（勤務詳細の削除）
     Route::delete('/shift-details/{shift_detail}', [App\Http\Controllers\ShiftDetailController::class, 'destroy'])->name('shift-details.destroy');
 
