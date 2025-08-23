@@ -101,6 +101,43 @@ export default function Daily() {
             if (!body.date) body.date = found ? found.date : body.date;
         }
 
+        // If the selected range exactly matches an existing break of the same user and same status,
+        // toggle-delete it instead of creating a new one.
+        try {
+            if (body.user_id) {
+                const existing = shiftDetails.find(
+                    (s) =>
+                        String(s.type ?? '') === 'break' &&
+                        String(s.user_id ?? '') === String(body.user_id) &&
+                        (s.start_time ?? '') === (body.start_time ?? '') &&
+                        (s.end_time ?? '') === (body.end_time ?? '') &&
+                        (s.status ?? 'scheduled') === (body.status ?? 'scheduled'),
+                );
+
+                if (existing) {
+                    // If user lacks delete permission, show message and abort
+                    if (!canDeleteBreak) {
+                        setToast({ message: '休憩を削除する権限がありません', type: 'error' });
+                        return;
+                    }
+
+                    // perform delete (toggle behavior)
+                    try {
+                        await axios.delete(route('shift-details.destroy', existing.id));
+                        setShiftDetails((prev) => prev.filter((p) => p.id !== existing.id));
+                        setToast({ message: `${body.status === 'actual' ? '実績' : '予定'}休憩を削除しました`, type: 'success' });
+                        return;
+                    } catch (e: any) {
+                        console.error('failed to delete matched break', e);
+                        setToast({ message: '休憩の削除に失敗しました', type: 'error' });
+                        return;
+                    }
+                }
+            }
+        } catch (e) {
+            // fallback - continue to create
+        }
+
         try {
             const res = await axios.post(route('shift-details.store'), body);
             const created = res && res.data && (res.data.shiftDetail || res.data.shift_detail) ? res.data.shiftDetail || res.data.shift_detail : null;
@@ -175,6 +212,11 @@ export default function Daily() {
                         breakType={breakType}
                         onCreateBreak={handleCreateBreak}
                         breaks={(shiftDetails || []).filter((s: any) => (s.type ?? '') === 'break')}
+                        canDeleteBreak={canDeleteBreak}
+                        onDeleteBreak={(id: number) => {
+                            setShiftDetails((prev) => prev.filter((p) => p.id !== id));
+                            setToast({ message: '削除しました', type: 'success' });
+                        }}
                     />
                 )}
 

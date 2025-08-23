@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import axios from 'axios';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 type ShiftDetail = {
     id: number;
@@ -36,6 +37,10 @@ export default function BreakTimeline(props: {
     onBarClick?: (id: number) => void;
     onCreateBreak?: (p: BreakPayload) => void;
     breaks?: Break[];
+    // optional: whether current user can delete breaks
+    canDeleteBreak?: boolean;
+    // optional callback when a break is deleted (pass id)
+    onDeleteBreak?: (id: number) => void;
 }) {
     const { date, shiftDetails = [], initialInterval = 15, breakType = 'planned', onCreateBreak, breaks = [] } = props;
 
@@ -280,30 +285,38 @@ export default function BreakTimeline(props: {
                                                 const slotEndMin = slotMin + interval;
                                                 const isWithinShift = sMin < slotEndMin && slotMin < eMin;
 
-                                                const isBreak = combinedBreaksMemo
-                                                    .filter((b) => Number(b.user_id) === Number(currentUserId))
-                                                    .some((b) => {
-                                                        const bs_parsed = parseDbTime(b.start_time ?? null);
-                                                        const be_parsed = parseDbTime(b.end_time ?? null);
-                                                        if (!bs_parsed || !be_parsed) return false;
+                                                // Determine overlapping breaks for this user and slot
+                                                const overlappingBreaksForUser = combinedBreaksMemo.filter((b) => {
+                                                    if (Number(b.user_id) !== Number(currentUserId)) return false;
+                                                    const bs_parsed = parseDbTime(b.start_time ?? null);
+                                                    const be_parsed = parseDbTime(b.end_time ?? null);
+                                                    if (!bs_parsed || !be_parsed) return false;
 
-                                                        const dayOffset = (d?: Date | null) => {
-                                                            if (!d || !baseDateObj) return 0;
-                                                            return Math.round((d.getTime() - baseDateObj.getTime()) / 86400000);
-                                                        };
+                                                    const dayOffset = (d?: Date | null) => {
+                                                        if (!d || !baseDateObj) return 0;
+                                                        return Math.round((d.getTime() - baseDateObj.getTime()) / 86400000);
+                                                    };
 
-                                                        const breakStartDate = parseDateOnly(b.start_time);
-                                                        const bsMin = bs_parsed.hh * 60 + bs_parsed.mm + dayOffset(breakStartDate) * 1440;
-                                                        const breakEndDate = parseDateOnly(b.end_time);
-                                                        const beMinRaw = be_parsed.hh * 60 + be_parsed.mm + dayOffset(breakEndDate) * 1440;
-                                                        const beMin = beMinRaw < bsMin ? beMinRaw + 1440 : beMinRaw;
+                                                    const breakStartDate = parseDateOnly(b.start_time);
+                                                    const bsMin = bs_parsed.hh * 60 + bs_parsed.mm + dayOffset(breakStartDate) * 1440;
+                                                    const breakEndDate = parseDateOnly(b.end_time);
+                                                    const beMinRaw = be_parsed.hh * 60 + be_parsed.mm + dayOffset(breakEndDate) * 1440;
+                                                    const beMin = beMinRaw < bsMin ? beMinRaw + 1440 : beMinRaw;
 
-                                                        return bsMin < slotEndMin && slotMin < beMin;
-                                                    });
+                                                    return bsMin < slotEndMin && slotMin < beMin;
+                                                });
 
-                                                // slotBlocked: true if this slot contains a break and the selected
-                                                // mode is NOT 'actual' (i.e. planned/other should be blocked)
-                                                const slotBlocked = isBreak && breakType !== 'actual';
+                                                const hasAnyBreakOverlap = overlappingBreaksForUser.length > 0;
+                                                const hasActualBreakOverlap = overlappingBreaksForUser.some(
+                                                    (b) => (b.status ?? 'scheduled') === 'actual',
+                                                );
+
+                                                // slotBlocked rules:
+                                                // - when creating a planned break: block if any overlapping break exists (scheduled or actual)
+                                                // - when creating an actual break: allow if only scheduled overlaps, but block if an actual overlap exists
+                                                const slotBlocked =
+                                                    (breakType !== 'actual' && hasAnyBreakOverlap) ||
+                                                    (breakType === 'actual' && hasActualBreakOverlap);
 
                                                 const isSelectedStart = selTarget?.id === it.id && selTarget.startIndex === idx;
 
@@ -409,13 +422,44 @@ export default function BreakTimeline(props: {
                                                             )`;
                                                         }
 
+                                                        // decide whether this bar should receive pointer events
+                                                        const barStatus = (b.status ?? 'scheduled') as string;
+                                                        const currentType = props.breakType ?? 'planned';
+                                                        const deletionAllowedForThisBar =
+                                                            !!props.canDeleteBreak &&
+                                                            !!props.onDeleteBreak &&
+                                                            ((currentType === 'actual' && barStatus === 'actual') ||
+                                                                (currentType === 'planned' && barStatus === 'scheduled'));
+
+                                                        const barStyle: React.CSSProperties = {
+                                                            ...breakStyle,
+                                                            pointerEvents: deletionAllowedForThisBar ? 'auto' : 'none',
+                                                            cursor: deletionAllowedForThisBar ? 'pointer' : 'default',
+                                                        };
+
                                                         return (
                                                             <div
                                                                 key={`br-${b.id}`}
-                                                                // 4. 見た目を整えるために、クラス名も少し変更しました
                                                                 className={`absolute top-1 h-8 rounded-sm border border-gray-200/50`}
-                                                                // 5. ここで、上で決定したスタイルを適用します
-                                                                style={breakStyle}
+                                                                style={barStyle}
+                                                                onClick={
+                                                                    deletionAllowedForThisBar
+                                                                        ? async (e: React.MouseEvent<HTMLDivElement>) => {
+                                                                              e.stopPropagation();
+                                                                              if (!b.id) return;
+                                                                              try {
+                                                                                  await axios.delete(route('shift-details.destroy', b.id));
+                                                                                  try {
+                                                                                      props.onDeleteBreak!(b.id as number);
+                                                                                  } catch (err) {
+                                                                                      console.error(err);
+                                                                                  }
+                                                                              } catch (err) {
+                                                                                  console.error('failed to delete break', err);
+                                                                              }
+                                                                          }
+                                                                        : undefined
+                                                                }
                                                             />
                                                         );
                                                     })}
