@@ -32,7 +32,7 @@ class AuthServiceProvider extends ServiceProvider
         \App\Models\ShiftApplication::class => ShiftApplicationPolicy::class,
         \App\Models\UserShiftSetting::class => UserShiftSettingPolicy::class,
         DefaultShift::class => DefaultShiftPolicy::class,
-    \App\Models\ShiftDetail::class => \App\Policies\ShiftDetailPolicy::class,
+        \App\Models\ShiftDetail::class => \App\Policies\ShiftDetailPolicy::class,
     ];
 
     /**

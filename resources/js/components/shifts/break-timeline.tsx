@@ -167,7 +167,10 @@ export default function BreakTimeline(props: {
                 if (sMin < slotEndMin && slotMin < eMin) workCount += 1;
             }
 
-            const breakCount = combinedBreaks.filter((b) => {
+            // Count number of distinct users who have any break overlapping this slot.
+            // This ensures that if the same user has both a scheduled and an actual break
+            // overlapping the same time, we only subtract once.
+            const overlappingBreaks = combinedBreaks.filter((b) => {
                 const bs_parsed = parseDbTime(b.start_time ?? null);
                 const be_parsed = parseDbTime(b.end_time ?? null);
                 if (!bs_parsed || !be_parsed) return false;
@@ -175,16 +178,26 @@ export default function BreakTimeline(props: {
                 const breakStartDate = parseDateOnly(b.start_time);
                 const bsMin = bs_parsed.hh * 60 + bs_parsed.mm + dayOffset(breakStartDate) * 1440;
                 const breakEndDate = parseDateOnly(b.end_time);
-                const beMin = be_parsed.hh * 60 + be_parsed.mm + dayOffset(breakEndDate) * 1440;
-
-                if (beMin < bsMin) {
-                    // if end is earlier than start, assume next day
-                    // not reassigning bsMin/beMin, keep as const and compare
-                    return bsMin < slotEndMin && slotMin < beMin + 1440;
-                }
+                const beMinRaw = be_parsed.hh * 60 + be_parsed.mm + dayOffset(breakEndDate) * 1440;
+                const beMin = beMinRaw < bsMin ? beMinRaw + 1440 : beMinRaw;
 
                 return bsMin < slotEndMin && slotMin < beMin;
-            }).length;
+            });
+
+            const usersOnBreak = new Set<string>();
+            for (const b of overlappingBreaks) {
+                if (b.user_id !== undefined && b.user_id !== null) {
+                    usersOnBreak.add(String(b.user_id));
+                } else if (b.shift_detail_id !== undefined && b.shift_detail_id !== null) {
+                    usersOnBreak.add(`sd:${String(b.shift_detail_id)}`);
+                } else if (b.id !== undefined && b.id !== null) {
+                    usersOnBreak.add(`id:${String(b.id)}`);
+                } else {
+                    usersOnBreak.add(`${b.start_time ?? ''}-${b.end_time ?? ''}`);
+                }
+            }
+
+            const breakCount = usersOnBreak.size;
 
             counts[idx] = Math.max(0, workCount - breakCount);
         }
