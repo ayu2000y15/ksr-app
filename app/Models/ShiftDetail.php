@@ -19,9 +19,10 @@ class ShiftDetail extends Model
     ];
 
     protected $casts = [
-        'date' => 'date',
-        'start_time' => 'datetime',
-        'end_time' => 'datetime',
+        // Keep raw DB wall-clock strings. Avoid automatic Carbon/timezone conversions.
+        'date' => 'string',
+        'start_time' => 'string',
+        'end_time' => 'string',
     ];
 
     public function user()

@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button';
 import Toast from '@/components/ui/toast';
-import { router } from '@inertiajs/react';
+import { Link, router } from '@inertiajs/react';
 import axios from 'axios';
 import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -244,8 +244,8 @@ export default function MonthEditor({
                                         today.setHours(0, 0, 0, 0);
                                         const isToday = tDate.getTime() === today.getTime();
 
-                                        return (
-                                            <th key={d} className={`w-12 p-1 text-center ${isToday ? 'bg-green-100' : (accentClass ?? '')}`}>
+                                            return (
+                                                <th key={d} className={`w-12 p-1 text-center ${isToday ? 'bg-green-100' : (accentClass ?? '')}`}>
                                                 <div className="mb-1">
                                                     <input
                                                         type="checkbox"
@@ -254,8 +254,14 @@ export default function MonthEditor({
                                                         aria-label={`日付 ${d} を選択`}
                                                     />
                                                 </div>
-                                                <div className={`text-xs ${textClass}`}>{`${dt.getMonth() + 1}/${dt.getDate()}`}</div>
-                                                <div className={`text-[10px] ${textClass}`}>{weekdayShort(d)}</div>
+                                                <Link
+                                                    href={route('shifts.daily', { date: d })}
+                                                    className={`inline-block cursor-pointer select-none rounded px-1 py-0.5 ${textClass} hover:bg-gray-100`}
+                                                    title={`この日のタイムラインを見る: ${d}`}
+                                                >
+                                                    <div className="text-xs">{`${dt.getMonth() + 1}/${dt.getDate()}`}</div>
+                                                    <div className="text-[10px]">{weekdayShort(d)}</div>
+                                                </Link>
                                             </th>
                                         );
                                     })}

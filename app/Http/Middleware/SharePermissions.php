@@ -38,26 +38,36 @@ class SharePermissions
                 })->pluck('name')->unique()->values()->all();
             }
 
+            // safe permission checker: return false when the named permission does not exist
+            $safeHas = function ($permName) use ($user, $isSystemAdmin) {
+                if ($isSystemAdmin) return true;
+                try {
+                    return $user->hasPermissionTo($permName);
+                } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
+                    return false;
+                }
+            };
+
             Inertia::share([
                 'auth.permissions' => $flatPermissions,
                 'permissions' => [
                     'user' => [
-                        'view' => $isSystemAdmin || $user->hasPermissionTo('user.view'),
-                        'create' => $isSystemAdmin || $user->hasPermissionTo('user.create'),
-                        'update' => $isSystemAdmin || $user->hasPermissionTo('user.update'),
-                        'delete' => $isSystemAdmin || $user->hasPermissionTo('user.delete'),
+                        'view' => $safeHas('user.view'),
+                        'create' => $safeHas('user.create'),
+                        'update' => $safeHas('user.update'),
+                        'delete' => $safeHas('user.delete'),
                     ],
                     'role' => [
-                        'view' => $isSystemAdmin || $user->hasPermissionTo('role.view'),
-                        'create' => $isSystemAdmin || $user->hasPermissionTo('role.create'),
-                        'update' => $isSystemAdmin || $user->hasPermissionTo('role.update'),
-                        'delete' => $isSystemAdmin || $user->hasPermissionTo('role.delete'),
+                        'view' => $safeHas('role.view'),
+                        'create' => $safeHas('role.create'),
+                        'update' => $safeHas('role.update'),
+                        'delete' => $safeHas('role.delete'),
                     ],
                     'permission' => [
-                        'view' => $isSystemAdmin || $user->hasPermissionTo('permission.view'),
-                        'create' => $isSystemAdmin || $user->hasPermissionTo('permission.create'),
-                        'update' => $isSystemAdmin || $user->hasPermissionTo('permission.update'),
-                        'delete' => $isSystemAdmin || $user->hasPermissionTo('permission.delete'),
+                        'view' => $safeHas('permission.view'),
+                        'create' => $safeHas('permission.create'),
+                        'update' => $safeHas('permission.update'),
+                        'delete' => $safeHas('permission.delete'),
                     ],
                     'is_system_admin' => $isSystemAdmin,
                 ],

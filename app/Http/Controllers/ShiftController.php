@@ -68,6 +68,84 @@ class ShiftController extends Controller
     }
 
     /**
+     * Return a dedicated daily timeline page for a single date.
+     * Accepts ?date=YYYY-MM-DD and returns shiftDetails filtered to that date.
+     */
+    public function daily(Request $request)
+    {
+        try {
+            $this->authorize('viewAny', Shift::class);
+        } catch (\Exception $e) {
+            // don't block the response for now; log for diagnosis
+            logger()->debug('ShiftController::daily authorize failed: ' . $e->getMessage());
+        }
+
+        $date = $request->get('date');
+        if (!$date) {
+            // If no date provided, redirect back to index
+            return Redirect::route('shifts.index');
+        }
+
+        // ensure date string is canonical
+        try {
+            $d = Carbon::parse($date)->toDateString();
+        } catch (\Exception $e) {
+            return Redirect::route('shifts.index');
+        }
+
+        // fetch shift details that belong to the requested date.
+        // We include rows where the `date` column equals the day, and also
+        // any shift_details whose start_time or end_time fall within the day
+        // (this captures cross-midnight shifts that span the day).
+        $startOfDay = Carbon::parse($d)->startOfDay()->toDateTimeString();
+        $endOfDay = Carbon::parse($d)->endOfDay()->toDateTimeString();
+
+        $shiftDetails = ShiftDetail::with('user')
+            ->where(function ($q) use ($d, $startOfDay, $endOfDay) {
+                // match if the date column equals the day
+                $q->whereDate('date', $d)
+                    // OR if the shift interval overlaps the day window
+                    ->orWhere(function ($qq) use ($startOfDay, $endOfDay) {
+                        $qq->where('start_time', '<=', $endOfDay)
+                            ->where('end_time', '>=', $startOfDay);
+                    });
+            })
+            ->get();
+
+        // Ensure we pass the raw DB-stored datetime strings (not Carbon instances)
+        $shiftDetails = $shiftDetails->map(function ($sd) {
+            $arr = $sd->toArray();
+            $attrs = $sd->getAttributes();
+            // override start_time/end_time/date with raw DB values if present
+            $arr['start_time'] = $attrs['start_time'] ?? null;
+            $arr['end_time'] = $attrs['end_time'] ?? null;
+            $arr['date'] = $attrs['date'] ?? ($arr['date'] ?? null);
+            // attach shift_type from shifts table for the same user/date (use DB-stored date)
+            try {
+                $rawDate = $attrs['date'] ?? ($arr['date'] ?? null);
+                $shiftDate = $rawDate ? Carbon::parse($rawDate)->toDateString() : null;
+                if ($shiftDate && isset($attrs['user_id'])) {
+                    $shiftRec = Shift::where('user_id', $attrs['user_id'])->whereDate('date', $shiftDate)->first();
+                    $arr['shift_type'] = $shiftRec ? $shiftRec->shift_type : null;
+                } else {
+                    $arr['shift_type'] = null;
+                }
+            } catch (\Exception $e) {
+                $arr['shift_type'] = null;
+            }
+            return $arr;
+        });
+
+        // (debug removed)
+
+        return Inertia::render('shifts/daily', [
+            'date' => $d,
+            'shiftDetails' => $shiftDetails,
+            'queryParams' => $request->query() ?: null,
+        ]);
+    }
+
+    /**
      * Bulk update/create shifts for a month (entries: [{user_id, date, shift_type}])
      */
     public function bulkUpdate(Request $request)

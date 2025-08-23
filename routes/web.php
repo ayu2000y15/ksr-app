@@ -77,6 +77,9 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
     Route::delete('/admin/user-shift-settings/{user_shift_setting}', [App\Http\Controllers\UserShiftSettingController::class, 'destroy'])->name('admin.user-shift-settings.destroy');
 
     // --- シフト管理 ---
+    // 専用の日間タイムラインページ（クエリ or param で日付指定）
+    Route::get('/shifts/daily', [App\Http\Controllers\ShiftController::class, 'daily'])->name('shifts.daily');
+
     Route::resource('shifts', App\Http\Controllers\ShiftController::class)->only([
         'index',
         'create',

@@ -82,6 +82,28 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
     const page = usePage();
     const { permissions } = page.props as any;
     const upcomingApplications = (page.props as any).upcomingApplications || [];
+    const queryDate = (page.props as any).queryParams?.date ?? null;
+
+    const timelineShiftDetails = useMemo(() => {
+        const all = (page.props as any).shiftDetails || [];
+        if (!queryDate) return [];
+        return all.filter((sd: any) => {
+            try {
+                const d = sd.date ? sd.date : sd.start_time;
+                return d && d.startsWith(queryDate);
+            } catch (e) {
+                return false;
+            }
+        });
+    }, [page.props, (page.props as any).shiftDetails, queryDate]);
+
+    // when queryDate appears in props, navigate to the separate daily page
+    useEffect(() => {
+        if (queryDate) {
+            // navigate to shifts.index with date param (avoid using a non-registered Ziggy route)
+            router.get(route('shifts.index'), { date: queryDate }, { preserveState: true, only: ['shiftDetails', 'queryParams'] });
+        }
+    }, [queryDate]);
 
     // ensure users are displayed in ID order in the month editor
     const usersById = useMemo(() => {
@@ -272,12 +294,10 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>ID</TableHead>
                                     <TableHead>日付</TableHead>
+                                    <TableHead>ユーザー</TableHead>
                                     <TableHead>時間</TableHead>
                                     <TableHead>昼/夜</TableHead>
-                                    <TableHead>ユーザー</TableHead>
-                                    <TableHead>状態</TableHead>
                                     <TableHead className="text-right">操作</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -286,14 +306,22 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                                 {useMemo(() => {
                                     const raw = ((page.props as any).shiftDetails || []).slice();
                                     raw.sort((a: any, b: any) => {
-                                        const ad = a.date ?? a.start_time;
-                                        const bd = b.date ?? b.start_time;
-                                        const da = new Date(ad);
-                                        const db = new Date(bd);
-                                        if (da.getTime() !== db.getTime()) return da.getTime() - db.getTime();
-                                        const as_ = new Date(a.start_time);
-                                        const bs_ = new Date(b.start_time);
-                                        return as_.getTime() - bs_.getTime();
+                                        // compare by date (YYYY-MM-DD from either explicit date or start_time)
+                                        const aDate = String(a.date ?? a.start_time ?? '').slice(0, 10);
+                                        const bDate = String(b.date ?? b.start_time ?? '').slice(0, 10);
+                                        if (aDate !== bDate) return aDate < bDate ? -1 : 1;
+
+                                        // same date: sort by user_id ascending
+                                        const aUid = Number(a.user_id ?? (a.user && a.user.id) ?? 0);
+                                        const bUid = Number(b.user_id ?? (b.user && b.user.id) ?? 0);
+                                        if (aUid !== bUid) return aUid - bUid;
+
+                                        // final tiebreaker: start_time (string compare of wall-clock)
+                                        const aStart = String(a.start_time ?? '');
+                                        const bStart = String(b.start_time ?? '');
+                                        if (aStart < bStart) return -1;
+                                        if (aStart > bStart) return 1;
+                                        return 0;
                                     });
                                     return raw.map((sd: any) => (
                                         <TableRow
@@ -308,7 +336,6 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                                                 setModalOpen(true);
                                             }}
                                         >
-                                            <TableCell>{sd.id}</TableCell>
                                             <TableCell>
                                                 {(() => {
                                                     try {
@@ -323,6 +350,8 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                                                     }
                                                 })()}
                                             </TableCell>
+
+                                            <TableCell>{sd.user ? sd.user.name : '—'}</TableCell>
 
                                             <TableCell>
                                                 {(() => {
@@ -369,16 +398,6 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                                                 })()}
                                             </TableCell>
 
-                                            <TableCell>{sd.user ? sd.user.name : '—'}</TableCell>
-                                            <TableCell>
-                                                {sd.status === 'scheduled'
-                                                    ? '予定'
-                                                    : sd.status === 'actual'
-                                                      ? '実績'
-                                                      : sd.status === 'absent'
-                                                        ? '欠席'
-                                                        : sd.status}
-                                            </TableCell>
                                             <TableCell className="text-right">
                                                 {canDelete && (
                                                     <Button
@@ -461,6 +480,8 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                         </div>
                     </DialogContent>
                 </Dialog>
+                {/* queryDate が来たら別ページに遷移する（モーダルではなく） */}
+                {/** リダイレクトは副作用で行う */}
             </div>
         </AppSidebarLayout>
     );
