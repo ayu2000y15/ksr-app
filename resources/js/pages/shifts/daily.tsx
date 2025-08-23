@@ -33,6 +33,38 @@ export default function Daily() {
 
     const [mode, setMode] = useState<'shift' | 'break'>('shift');
     const [breakType, setBreakType] = useState<'planned' | 'actual'>('planned');
+
+    // persist selected tab and break type across page reloads
+    useEffect(() => {
+        try {
+            const savedMode = typeof window !== 'undefined' ? localStorage.getItem('daily.mode') : null;
+            if (savedMode === 'shift' || savedMode === 'break') {
+                setMode(savedMode as 'shift' | 'break');
+            }
+            const savedBreakType = typeof window !== 'undefined' ? localStorage.getItem('daily.breakType') : null;
+            if (savedBreakType === 'planned' || savedBreakType === 'actual') {
+                setBreakType(savedBreakType as 'planned' | 'actual');
+            }
+        } catch {
+            // ignore
+        }
+    }, []);
+
+    useEffect(() => {
+        try {
+            if (typeof window !== 'undefined') localStorage.setItem('daily.mode', mode);
+        } catch {
+            // ignore
+        }
+    }, [mode]);
+
+    useEffect(() => {
+        try {
+            if (typeof window !== 'undefined') localStorage.setItem('daily.breakType', breakType);
+        } catch {
+            // ignore
+        }
+    }, [breakType]);
     const permissions = props?.permissions || {};
     const canUpdateBreak = permissions?.shift?.update || permissions?.is_system_admin;
     const canDeleteBreak = permissions?.shift?.delete || permissions?.is_system_admin;
@@ -57,7 +89,9 @@ export default function Daily() {
             start_time: payload.start_time,
             end_time: payload.end_time,
             type: 'break',
-            status: 'scheduled',
+            // reflect the selected 種別: 'actual' -> actual, otherwise scheduled
+            status: payload.type === 'actual' ? 'actual' : 'scheduled',
+            shift_detail_id: payload.shift_detail_id,
         } as any;
 
         // If no user_id available, try to derive from shiftDetails map
@@ -123,9 +157,7 @@ export default function Daily() {
                         date={date}
                         shiftDetails={shiftDetails}
                         initialInterval={30}
-                        breaks={(shiftDetails || [])
-                            .filter((s: any) => (s.type ?? '') === 'break')
-                            .map((s: any) => ({ id: s.id, shift_detail_id: s.id, start_time: s.start_time, end_time: s.end_time, type: 'actual' }))}
+                        breaks={(shiftDetails || []).filter((s: any) => (s.type ?? '') === 'break')}
                         onCreateBreak={handleCreateBreak}
                         onBarClick={(id: number) => {
                             setShiftDetails((prev) => prev.map((p) => (p.id === id ? { ...p, _openEdit: true } : { ...p, _openEdit: false })));
@@ -142,108 +174,111 @@ export default function Daily() {
                         initialInterval={15}
                         breakType={breakType}
                         onCreateBreak={handleCreateBreak}
-                        breaks={(shiftDetails || [])
-                            .filter((s: any) => (s.type ?? '') === 'break')
-                            .map((s: any) => ({ id: s.id, shift_detail_id: s.id, start_time: s.start_time, end_time: s.end_time, type: 'actual' }))}
+                        breaks={(shiftDetails || []).filter((s: any) => (s.type ?? '') === 'break')}
                     />
                 )}
 
                 {/* editable list below the timeline (same design as シフト一覧) */}
                 <div className="mt-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>シフト一覧</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>ユーザー</TableHead>
-                                        <TableHead>時間</TableHead>
-                                        <TableHead>昼/夜</TableHead>
-                                        <TableHead className="text-right">操作</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {(() => {
-                                        // Filter to only the shiftDetails that start on the requested date
-                                        // and only show records of type 'work' in the main shift list
-                                        const filtered = (shiftDetails || [])
-                                            .filter((sd: any) => (sd.type ?? '') === 'work')
-                                            .filter((sd: any) => {
-                                                try {
-                                                    const startDate = sd.start_time
-                                                        ? String(sd.start_time).slice(0, 10)
-                                                        : sd.date
-                                                          ? String(sd.date).slice(0, 10)
-                                                          : null;
-                                                    return startDate === date;
-                                                } catch {
-                                                    return false;
-                                                }
+                    {mode === 'shift' && (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>シフト一覧</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>ユーザー</TableHead>
+                                            <TableHead>時間</TableHead>
+                                            <TableHead>昼/夜</TableHead>
+                                            <TableHead className="text-right">操作</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {(() => {
+                                            // Filter to only the shiftDetails that start on the requested date
+                                            // and only show records of type 'work' in the main shift list
+                                            const filtered = (shiftDetails || [])
+                                                .filter((sd: any) => (sd.type ?? '') === 'work')
+                                                .filter((sd: any) => {
+                                                    try {
+                                                        const startDate = sd.start_time
+                                                            ? String(sd.start_time).slice(0, 10)
+                                                            : sd.date
+                                                              ? String(sd.date).slice(0, 10)
+                                                              : null;
+                                                        return startDate === date;
+                                                    } catch {
+                                                        return false;
+                                                    }
+                                                });
+
+                                            // sort by user_id (asc) then by start_time (asc) for the daily list
+                                            const sorted = (filtered || []).slice().sort((a: any, b: any) => {
+                                                // rank shift type: day first, others middle, night last
+                                                const rank = (sd: any) => {
+                                                    const t = (sd.shift_type || sd.type || '').toString();
+                                                    if (t === 'day') return 0;
+                                                    if (t === 'night') return 2;
+                                                    return 1;
+                                                };
+                                                const ra = rank(a);
+                                                const rb = rank(b);
+                                                if (ra !== rb) return ra - rb;
+
+                                                const aUid = Number(a.user_id ?? (a.user && a.user.id) ?? 0);
+                                                const bUid = Number(b.user_id ?? (b.user && b.user.id) ?? 0);
+                                                if (aUid !== bUid) return aUid - bUid;
+
+                                                const aStart = String(a.start_time ?? a.startRaw ?? '');
+                                                const bStart = String(b.start_time ?? b.startRaw ?? '');
+                                                if (aStart < bStart) return -1;
+                                                if (aStart > bStart) return 1;
+                                                return 0;
                                             });
+                                            return (
+                                                <>
+                                                    {sorted.length === 0 && (
+                                                        <TableRow>
+                                                            <TableCell colSpan={4} className="px-4 py-6 text-center text-sm text-muted-foreground">
+                                                                この日の勤務詳細はありません。
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    )}
+                                                    {sorted.map((sd: any) => (
+                                                        <EditableShiftRow
+                                                            key={sd.id}
+                                                            sd={sd}
+                                                            onSaved={(updated: any) => {
+                                                                // prefer the client-sent datetime strings to avoid ISO/UTC transient display
+                                                                setShiftDetails((prev) =>
+                                                                    prev.map((p) =>
+                                                                        p.id === updated.id ? { ...p, ...updated, _openEdit: false } : p,
+                                                                    ),
+                                                                );
+                                                                // show success toast
+                                                                setToast({ message: '保存しました', type: 'success' });
+                                                            }}
+                                                            onDeleted={(id: number) => {
+                                                                setShiftDetails((prev) => prev.filter((p) => p.id !== id));
+                                                            }}
+                                                            onClearOpen={(id: number) => {
+                                                                setShiftDetails((prev) =>
+                                                                    prev.map((p) => (p.id === id ? { ...p, _openEdit: false } : p)),
+                                                                );
+                                                            }}
+                                                        />
+                                                    ))}
+                                                </>
+                                            );
+                                        })()}
+                                    </TableBody>
+                                </Table>
+                            </CardContent>
+                        </Card>
+                    )}
 
-                                        // sort by user_id (asc) then by start_time (asc) for the daily list
-                                        const sorted = (filtered || []).slice().sort((a: any, b: any) => {
-                                            // rank shift type: day first, others middle, night last
-                                            const rank = (sd: any) => {
-                                                const t = (sd.shift_type || sd.type || '').toString();
-                                                if (t === 'day') return 0;
-                                                if (t === 'night') return 2;
-                                                return 1;
-                                            };
-                                            const ra = rank(a);
-                                            const rb = rank(b);
-                                            if (ra !== rb) return ra - rb;
-
-                                            const aUid = Number(a.user_id ?? (a.user && a.user.id) ?? 0);
-                                            const bUid = Number(b.user_id ?? (b.user && b.user.id) ?? 0);
-                                            if (aUid !== bUid) return aUid - bUid;
-
-                                            const aStart = String(a.start_time ?? a.startRaw ?? '');
-                                            const bStart = String(b.start_time ?? b.startRaw ?? '');
-                                            if (aStart < bStart) return -1;
-                                            if (aStart > bStart) return 1;
-                                            return 0;
-                                        });
-                                        return (
-                                            <>
-                                                {sorted.length === 0 && (
-                                                    <TableRow>
-                                                        <TableCell colSpan={4} className="px-4 py-6 text-center text-sm text-muted-foreground">
-                                                            この日の勤務詳細はありません。
-                                                        </TableCell>
-                                                    </TableRow>
-                                                )}
-                                                {sorted.map((sd: any) => (
-                                                    <EditableShiftRow
-                                                        key={sd.id}
-                                                        sd={sd}
-                                                        onSaved={(updated: any) => {
-                                                            // prefer the client-sent datetime strings to avoid ISO/UTC transient display
-                                                            setShiftDetails((prev) =>
-                                                                prev.map((p) => (p.id === updated.id ? { ...p, ...updated, _openEdit: false } : p)),
-                                                            );
-                                                            // show success toast
-                                                            setToast({ message: '保存しました', type: 'success' });
-                                                        }}
-                                                        onDeleted={(id: number) => {
-                                                            setShiftDetails((prev) => prev.filter((p) => p.id !== id));
-                                                        }}
-                                                        onClearOpen={(id: number) => {
-                                                            setShiftDetails((prev) =>
-                                                                prev.map((p) => (p.id === id ? { ...p, _openEdit: false } : p)),
-                                                            );
-                                                        }}
-                                                    />
-                                                ))}
-                                            </>
-                                        );
-                                    })()}
-                                </TableBody>
-                            </Table>
-                        </CardContent>
-                    </Card>
                     {mode === 'break' && (
                         <Card className="mt-4">
                             <CardHeader>
@@ -263,15 +298,72 @@ export default function Daily() {
                                         {(() => {
                                             // build break entries directly from shiftDetails (server source-of-truth)
                                             const sdBreaks = (shiftDetails || []).filter((s: any) => String(s.type ?? '') === 'break');
-                                            const combined = sdBreaks.map((s: any) => ({
-                                                id: s.id,
-                                                // show the user id next to the name; fall back to user.id from nested user object
-                                                user_id: s.user_id ?? (s.user && s.user.id) ?? '—',
-                                                start_time: s.start_time,
-                                                end_time: s.end_time,
-                                                status: s.status ?? 'scheduled',
-                                                user_name: s.user ? s.user.name : '—',
-                                            }));
+
+                                            // Determine the user ordering used by the timeline (work items on the date)
+                                            const workItems = (shiftDetails || [])
+                                                .filter((sd: any) => (sd.type ?? '') === 'work')
+                                                .filter((sd: any) => {
+                                                    try {
+                                                        const startDate = sd.start_time
+                                                            ? String(sd.start_time).slice(0, 10)
+                                                            : sd.date
+                                                              ? String(sd.date).slice(0, 10)
+                                                              : null;
+                                                        return startDate === date;
+                                                    } catch {
+                                                        return false;
+                                                    }
+                                                })
+                                                .slice()
+                                                .sort((a: any, b: any) => {
+                                                    const rank = (sd: any) => {
+                                                        const t = (sd.shift_type || sd.type || '').toString();
+                                                        if (t === 'day') return 0;
+                                                        if (t === 'night') return 2;
+                                                        return 1;
+                                                    };
+                                                    const ra = rank(a);
+                                                    const rb = rank(b);
+                                                    if (ra !== rb) return ra - rb;
+                                                    const aUid = Number(a.user_id ?? (a.user && a.user.id) ?? 0);
+                                                    const bUid = Number(b.user_id ?? (b.user && b.user.id) ?? 0);
+                                                    if (aUid !== bUid) return aUid - bUid;
+                                                    const aStart = String(a.start_time ?? a.startRaw ?? '');
+                                                    const bStart = String(b.start_time ?? b.startRaw ?? '');
+                                                    if (aStart < bStart) return -1;
+                                                    if (aStart > bStart) return 1;
+                                                    return 0;
+                                                });
+
+                                            // map user id to order index
+                                            const userOrder: Record<string | number, number> = {};
+                                            workItems.forEach((wi: any, idx: number) => {
+                                                const uid = wi.user_id ?? (wi.user && wi.user.id) ?? '';
+                                                if (userOrder[String(uid)] === undefined) userOrder[String(uid)] = idx;
+                                            });
+
+                                            const combined = sdBreaks
+                                                .map((s: any) => ({
+                                                    id: s.id,
+                                                    user_id: s.user_id ?? (s.user && s.user.id) ?? '—',
+                                                    start_time: s.start_time,
+                                                    end_time: s.end_time,
+                                                    status: s.status ?? 'scheduled',
+                                                    user_name: s.user ? s.user.name : '—',
+                                                }))
+                                                .slice()
+                                                .sort((a: any, b: any) => {
+                                                    const au = userOrder[String(a.user_id)] ?? Number.MAX_SAFE_INTEGER;
+                                                    const bu = userOrder[String(b.user_id)] ?? Number.MAX_SAFE_INTEGER;
+                                                    if (au !== bu) return au - bu;
+                                                    // same user: sort by start_time asc (nulls last)
+                                                    if (!a.start_time && !b.start_time) return 0;
+                                                    if (!a.start_time) return 1;
+                                                    if (!b.start_time) return -1;
+                                                    if (a.start_time < b.start_time) return -1;
+                                                    if (a.start_time > b.start_time) return 1;
+                                                    return 0;
+                                                });
 
                                             if (combined.length === 0) {
                                                 return (
@@ -451,6 +543,7 @@ export default function Daily() {
                             </CardContent>
                         </Card>
                     )}
+
                     {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
                 </div>
             </div>

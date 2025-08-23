@@ -40,24 +40,28 @@ class ShiftDetailController extends Controller
         ], $messages);
 
         // If this is a break, ensure the same user's breaks do not overlap the requested time range
+        // NOTE: allow overlaps when the incoming status is 'actual' (実績 can overlap 予定)
         if (isset($data['type']) && $data['type'] === 'break') {
-            $existsOverlap = ShiftDetail::where('user_id', $data['user_id'])
-                ->where('type', 'break')
-                ->where(function ($q) use ($data) {
-                    $q->where('start_time', '<', $data['end_time'])
-                        ->where('end_time', '>', $data['start_time']);
-                })
-                ->exists();
+            $status = $data['status'] ?? 'scheduled';
+            if ($status !== 'actual') {
+                $existsOverlap = ShiftDetail::where('user_id', $data['user_id'])
+                    ->where('type', 'break')
+                    ->where(function ($q) use ($data) {
+                        $q->where('start_time', '<', $data['end_time'])
+                            ->where('end_time', '>', $data['start_time']);
+                    })
+                    ->exists();
 
-            if ($existsOverlap) {
-                if ($request->expectsJson() || $request->ajax()) {
-                    return response()->json([
-                        'message' => '休憩時間が他の休憩と重複しています。',
-                        'errors' => ['start_time' => ['休憩時間が重複しています。']],
-                    ], 422);
+                if ($existsOverlap) {
+                    if ($request->expectsJson() || $request->ajax()) {
+                        return response()->json([
+                            'message' => '休憩時間が他の休憩と重複しています。',
+                            'errors' => ['start_time' => ['休憩時間が重複しています。']],
+                        ], 422);
+                    }
+
+                    return Redirect::back()->withErrors(['start_time' => '休憩時間が重複しています。'])->withInput();
                 }
-
-                return Redirect::back()->withErrors(['start_time' => '休憩時間が重複しています。'])->withInput();
             }
         }
 
@@ -111,28 +115,32 @@ class ShiftDetailController extends Controller
         // If the resulting record is a break, ensure no overlap with other breaks for the same user
         $resultingType = $data['type'] ?? $shiftDetail->type;
         if ($resultingType === 'break') {
-            $userId = $shiftDetail->user_id;
-            $start = $data['start_time'];
-            $end = $data['end_time'];
+            // If the updated/remaining status is 'actual', allow overlaps
+            $status = $data['status'] ?? $shiftDetail->status ?? 'scheduled';
+            if ($status !== 'actual') {
+                $userId = $shiftDetail->user_id;
+                $start = $data['start_time'];
+                $end = $data['end_time'];
 
-            $existsOverlap = ShiftDetail::where('user_id', $userId)
-                ->where('type', 'break')
-                ->where('id', '<>', $shiftDetail->id)
-                ->where(function ($q) use ($start, $end) {
-                    $q->where('start_time', '<', $end)
-                        ->where('end_time', '>', $start);
-                })
-                ->exists();
+                $existsOverlap = ShiftDetail::where('user_id', $userId)
+                    ->where('type', 'break')
+                    ->where('id', '<>', $shiftDetail->id)
+                    ->where(function ($q) use ($start, $end) {
+                        $q->where('start_time', '<', $end)
+                            ->where('end_time', '>', $start);
+                    })
+                    ->exists();
 
-            if ($existsOverlap) {
-                if ($request->expectsJson() || $request->ajax()) {
-                    return response()->json([
-                        'message' => '休憩時間が他の休憩と重複しています。',
-                        'errors' => ['start_time' => ['休憩時間が重複しています。']],
-                    ], 422);
+                if ($existsOverlap) {
+                    if ($request->expectsJson() || $request->ajax()) {
+                        return response()->json([
+                            'message' => '休憩時間が他の休憩と重複しています。',
+                            'errors' => ['start_time' => ['休憩時間が重複しています。']],
+                        ], 422);
+                    }
+
+                    return Redirect::back()->withErrors(['start_time' => '休憩時間が重複しています。'])->withInput();
                 }
-
-                return Redirect::back()->withErrors(['start_time' => '休憩時間が重複しています。'])->withInput();
             }
         }
         // only update allowed fields

@@ -9,6 +9,7 @@ type ShiftDetail = {
     user?: { id?: number; name?: string } | null;
     shift_type?: string | null;
     type?: string | null;
+    status?: string | null;
     [key: string]: unknown;
 };
 
@@ -18,6 +19,8 @@ type Break = {
     start_time?: string | null;
     end_time?: string | null;
     type?: string | null;
+    user_id?: number | null;
+    status?: string | null;
     [key: string]: unknown;
 };
 
@@ -40,7 +43,6 @@ export default function BreakTimeline(props: {
     useEffect(() => setInterval(initialInterval), [initialInterval]);
     const [selTarget, setSelTarget] = useState<{ id: number | null; startIndex: number | null } | null>(null);
     const [hoverIndex, setHoverIndex] = useState<number | null>(null);
-
     const parseDbTime = (dt?: string | null) => {
         if (!dt) return null;
         const m = String(dt).match(/(\d{4})[-/ ]?(\d{2})[-/ ]?(\d{2})[T\s](\d{1,2}):(\d{2})/);
@@ -78,36 +80,32 @@ export default function BreakTimeline(props: {
             return { ...(sd as ShiftDetail), sMin, eMin, startRaw: sd.start_time ?? null, endRaw: sd.end_time ?? null } as Item;
         };
 
-        return (
-            (shiftDetails || [])
-                // only include work-type shift details for gantt rendering in both shift and break modes
-                .filter((sd) => String(sd.type ?? '') === 'work')
-                // only include shifts that start on the selected date
-                .filter((sd) => {
-                    const sDate = sd.start_time ? String(sd.start_time).slice(0, 10) : sd.date ? String(sd.date).slice(0, 10) : null;
-                    return sDate === date;
-                })
-                .map(parse)
-                .sort((a: Item, b: Item) => {
-                    const rank = (sd: Item) => {
-                        const t = String(sd.shift_type ?? sd.type ?? '');
-                        if (t === 'day') return 0;
-                        if (t === 'night') return 2;
-                        return 1;
-                    };
-                    const ra = rank(a);
-                    const rb = rank(b);
-                    if (ra !== rb) return ra - rb;
-                    const aUid = Number(a.user_id ?? (a.user && (a.user as { id?: number }).id) ?? 0);
-                    const bUid = Number(b.user_id ?? (b.user && (b.user as { id?: number }).id) ?? 0);
-                    if (aUid !== bUid) return aUid - bUid;
-                    const aStart = String(a.startRaw ?? '');
-                    const bStart = String(b.startRaw ?? '');
-                    if (aStart < bStart) return -1;
-                    if (aStart > bStart) return 1;
-                    return 0;
-                })
-        );
+        return (shiftDetails || [])
+            .filter((sd) => String(sd.type ?? '') === 'work')
+            .filter((sd) => {
+                const sDate = sd.start_time ? String(sd.start_time).slice(0, 10) : sd.date ? String(sd.date).slice(0, 10) : null;
+                return sDate === date;
+            })
+            .map(parse)
+            .sort((a: Item, b: Item) => {
+                const rank = (sd: Item) => {
+                    const t = String(sd.shift_type ?? sd.type ?? '');
+                    if (t === 'day') return 0;
+                    if (t === 'night') return 2;
+                    return 1;
+                };
+                const ra = rank(a);
+                const rb = rank(b);
+                if (ra !== rb) return ra - rb;
+                const aUid = Number(a.user_id ?? (a.user && (a.user as { id?: number }).id) ?? 0);
+                const bUid = Number(b.user_id ?? (b.user && (b.user as { id?: number }).id) ?? 0);
+                if (aUid !== bUid) return aUid - bUid;
+                const aStart = String(a.startRaw ?? '');
+                const bStart = String(b.startRaw ?? '');
+                if (aStart < bStart) return -1;
+                if (aStart > bStart) return 1;
+                return 0;
+            });
     }, [shiftDetails, date, baseDateObj, parseDateOnly]);
 
     const [timelineStartMin, timelineEndMin] = useMemo(() => {
@@ -135,42 +133,64 @@ export default function BreakTimeline(props: {
     const columnWidth = 40;
     const totalPixelWidth = timeSlots.length * columnWidth;
 
-    // attendanceCounts: for each time slot, count how many shifts are working (exclude when the person is on break)
+    const combinedBreaksMemo = useMemo(() => {
+        const sdBreaks = (shiftDetails || []).filter((s) => String(s.type ?? '') === 'break');
+        const rawCombined = [...(breaks || []), ...sdBreaks];
+        const m = new Map<string, Break>();
+        for (const b of rawCombined) {
+            const key = b.id ?? `${b.start_time ?? ''}-${b.end_time ?? ''}`;
+            const k = String(key);
+            if (!m.has(k)) m.set(k, b);
+        }
+        return Array.from(m.values());
+    }, [breaks, shiftDetails]);
+
     const attendanceCounts = useMemo(() => {
         const counts: number[] = Array(timeSlots.length).fill(0);
         if (!items || items.length === 0) return counts;
+
+        const combinedBreaks = combinedBreaksMemo;
+
+        const dayOffset = (d?: Date | null) => {
+            if (!d || !baseDateObj) return 0;
+            return Math.round((d.getTime() - baseDateObj.getTime()) / 86400000);
+        };
 
         for (let idx = 0; idx < timeSlots.length; idx++) {
             const slotMin = timelineStartMin + idx * interval;
             const slotEndMin = slotMin + interval;
 
-            let cnt = 0;
+            let workCount = 0;
             for (const it of items) {
                 const sMin = it.sMin ?? 0;
                 const eMin = it.eMin ?? sMin + 60;
-                const isWithinShift = sMin < slotEndMin && slotMin < eMin;
-                if (!isWithinShift) continue;
-
-                // check breaks for this shift: if any break overlaps the slot, exclude this shift
-                const hasOverlappingBreak = (breaks || [])
-                    .filter((b) => Number(b.shift_detail_id) === Number(it.id))
-                    .some((b) => {
-                        const bs = parseDbTime(b.start_time ?? null);
-                        const be = parseDbTime(b.end_time ?? null);
-                        if (!bs || !be) return false;
-                        const bsMin = bs.hh * 60 + bs.mm;
-                        const beMin = be.hh * 60 + be.mm;
-                        return bsMin < slotEndMin && slotMin < beMin;
-                    });
-
-                if (!hasOverlappingBreak) cnt += 1;
+                if (sMin < slotEndMin && slotMin < eMin) workCount += 1;
             }
 
-            counts[idx] = cnt;
+            const breakCount = combinedBreaks.filter((b) => {
+                const bs_parsed = parseDbTime(b.start_time ?? null);
+                const be_parsed = parseDbTime(b.end_time ?? null);
+                if (!bs_parsed || !be_parsed) return false;
+
+                const breakStartDate = parseDateOnly(b.start_time);
+                const bsMin = bs_parsed.hh * 60 + bs_parsed.mm + dayOffset(breakStartDate) * 1440;
+                const breakEndDate = parseDateOnly(b.end_time);
+                const beMin = be_parsed.hh * 60 + be_parsed.mm + dayOffset(breakEndDate) * 1440;
+
+                if (beMin < bsMin) {
+                    // if end is earlier than start, assume next day
+                    // not reassigning bsMin/beMin, keep as const and compare
+                    return bsMin < slotEndMin && slotMin < beMin + 1440;
+                }
+
+                return bsMin < slotEndMin && slotMin < beMin;
+            }).length;
+
+            counts[idx] = Math.max(0, workCount - breakCount);
         }
 
         return counts;
-    }, [items, breaks, timelineStartMin, interval, timeSlots]);
+    }, [items, timelineStartMin, interval, timeSlots, combinedBreaksMemo, baseDateObj, parseDateOnly]);
 
     const toDbString = (m: number) => {
         const dayOffset = Math.floor(m / 1440);
@@ -193,16 +213,11 @@ export default function BreakTimeline(props: {
                 <div className="text-lg font-medium">{date ? String(date).slice(0, 10).replace(/-/g, '/') : ''}</div>
                 <div className="flex items-center gap-3">
                     <label className="text-sm">グリッド間隔:</label>
-                    <select value={String(interval)} onChange={(e) => setInterval(Number(e.target.value))} className="rounded border p-1 text-sm">
-                        <option value="15">15分</option>
-                        <option value="30">30分</option>
-                        <option value="60">60分</option>
-                    </select>
+                    <span className="rounded border bg-gray-50 p-1 text-sm">{String(initialInterval)}分</span>
                 </div>
             </div>
 
             <div className="flex">
-                {/* left fixed column */}
                 <div className="w-48 flex-shrink-0">
                     <div className="h-10 border-b bg-white" />
                     <div className="space-y-2">
@@ -216,12 +231,10 @@ export default function BreakTimeline(props: {
                     <div className="flex h-6 items-center border-t bg-white p-4 text-sm font-medium text-muted-foreground">出勤人数</div>
                 </div>
 
-                {/* right scrollable timeline */}
                 <div className="flex-1 overflow-x-auto">
                     <div style={{ minWidth: `${totalPixelWidth}px` }}>
                         <div className="grid h-10 items-center" style={{ gridTemplateColumns: `repeat(${timeSlots.length}, ${columnWidth}px)` }}>
                             {timeSlots.map((t, i) => {
-                                // Shift display time by -30 minutes to align with gantt bars
                                 const displayTime = t;
                                 const displayHour = Math.floor((displayTime % 1440) / 60);
                                 return (
@@ -238,6 +251,7 @@ export default function BreakTimeline(props: {
                             {items.map((it) => {
                                 const sMin = it.sMin ?? 0;
                                 const eMin = it.eMin ?? sMin + 60;
+                                const currentUserId = it.user_id ?? (it.user && it.user.id) ?? null;
 
                                 return (
                                     <div key={`row-${it.id}`} className="relative h-10 border-b bg-white">
@@ -253,16 +267,30 @@ export default function BreakTimeline(props: {
                                                 const slotEndMin = slotMin + interval;
                                                 const isWithinShift = sMin < slotEndMin && slotMin < eMin;
 
-                                                const isBreak = breaks
-                                                    .filter((b) => Number(b.shift_detail_id) === Number(it.id))
+                                                const isBreak = combinedBreaksMemo
+                                                    .filter((b) => Number(b.user_id) === Number(currentUserId))
                                                     .some((b) => {
-                                                        const bs = parseDbTime(b.start_time ?? null);
-                                                        const be = parseDbTime(b.end_time ?? null);
-                                                        if (!bs || !be) return false;
-                                                        const bsMin = bs.hh * 60 + bs.mm;
-                                                        const beMin = be.hh * 60 + be.mm;
+                                                        const bs_parsed = parseDbTime(b.start_time ?? null);
+                                                        const be_parsed = parseDbTime(b.end_time ?? null);
+                                                        if (!bs_parsed || !be_parsed) return false;
+
+                                                        const dayOffset = (d?: Date | null) => {
+                                                            if (!d || !baseDateObj) return 0;
+                                                            return Math.round((d.getTime() - baseDateObj.getTime()) / 86400000);
+                                                        };
+
+                                                        const breakStartDate = parseDateOnly(b.start_time);
+                                                        const bsMin = bs_parsed.hh * 60 + bs_parsed.mm + dayOffset(breakStartDate) * 1440;
+                                                        const breakEndDate = parseDateOnly(b.end_time);
+                                                        const beMinRaw = be_parsed.hh * 60 + be_parsed.mm + dayOffset(breakEndDate) * 1440;
+                                                        const beMin = beMinRaw < bsMin ? beMinRaw + 1440 : beMinRaw;
+
                                                         return bsMin < slotEndMin && slotMin < beMin;
                                                     });
+
+                                                // slotBlocked: true if this slot contains a break and the selected
+                                                // mode is NOT 'actual' (i.e. planned/other should be blocked)
+                                                const slotBlocked = isBreak && breakType !== 'actual';
 
                                                 const isSelectedStart = selTarget?.id === it.id && selTarget.startIndex === idx;
 
@@ -272,16 +300,15 @@ export default function BreakTimeline(props: {
                                                     const end = Math.max(selTarget.startIndex, hoverIndex);
                                                     isWithinHoverRange = idx >= start && idx <= end;
                                                 }
-
                                                 const cellClasses = [
                                                     'h-10 border-l transition-colors duration-75',
-                                                    isWithinShift ? 'cursor-pointer' : 'bg-gray-50 pointer-events-none',
+                                                    // clickable only when within shift and not blocked
+                                                    isWithinShift && !slotBlocked ? 'cursor-pointer' : 'bg-gray-50 pointer-events-none',
                                                     isWithinShift &&
-                                                        !isBreak &&
                                                         !isWithinHoverRange &&
                                                         (it.shift_type === 'night' ? 'bg-indigo-200' : 'bg-yellow-200'),
-                                                    isWithinHoverRange && !isBreak && 'bg-green-300',
-                                                    isBreak && 'bg-blue-300 opacity-70',
+                                                    // allow hover highlight even if existing break when creating 'actual'
+                                                    isWithinHoverRange && !slotBlocked && 'bg-green-300',
                                                     isSelectedStart && 'ring-2 ring-blue-500 z-10',
                                                 ]
                                                     .filter(Boolean)
@@ -292,12 +319,12 @@ export default function BreakTimeline(props: {
                                                         key={`${it.id}-slot-${idx}`}
                                                         className={cellClasses}
                                                         onMouseEnter={() => {
-                                                            if (selTarget && selTarget.id === it.id) {
+                                                            if (selTarget && selTarget.id === it.id && !slotBlocked) {
                                                                 setHoverIndex(idx);
                                                             }
                                                         }}
                                                         onClick={() => {
-                                                            if (!isWithinShift || isBreak) return;
+                                                            if (!isWithinShift || slotBlocked) return;
                                                             if (!selTarget || selTarget.id !== it.id) {
                                                                 setSelTarget({ id: it.id, startIndex: idx });
                                                                 return;
@@ -322,34 +349,61 @@ export default function BreakTimeline(props: {
                                             })}
                                         </div>
 
-                                        {/* render break overlays using grid-aligned positions */}
                                         <div className="pointer-events-none absolute inset-0">
-                                            {breaks &&
-                                                breaks
-                                                    .filter((b) => Number(b.shift_detail_id) === Number(it.id))
+                                            {combinedBreaksMemo &&
+                                                combinedBreaksMemo
+                                                    .filter((b) => Number(b.user_id) === Number(currentUserId))
                                                     .map((b) => {
                                                         const bs = parseDbTime(b.start_time ?? null);
                                                         const be = parseDbTime(b.end_time ?? null);
                                                         if (!bs || !be) return null;
-                                                        const bsMin = bs.hh * 60 + bs.mm;
-                                                        const beMin = be.hh * 60 + be.mm;
 
-                                                        // calculate grid-based positions to align with header slots
-                                                        const startColIndex = Math.floor((bsMin - timelineStartMin) / interval);
-                                                        const endColIndex = Math.ceil((beMin - timelineStartMin) / interval);
-                                                        const colSpan = Math.max(1, endColIndex - startColIndex);
+                                                        const dayOffset = (d?: Date | null) => {
+                                                            if (!d || !baseDateObj) return 0;
+                                                            return Math.round((d.getTime() - baseDateObj.getTime()) / 86400000);
+                                                        };
+
+                                                        const breakStartDate = parseDateOnly(b.start_time);
+                                                        const bsMin = bs.hh * 60 + bs.mm + dayOffset(breakStartDate) * 1440;
+                                                        const breakEndDate = parseDateOnly(b.end_time);
+                                                        const beMinRaw = be.hh * 60 + be.mm + dayOffset(breakEndDate) * 1440;
+                                                        const beMin = beMinRaw < bsMin ? beMinRaw + 1440 : beMinRaw;
+
+                                                        const startColIndex = (bsMin - timelineStartMin) / interval;
+                                                        const endColIndex = (beMin - timelineStartMin) / interval;
+                                                        const colSpan = Math.max(0, endColIndex - startColIndex);
                                                         const leftPx = Math.max(0, startColIndex * columnWidth);
                                                         const widthPx = colSpan * columnWidth;
+                                                        console.log(b.status);
+                                                        const breakStatus = b.status ?? 'scheduled';
+                                                        const breakStyle: React.CSSProperties = {
+                                                            left: `${leftPx}px`,
+                                                            width: `${widthPx}px`,
+                                                            zIndex: 5,
+                                                        };
+
+                                                        // 3. ステータスに応じてスタイルを決定します
+                                                        if (breakStatus === 'actual') {
+                                                            // 「実績」の場合：緑色で塗りつぶします
+                                                            breakStyle.backgroundColor = 'rgba(34, 197, 94, 0.55)';
+                                                        } else {
+                                                            // 「予定」の場合：グレーの斜線模様にします
+                                                            breakStyle.background = `repeating-linear-gradient(
+                                                                45deg,
+                                                                rgba(156, 163, 175, 0.4),
+                                                                rgba(156, 163, 175, 0.4) 10px,
+                                                                rgba(156, 163, 175, 0.5) 10px,
+                                                                rgba(156, 163, 175, 0.5) 20px
+                                                            )`;
+                                                        }
 
                                                         return (
                                                             <div
                                                                 key={`br-${b.id}`}
-                                                                className={`absolute top-1 h-8 border-r border-l border-white/40 ${it.shift_type === 'night' ? 'bg-indigo-300/70' : 'bg-yellow-300/70'}`}
-                                                                style={{
-                                                                    left: `${leftPx}px`,
-                                                                    width: `${widthPx}px`,
-                                                                    zIndex: 20,
-                                                                }}
+                                                                // 4. 見た目を整えるために、クラス名も少し変更しました
+                                                                className={`absolute top-1 h-8 rounded-sm border border-gray-200/50`}
+                                                                // 5. ここで、上で決定したスタイルを適用します
+                                                                style={breakStyle}
                                                             />
                                                         );
                                                     })}
@@ -358,7 +412,6 @@ export default function BreakTimeline(props: {
                                 );
                             })}
                         </div>
-                        {/* counts row at the bottom, aligned with left '出勤人数' label */}
                         <div className="flex h-6 items-center">
                             <div
                                 className="grid"

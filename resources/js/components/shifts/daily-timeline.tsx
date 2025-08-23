@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 type BreakPayload = { shift_detail_id: number; start_time: string; end_time: string; type?: string };
 
@@ -37,11 +37,7 @@ export default function DailyTimeline(props: {
 }) {
     const { date, shiftDetails = [], initialInterval = 15, onBarClick, mode, breakType, onCreateBreak, breaks = [] } = props;
 
-    const [interval, setInterval] = useState<number>(initialInterval);
-    // keep internal interval in sync when parent changes initialInterval (mode switch)
-    useEffect(() => {
-        setInterval(initialInterval);
-    }, [initialInterval]);
+    const [interval] = useState<number>(initialInterval);
     const [selTarget, setSelTarget] = useState<{ id: number | null; startIndex: number | null } | null>(null);
 
     const parseDbTime = (dt?: string | null) => {
@@ -154,27 +150,9 @@ export default function DailyTimeline(props: {
             else if (t === 'night') night.add(uid);
         });
 
-        // subtract users who have breaks (so header counts reflect people temporarily not attending)
-        const sdBreaks = (shiftDetails || []).filter((s: ShiftDetail) => String(s.type ?? '') === 'break');
-        const combinedBreaks = [
-            ...(props.breaks || []),
-            ...sdBreaks.map((s) => ({ id: s.id, shift_detail_id: s.id, start_time: s.start_time, end_time: s.end_time })),
-        ];
-        const breakUsers = new Set<number>();
-        for (const b of combinedBreaks) {
-            // try to map break to a shiftDetail to get user_id
-            const owner = (shiftDetails || []).find((sd) => sd.id === (b.shift_detail_id ?? b.id));
-            const uid = owner ? Number(owner.user_id ?? (owner.user && owner.user.id) ?? NaN) : NaN;
-            if (Number.isFinite(uid)) breakUsers.add(uid);
-        }
-
-        for (const uid of breakUsers) {
-            if (day.has(uid)) day.delete(uid);
-            if (night.has(uid)) night.delete(uid);
-        }
-
+        // simple counts: just sizes of day/night sets (no break subtraction)
         return { dayCount: day.size, nightCount: night.size };
-    }, [items, shiftDetails, props.breaks]);
+    }, [items]);
 
     // per-slot attendance counts = number of work shifts covering the slot minus any breaks overlapping the slot
     const attendanceCounts = useMemo(() => {
@@ -238,12 +216,7 @@ export default function DailyTimeline(props: {
                 <div className="text-lg font-medium">{displayDate}</div>
                 <div className="flex items-center gap-3">
                     <label className="text-sm">グリッド間隔:</label>
-                    <select value={String(interval)} onChange={(e) => setInterval(Number(e.target.value))} className="rounded border p-1 text-sm">
-                        <option value="5">5分</option>
-                        <option value="15">15分</option>
-                        <option value="30">30分</option>
-                        <option value="60">60分</option>
-                    </select>
+                    <span className="rounded border bg-gray-50 p-1 text-sm">{String(initialInterval)}分</span>
                 </div>
             </div>
 
@@ -313,7 +286,33 @@ export default function DailyTimeline(props: {
                                                 {timeSlots.map((t, idx) => {
                                                     const slotMin = timelineStartMin + idx * interval;
                                                     const within = slotMin >= sMin && slotMin <= eMin;
-                                                    const clickable = mode === 'break' && within;
+                                                    // determine if this slot already contains a break for this user
+                                                    const sdBreaksLocal = (shiftDetails || []).filter(
+                                                        (s: ShiftDetail) => String(s.type ?? '') === 'break',
+                                                    );
+                                                    const combinedBreaksLocal = [
+                                                        ...(props.breaks || []),
+                                                        ...sdBreaksLocal.map((s) => ({
+                                                            id: s.id,
+                                                            shift_detail_id: s.id,
+                                                            user_id: s.user_id,
+                                                            start_time: s.start_time,
+                                                            end_time: s.end_time,
+                                                        })),
+                                                    ];
+                                                    const isBreakSlot = combinedBreaksLocal
+                                                        .filter((b: any) => Number(b.user_id) === Number(it.user_id))
+                                                        .some((b: any) => {
+                                                            const bs = parseDbTime(b.start_time ?? null);
+                                                            const be = parseDbTime(b.end_time ?? null);
+                                                            if (!bs || !be) return false;
+                                                            const bsMin = bs.hh * 60 + bs.mm;
+                                                            const beMin = be.hh * 60 + be.mm;
+                                                            return bsMin < slotMin + interval && slotMin < beMin;
+                                                        });
+                                                    // block slot only when existing break AND selected breakType is not 'actual'
+                                                    const slotBlocked = isBreakSlot && breakType !== 'actual';
+                                                    const clickable = mode === 'break' && within && !slotBlocked;
                                                     return (
                                                         <div
                                                             key={`${it.id}-slot-${idx}`}
