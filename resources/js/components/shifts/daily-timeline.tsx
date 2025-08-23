@@ -225,7 +225,7 @@ export default function DailyTimeline(props: {
                 {mode === 'break' ? (
                     <div className="min-w-full">
                         <div className="flex items-stretch border-b">
-                            <div className="w-48" />
+                            <div className="w-28 sm:w-48" />
                             <div className="flex-1">
                                 <div style={{ minWidth: `${timeSlots.length * columnWidth}px` }}>
                                     <div className="grid" style={{ gridTemplateColumns: `repeat(${timeSlots.length}, ${columnWidth}px)` }}>
@@ -240,15 +240,19 @@ export default function DailyTimeline(props: {
                         </div>
                     </div>
                 ) : (
-                    <div className={`min-w-full ${String(mode) === 'break' ? 'min-w-[1600px]' : ''}`}>
+                    <div className="min-w-full">
                         <div className="flex items-stretch border-b">
-                            <div className="w-48" />
-                            <div className="grid flex-1" style={{ gridTemplateColumns: `repeat(${timeSlots.length}, minmax(0, 1fr))` }}>
-                                {timeSlots.map((t, i) => (
-                                    <div key={t + ':' + i} className="border-l py-1 text-center text-xs text-muted-foreground">
-                                        {i % Math.max(1, Math.floor(60 / interval)) === 0 ? String(Math.floor((t % 1440) / 60)) : ''}
+                            <div className="w-28 sm:w-48" />
+                            <div className="flex-1">
+                                <div style={{ minWidth: `${timeSlots.length * columnWidth}px` }}>
+                                    <div className="grid" style={{ gridTemplateColumns: `repeat(${timeSlots.length}, ${columnWidth}px)` }}>
+                                        {timeSlots.map((t, i) => (
+                                            <div key={t + ':' + i} className="border-l py-1 text-center text-xs text-muted-foreground">
+                                                {i % Math.max(1, Math.floor(60 / interval)) === 0 ? String(Math.floor((t % 1440) / 60)) : ''}
+                                            </div>
+                                        ))}
                                     </div>
-                                ))}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -271,7 +275,7 @@ export default function DailyTimeline(props: {
 
                         return (
                             <div key={it.id} className="flex items-center gap-4">
-                                <div className="flex w-48 items-center font-medium">
+                                <div className="flex w-28 items-center font-medium sm:w-48">
                                     <span className="mr-2 w-6 text-right font-mono text-sm">{it.user_id ?? (it.user && it.user.id) ?? '—'}</span>
                                     <span className="truncate">{it.user ? it.user.name : '—'}</span>
                                 </div>

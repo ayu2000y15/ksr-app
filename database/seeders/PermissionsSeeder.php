@@ -34,6 +34,15 @@ class PermissionsSeeder extends Seeder
             'shift.create',
             'shift.update',
             'shift.delete',
+            // additional variants for finer-grained checks
+            'shift.viewAny',
+            'shift.manage',
+
+            // explicit shift detail permissions (used in some checks / future extension)
+            'shift_detail.view',
+            'shift_detail.create',
+            'shift_detail.update',
+            'shift_detail.delete',
 
             // shift applications (休暇申請)
             'shift_application.view',

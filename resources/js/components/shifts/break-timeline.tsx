@@ -218,7 +218,7 @@ export default function BreakTimeline(props: {
             </div>
 
             <div className="flex">
-                <div className="w-48 flex-shrink-0">
+                <div className="w-28 flex-shrink-0 sm:w-48">
                     <div className="h-10 border-b bg-white" />
                     <div className="space-y-2">
                         {items.map((it) => (
@@ -374,7 +374,6 @@ export default function BreakTimeline(props: {
                                                         const colSpan = Math.max(0, endColIndex - startColIndex);
                                                         const leftPx = Math.max(0, startColIndex * columnWidth);
                                                         const widthPx = colSpan * columnWidth;
-                                                        console.log(b.status);
                                                         const breakStatus = b.status ?? 'scheduled';
                                                         const breakStyle: React.CSSProperties = {
                                                             left: `${leftPx}px`,
