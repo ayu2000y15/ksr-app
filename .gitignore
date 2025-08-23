@@ -2,6 +2,7 @@
 /bootstrap/ssr
 /node_modules
 /public
+/public/build/
 /public/hot
 /public/storage
 /storage/*.key
@@ -22,3 +23,4 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+public/build/manifest.json
