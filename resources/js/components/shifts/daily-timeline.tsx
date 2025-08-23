@@ -330,8 +330,8 @@ export default function DailyTimeline(props: {
                     <div className="min-w-full">
                         <div className="flex items-stretch border-b">
                             <div className="w-28 sm:w-48">
-                                <div className="flex h-10 items-center border-b px-2">
-                                    <span className="text-sm font-medium">欠席</span>
+                                <div className="flex h-10 items-center border-b">
+                                    <span className="text-sm">欠席</span>
                                 </div>
                             </div>
                             <div className="flex-1">
@@ -375,7 +375,7 @@ export default function DailyTimeline(props: {
                                             className="mr-2"
                                             checked={!!absentMap[Number(it.id ?? 0)]}
                                             onChange={(e) => toggleAbsent(Number(it.id ?? 0), e.target.checked)}
-                                            title="チェックで欠席扱いになります（論理削除）"
+                                            title="チェックで欠席扱い"
                                         />
                                         <span className="mr-2 w-6 text-right font-mono text-sm">{it.user_id ?? (it.user && it.user.id) ?? '—'}</span>
                                         <span className={`truncate ${absentMap[Number(it.id ?? 0)] ? 'text-gray-600 line-through opacity-60' : ''}`}>
