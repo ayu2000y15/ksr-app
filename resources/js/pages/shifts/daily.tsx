@@ -8,6 +8,7 @@ import { BreadcrumbItem } from '@/types';
 import { Head, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { useEffect, useState } from 'react';
+import Toast from '@/components/ui/toast';
 
 export default function Daily() {
     const page = usePage();
@@ -22,6 +23,7 @@ export default function Daily() {
     // keep a local copy so edits can be applied without a full page reload
     const initialShiftDetails = (props?.shiftDetails || []) as unknown as any[];
     const [shiftDetails, setShiftDetails] = useState<any[]>(initialShiftDetails);
+    const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' | 'info' } | null>(null);
 
     // keep local state in sync if props change (Inertia navigation)
     useEffect(() => {
@@ -117,6 +119,8 @@ export default function Daily() {
                                                             setShiftDetails((prev) =>
                                                                 prev.map((p) => (p.id === updated.id ? { ...p, ...updated, _openEdit: false } : p)),
                                                             );
+                                                            // show success toast
+                                                            setToast({ message: '保存しました', type: 'success' });
                                                         }}
                                                         onDeleted={(id: number) => {
                                                             setShiftDetails((prev) => prev.filter((p) => p.id !== id));
@@ -135,6 +139,7 @@ export default function Daily() {
                             </Table>
                         </CardContent>
                     </Card>
+                    {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
                 </div>
             </div>
         </AppSidebarLayout>
