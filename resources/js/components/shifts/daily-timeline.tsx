@@ -228,8 +228,8 @@ export default function DailyTimeline({
 
                             return (
                                 <div key={it.id} className="flex items-center gap-4">
-                                    <div className="w-48 font-medium flex items-center">
-                                        <span className="font-mono text-sm w-6 text-right mr-2">{it.user_id ?? (it.user && it.user.id) ?? '—'}</span>
+                                    <div className="flex w-48 items-center font-medium">
+                                        <span className="mr-2 w-6 text-right font-mono text-sm">{it.user_id ?? (it.user && it.user.id) ?? '—'}</span>
                                         <span className="truncate">{it.user ? it.user.name : '—'}</span>
                                     </div>
                                     <div className="relative h-10 flex-1">

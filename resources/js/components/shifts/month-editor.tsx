@@ -244,8 +244,8 @@ export default function MonthEditor({
                                         today.setHours(0, 0, 0, 0);
                                         const isToday = tDate.getTime() === today.getTime();
 
-                                            return (
-                                                <th key={d} className={`w-12 p-1 text-center ${isToday ? 'bg-green-100' : (accentClass ?? '')}`}>
+                                        return (
+                                            <th key={d} className={`w-12 p-1 text-center ${isToday ? 'bg-green-100' : (accentClass ?? '')}`}>
                                                 <div className="mb-1">
                                                     <input
                                                         type="checkbox"
@@ -256,7 +256,7 @@ export default function MonthEditor({
                                                 </div>
                                                 <Link
                                                     href={route('shifts.daily', { date: d })}
-                                                    className={`inline-block cursor-pointer select-none rounded px-1 py-0.5 ${textClass} hover:bg-gray-100`}
+                                                    className={`inline-block cursor-pointer rounded px-1 py-0.5 select-none ${textClass} hover:bg-gray-100`}
                                                     title={`この日のタイムラインを見る: ${d}`}
                                                 >
                                                     <div className="text-xs">{`${dt.getMonth() + 1}/${dt.getDate()}`}</div>

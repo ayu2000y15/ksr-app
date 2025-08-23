@@ -55,8 +55,12 @@ class PermissionsSeeder extends Seeder
         ];
 
         // 既存の権限はそのままに、新しい権限のみを作成
+        $defaultGuard = config('auth.defaults.guard', 'web');
         foreach ($permissions as $name) {
-            Permission::firstOrCreate(['name' => $name]);
+            Permission::firstOrCreate([
+                'name' => $name,
+                'guard_name' => $defaultGuard,
+            ]);
         }
     }
 }

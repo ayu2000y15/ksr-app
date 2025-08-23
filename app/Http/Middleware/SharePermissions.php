@@ -69,6 +69,31 @@ class SharePermissions
                         'update' => $safeHas('permission.update'),
                         'delete' => $safeHas('permission.delete'),
                     ],
+                    // shift related permissions (used by shifts pages/components)
+                    'shift' => [
+                        'view' => $safeHas('shift.view'),
+                        'create' => $safeHas('shift.create'),
+                        'update' => $safeHas('shift.update'),
+                        'delete' => $safeHas('shift.delete'),
+                    ],
+                    'shift_application' => [
+                        'view' => $safeHas('shift_application.view'),
+                        'create' => $safeHas('shift_application.create'),
+                        'update' => $safeHas('shift_application.update'),
+                        'delete' => $safeHas('shift_application.delete'),
+                    ],
+                    'default_shift' => [
+                        'view' => $safeHas('default_shift.view'),
+                        'create' => $safeHas('default_shift.create'),
+                        'update' => $safeHas('default_shift.update'),
+                        'delete' => $safeHas('default_shift.delete'),
+                    ],
+                    'user_shift_setting' => [
+                        'view' => $safeHas('user_shift_setting.view'),
+                        'create' => $safeHas('user_shift_setting.create'),
+                        'update' => $safeHas('user_shift_setting.update'),
+                        'delete' => $safeHas('user_shift_setting.delete'),
+                    ],
                     'is_system_admin' => $isSystemAdmin,
                 ],
             ]);
@@ -79,6 +104,10 @@ class SharePermissions
                     'user' => ['view' => false, 'create' => false, 'update' => false, 'delete' => false],
                     'role' => ['view' => false, 'create' => false, 'update' => false, 'delete' => false],
                     'permission' => ['view' => false, 'create' => false, 'update' => false, 'delete' => false],
+                    'shift' => ['view' => false, 'create' => false, 'update' => false, 'delete' => false],
+                    'shift_application' => ['view' => false, 'create' => false, 'update' => false, 'delete' => false],
+                    'default_shift' => ['view' => false, 'create' => false, 'update' => false, 'delete' => false],
+                    'user_shift_setting' => ['view' => false, 'create' => false, 'update' => false, 'delete' => false],
                     'is_system_admin' => false,
                 ],
             ]);
