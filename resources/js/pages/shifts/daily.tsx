@@ -31,6 +31,46 @@ export default function Daily() {
         setShiftDetails(props?.shiftDetails || []);
     }, [props?.shiftDetails]);
 
+    // Listen for global updates so that status changes (e.g. absent) reflect immediately
+    useEffect(() => {
+        const handler = (e: Event) => {
+            try {
+                const ev = e as CustomEvent<any>;
+                const d = ev && ev.detail ? ev.detail : null;
+                if (!d || typeof d.id === 'undefined') return;
+                const id = Number(d.id);
+                const status = d.status;
+                setShiftDetails((prev: any[]) => prev.map((p: any) => (Number(p.id) === id ? { ...p, status } : p)));
+            } catch (err) {
+                // ignore
+            }
+        };
+        if (typeof window !== 'undefined' && window.addEventListener) {
+            window.addEventListener('ksr.shiftDetail.updated', handler as EventListener);
+        }
+        // toast listener
+        const toastHandler = (e: Event) => {
+            try {
+                const ev = e as CustomEvent<any>;
+                const d = ev && ev.detail ? ev.detail : null;
+                if (!d) return;
+                const msg = d.message ?? (d.status === 'absent' ? '欠席にしました' : '更新しました');
+                setToast({ message: String(msg), type: 'success' });
+            } catch {
+                // ignore
+            }
+        };
+        if (typeof window !== 'undefined' && window.addEventListener) {
+            window.addEventListener('ksr.shiftDetail.toast', toastHandler as EventListener);
+        }
+        return () => {
+            if (typeof window !== 'undefined' && window.removeEventListener) {
+                window.removeEventListener('ksr.shiftDetail.updated', handler as EventListener);
+                window.removeEventListener('ksr.shiftDetail.toast', toastHandler as EventListener);
+            }
+        };
+    }, []);
+
     const [mode, setMode] = useState<'shift' | 'break'>('shift');
     const [breakType, setBreakType] = useState<'planned' | 'actual'>('planned');
     const [breakLocked, setBreakLocked] = useState<boolean>(true);
@@ -173,6 +213,17 @@ export default function Daily() {
                 setShiftDetails((prev) => [...prev, created]);
             }
             setToast({ message: `${payload.type === 'actual' ? '休憩（実績）' : '休憩（予定）'} を登録しました`, type: 'success' });
+            try {
+                if (typeof window !== 'undefined' && window.dispatchEvent) {
+                    window.dispatchEvent(
+                        new CustomEvent('ksr.shiftDetail.updated', {
+                            detail: { id: created ? created.id : null, status: created ? ((created as any).status ?? null) : null },
+                        }),
+                    );
+                }
+            } catch {
+                // ignore
+            }
         } catch (e: any) {
             console.error('failed to create break', e);
             // try to show server-provided validation message (e.g. 重複エラー)
@@ -405,6 +456,18 @@ export default function Daily() {
                                                                 );
                                                                 // show success toast
                                                                 setToast({ message: '保存しました', type: 'success' });
+                                                                // notify other components (e.g., BreakTimeline) so they can update immediately
+                                                                try {
+                                                                    if (typeof window !== 'undefined' && window.dispatchEvent) {
+                                                                        window.dispatchEvent(
+                                                                            new CustomEvent('ksr.shiftDetail.updated', {
+                                                                                detail: { id: updated.id, status: (updated as any).status ?? null },
+                                                                            }),
+                                                                        );
+                                                                    }
+                                                                } catch {
+                                                                    // ignore
+                                                                }
                                                             }}
                                                             onDeleted={(id: number) => {
                                                                 setShiftDetails((prev) => prev.filter((p) => p.id !== id));
@@ -572,7 +635,37 @@ export default function Daily() {
                                     <TableBody>
                                         {(() => {
                                             // build break entries directly from shiftDetails (server source-of-truth)
-                                            const sdBreaks = (shiftDetails || []).filter((s: any) => String(s.type ?? '') === 'break');
+                                            // Exclude breaks with status 'absent' and breaks for users whose work shift on this date is marked absent.
+                                            const absentUserIds = new Set<string>();
+                                            (shiftDetails || [])
+                                                .filter((sd: any) => String(sd.type ?? '') === 'work')
+                                                .filter((sd: any) => {
+                                                    try {
+                                                        const startDate = sd.start_time
+                                                            ? String(sd.start_time).slice(0, 10)
+                                                            : sd.date
+                                                              ? String(sd.date).slice(0, 10)
+                                                              : null;
+                                                        return startDate === date && String(sd.status ?? '') === 'absent';
+                                                    } catch {
+                                                        return false;
+                                                    }
+                                                })
+                                                .forEach((w: any) => {
+                                                    const uid = w.user_id ?? (w.user && w.user.id) ?? null;
+                                                    if (uid !== null && typeof uid !== 'undefined') absentUserIds.add(String(uid));
+                                                });
+
+                                            const sdBreaks = (shiftDetails || []).filter((s: any) => {
+                                                // skip non-breaks
+                                                if (String(s.type ?? '') !== 'break') return false;
+                                                // skip breaks explicitly marked absent
+                                                if (String(s.status ?? '') === 'absent') return false;
+                                                // skip breaks belonging to users who are absent for the date
+                                                const uid = s.user_id ?? (s.user && s.user.id) ?? null;
+                                                if (uid !== null && typeof uid !== 'undefined' && absentUserIds.has(String(uid))) return false;
+                                                return true;
+                                            });
 
                                             // Determine the user ordering used by the timeline (work items on the date)
                                             const workItems = (shiftDetails || [])
@@ -786,6 +879,20 @@ export default function Daily() {
                                                                                     );
                                                                                 setToast({ message: '保存しました', type: 'success' });
                                                                                 setEditingBreakId(null);
+                                                                                try {
+                                                                                    if (typeof window !== 'undefined' && window.dispatchEvent) {
+                                                                                        const statusVal = returned
+                                                                                            ? ((returned as any).status ?? null)
+                                                                                            : ((payload as any).status ?? null);
+                                                                                        window.dispatchEvent(
+                                                                                            new CustomEvent('ksr.shiftDetail.updated', {
+                                                                                                detail: { id: b.id, status: statusVal },
+                                                                                            }),
+                                                                                        );
+                                                                                    }
+                                                                                } catch {
+                                                                                    // ignore
+                                                                                }
                                                                             } catch (e: any) {
                                                                                 console.error(e);
                                                                                 // If validation overlap (422), show specific message
@@ -921,11 +1028,39 @@ function EditableShiftRow({
     const [startVal, setStartVal] = useState<string>(padTimeForInput(timeValueFromRaw(sd.start_time ?? sd.startRaw ?? null)));
     const [endVal, setEndVal] = useState<string>(padTimeForInput(timeValueFromRaw(sd.end_time ?? sd.endRaw ?? null)));
     const [saving, setSaving] = useState(false);
+    const [isAbsentLocal, setIsAbsentLocal] = useState<boolean>(String(sd.status ?? '') === 'absent');
 
     useEffect(() => {
         setStartVal(padTimeForInput(timeValueFromRaw(sd.start_time ?? sd.startRaw ?? null)));
         setEndVal(padTimeForInput(timeValueFromRaw(sd.end_time ?? sd.endRaw ?? null)));
+        // keep local absent flag in sync with prop
+        setIsAbsentLocal(String(sd.status ?? '') === 'absent');
     }, [sd]);
+
+    // listen for global updates so the row updates even if parent state hasn't propagated
+    useEffect(() => {
+        const handler = (e: Event) => {
+            try {
+                const ev = e as CustomEvent<any>;
+                const d = ev && ev.detail ? ev.detail : null;
+                if (!d || typeof d.id === 'undefined') return;
+                const id = Number(d.id);
+                if (Number(sd.id) !== id) return;
+                const status = String(d.status ?? '');
+                setIsAbsentLocal(status === 'absent');
+            } catch {
+                // ignore
+            }
+        };
+        if (typeof window !== 'undefined' && window.addEventListener) {
+            window.addEventListener('ksr.shiftDetail.updated', handler as EventListener);
+        }
+        return () => {
+            if (typeof window !== 'undefined' && window.removeEventListener) {
+                window.removeEventListener('ksr.shiftDetail.updated', handler as EventListener);
+            }
+        };
+    }, [sd.id]);
 
     const save = async () => {
         if (!canUpdate) return alert('権限がありません。');
@@ -980,12 +1115,15 @@ function EditableShiftRow({
         if (onClearOpen) onClearOpen(sd.id);
     };
 
+    // prefer local absent flag which updates via global events so the row updates without full refresh
+    const isAbsent = isAbsentLocal;
+
     return (
         <TableRow id={`sd-row-${sd.id}`} className="hover:bg-gray-50">
             <TableCell>
                 <div className="flex items-center gap-2">
                     <span className="w-10 text-right font-mono text-sm">{sd.user_id ?? (sd.user && sd.user.id) ?? '—'}</span>
-                    <span className="truncate">{sd.user ? sd.user.name : '—'}</span>
+                    <span className={`truncate ${isAbsent ? 'text-gray-600 line-through opacity-60' : ''}`}>{sd.user ? sd.user.name : '—'}</span>
                 </div>
             </TableCell>
             <TableCell>
@@ -1038,12 +1176,12 @@ function EditableShiftRow({
                     </div>
                 ) : (
                     <div className="flex items-center justify-end gap-2">
-                        {canUpdate && (
+                        {!isAbsent && canUpdate && (
                             <Button variant="outline" onClick={() => setEditing(true)}>
                                 編集
                             </Button>
                         )}
-                        {canDelete && (
+                        {!isAbsent && canDelete && (
                             <Button variant="destructive" onClick={destroy}>
                                 削除
                             </Button>

@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import axios from 'axios';
+import { useEffect, useMemo, useState } from 'react';
 
 type BreakPayload = { shift_detail_id: number; start_time: string; end_time: string; type?: string };
 
@@ -139,6 +140,29 @@ export default function DailyTimeline(props: {
     // column width in px: wider in break mode to allow horizontal scroll and easier 15min clicks
     const columnWidth = mode === 'break' ? 40 : 24;
 
+    // light shape for shift detail records used here
+    type ShiftDetailLight = {
+        id?: number | string;
+        status?: string;
+        user_id?: number | string;
+        start_time?: string | null;
+        end_time?: string | null;
+    };
+
+    // track absent (logical delete) flags locally so UI updates immediately
+    const [absentMap, setAbsentMap] = useState<Record<number, boolean>>({});
+
+    // initialize absentMap from items' status when items change
+    useEffect(() => {
+        const m: Record<number, boolean> = {};
+        for (const itRaw of items) {
+            const it = itRaw as ShiftDetailLight;
+            const st = it.status ?? '';
+            if (it.id !== undefined) m[Number(it.id)] = String(st) === 'absent';
+        }
+        setAbsentMap(m);
+    }, [items]);
+
     const counts = useMemo(() => {
         const day = new Set<number>();
         const night = new Set<number>();
@@ -146,13 +170,15 @@ export default function DailyTimeline(props: {
             const t = String(it.shift_type ?? it.type ?? '');
             const uid = Number(it.user_id ?? (it.user && (it.user as { id?: number }).id) ?? NaN);
             if (!Number.isFinite(uid)) return;
+            // exclude shifts currently marked absent (absentMap keyed by shift id)
+            if (absentMap && it.id !== undefined && absentMap[Number(it.id)]) return;
             if (t === 'day') day.add(uid);
             else if (t === 'night') night.add(uid);
         });
 
         // simple counts: just sizes of day/night sets (no break subtraction)
         return { dayCount: day.size, nightCount: night.size };
-    }, [items]);
+    }, [items, absentMap]);
 
     // per-slot attendance counts = number of work shifts covering the slot minus any breaks overlapping the slot
     const attendanceCounts = useMemo(() => {
@@ -161,9 +187,12 @@ export default function DailyTimeline(props: {
         if (!items || items.length === 0) return countsArr;
 
         // combine breaks from prop and any shiftDetails entries of type 'break'
-        const sdBreaks = (shiftDetails || []).filter((s: ShiftDetail) => String(s.type ?? '') === 'break');
+        // exclude breaks whose status is 'absent' so they are not shown in break mode
+        const sdBreaks = (shiftDetails || []).filter(
+            (s: ShiftDetail) => String(s.type ?? '') === 'break' && String((s as any).status ?? '') !== 'absent',
+        );
         const combinedBreaks = [
-            ...(props.breaks || []),
+            ...(props.breaks || []).filter((b: Break) => String((b as any).status ?? '') !== 'absent'),
             ...sdBreaks.map((s) => ({ id: s.id, shift_detail_id: s.id, start_time: s.start_time, end_time: s.end_time })),
         ];
 
@@ -174,6 +203,8 @@ export default function DailyTimeline(props: {
             // count work shifts covering this slot
             let workCount = 0;
             for (const it of items) {
+                // skip absent shifts (absentMap keyed by shift id)
+                if (it.id !== undefined && absentMap && absentMap[Number(it.id)]) continue;
                 const sMin = it.sMin ?? 0;
                 const eMin = it.eMin ?? sMin + 60;
                 if (sMin < slotEndMin && slotMin < eMin) workCount += 1;
@@ -187,6 +218,8 @@ export default function DailyTimeline(props: {
                     if (!m) return null;
                     return { hh: Number(m[4]), mm: Number(m[5]) };
                 };
+                // ignore breaks that belong to absent shifts
+                if (b.shift_detail_id !== undefined && b.shift_detail_id !== null && absentMap && absentMap[Number(b.shift_detail_id)]) return false;
                 const bs = parse(b.start_time ?? null);
                 const be = parse(b.end_time ?? null);
                 if (!bs || !be) return false;
@@ -199,9 +232,56 @@ export default function DailyTimeline(props: {
         }
 
         return countsArr;
-    }, [items, shiftDetails, props.breaks, timelineStartMin, interval, timeSlots]);
+    }, [items, shiftDetails, props.breaks, timelineStartMin, interval, timeSlots, absentMap]);
 
     const displayDate = date ? String(date).slice(0, 10).replace(/-/g, '/') : '';
+
+    const toggleAbsent = async (id: number, makeAbsent: boolean) => {
+        // optimistic update
+        setAbsentMap((prev) => ({ ...prev, [id]: makeAbsent }));
+        try {
+            // find existing record to include required start_time/end_time per controller validation
+            const existing = (shiftDetails || []).find((s: ShiftDetail) => Number(s.id) === Number(id));
+            if (!existing) {
+                throw new Error('該当の勤務詳細が見つかりません');
+            }
+            const payload: { status: string; start_time?: string | null; end_time?: string | null } = { status: makeAbsent ? 'absent' : 'scheduled' };
+            // prefer explicit start_time/end_time fields returned from server
+            payload.start_time = existing.start_time ?? null;
+            payload.end_time = existing.end_time ?? null;
+
+            // if we don't have start/end, revert and notify user
+            if (!payload.start_time || !payload.end_time) {
+                setAbsentMap((prev) => ({ ...prev, [id]: !makeAbsent }));
+                alert('勤務の開始／終了時刻が不明なため欠席にできません。');
+                return;
+            }
+
+            await axios.patch(route('shift-details.update', id), payload);
+            // notify other components (e.g., BreakTimeline) so they can update immediately
+            try {
+                if (typeof window !== 'undefined' && window.dispatchEvent) {
+                    window.dispatchEvent(new CustomEvent('ksr.shiftDetail.updated', { detail: { id, status: payload.status } }));
+                }
+            } catch {
+                // ignore
+            }
+            // dispatch a toast event for UI feedback
+            try {
+                if (typeof window !== 'undefined' && window.dispatchEvent) {
+                    const msg = payload.status === 'absent' ? '欠席にしました' : '欠席を解除しました';
+                    window.dispatchEvent(new CustomEvent('ksr.shiftDetail.toast', { detail: { id, status: payload.status, message: msg } }));
+                }
+            } catch {
+                // ignore
+            }
+        } catch (err) {
+            console.error('failed to update absent status', err);
+            // revert
+            setAbsentMap((prev) => ({ ...prev, [id]: !makeAbsent }));
+            alert('欠席の更新に失敗しました');
+        }
+    };
 
     const toDbString = (m: number) => {
         const hh = String(Math.floor((m % (24 * 60)) / 60)).padStart(2, '0');
@@ -214,10 +294,12 @@ export default function DailyTimeline(props: {
         <div className="rounded border bg-white p-4">
             <div className="mb-3 flex items-center justify-between">
                 <div className="text-lg font-medium">{displayDate}</div>
-                <div className="flex items-center gap-3">
-                    <label className="text-sm">グリッド間隔:</label>
-                    <span className="rounded border bg-gray-50 p-1 text-sm">{String(initialInterval)}分</span>
-                </div>
+                {mode === 'break' && (
+                    <div className="flex items-center gap-3">
+                        <label className="text-sm">グリッド間隔:</label>
+                        <span className="rounded border bg-gray-50 p-1 text-sm">{String(initialInterval)}分</span>
+                    </div>
+                )}
             </div>
 
             <div className="overflow-x-auto">
@@ -225,7 +307,11 @@ export default function DailyTimeline(props: {
                 {mode === 'break' ? (
                     <div className="min-w-full">
                         <div className="flex items-stretch border-b">
-                            <div className="w-28 sm:w-48" />
+                            <div className="w-28 sm:w-48">
+                                <div className="flex h-10 items-center border-b">
+                                    <span className="text-xs">欠席</span>
+                                </div>
+                            </div>
                             <div className="flex-1">
                                 <div style={{ minWidth: `${timeSlots.length * columnWidth}px` }}>
                                     <div className="grid" style={{ gridTemplateColumns: `repeat(${timeSlots.length}, ${columnWidth}px)` }}>
@@ -240,73 +326,121 @@ export default function DailyTimeline(props: {
                         </div>
                     </div>
                 ) : (
+                    // shift mode: simplify header (no top time ruler) to avoid visual clutter
                     <div className="min-w-full">
                         <div className="flex items-stretch border-b">
-                            <div className="w-28 sm:w-48" />
-                            <div className="flex-1">
-                                <div style={{ minWidth: `${timeSlots.length * columnWidth}px` }}>
-                                    <div className="grid" style={{ gridTemplateColumns: `repeat(${timeSlots.length}, ${columnWidth}px)` }}>
-                                        {timeSlots.map((t, i) => (
-                                            <div key={t + ':' + i} className="border-l py-1 text-center text-xs text-muted-foreground">
-                                                {i % Math.max(1, Math.floor(60 / interval)) === 0 ? String(Math.floor((t % 1440) / 60)) : ''}
-                                            </div>
-                                        ))}
-                                    </div>
+                            <div className="w-28 sm:w-48">
+                                <div className="flex h-10 items-center border-b px-2">
+                                    <span className="text-sm font-medium">欠席</span>
                                 </div>
+                            </div>
+                            <div className="flex-1">
+                                <div className="h-10 border-b" />
                             </div>
                         </div>
                     </div>
                 )}
 
                 <div className="mt-2 space-y-2">
-                    {items.map((it: Item) => {
-                        const sMin = it.sMin ?? 0;
-                        const eMin = it.eMin ?? sMin + 60;
-                        const rawLeft = ((sMin - timelineStartMin) / totalMinutes) * 100;
-                        const rawWidth = ((eMin - sMin) / totalMinutes) * 100;
-                        const leftPercent = Number.isFinite(rawLeft) ? Math.max(0, Math.min(100, rawLeft)) : 0;
-                        const widthPercent = Number.isFinite(rawWidth) ? Math.max(0, Math.min(100 - leftPercent, rawWidth)) : 0;
-                        const totalPixelWidth = timeSlots.length * columnWidth;
-                        // when in break mode we render the grid with fixed pixel columns; compute px positions
-                        const barLeftPx = ((sMin - timelineStartMin) / totalMinutes) * totalPixelWidth;
-                        const barWidthPx = ((eMin - sMin) / totalMinutes) * totalPixelWidth;
-                        const startLabel = parseDbTime(it.startRaw);
-                        const endLabel = parseDbTime(it.endRaw);
+                    {items
+                        .filter((it: Item) => {
+                            // In break mode, skip shifts that are absent (database status) or locally marked absent
+                            if (mode === 'break') {
+                                const dbStatus = String((it as any).status ?? '');
+                                if (dbStatus === 'absent') return false;
+                                if (it.id !== undefined && absentMap && absentMap[Number(it.id)]) return false;
+                            }
+                            return true;
+                        })
+                        .map((it: Item) => {
+                            const sMin = it.sMin ?? 0;
+                            const eMin = it.eMin ?? sMin + 60;
+                            const rawLeft = ((sMin - timelineStartMin) / totalMinutes) * 100;
+                            const rawWidth = ((eMin - sMin) / totalMinutes) * 100;
+                            const leftPercent = Number.isFinite(rawLeft) ? Math.max(0, Math.min(100, rawLeft)) : 0;
+                            const widthPercent = Number.isFinite(rawWidth) ? Math.max(0, Math.min(100 - leftPercent, rawWidth)) : 0;
+                            const totalPixelWidth = timeSlots.length * columnWidth;
+                            // when in break mode we render the grid with fixed pixel columns; compute px positions
+                            const barLeftPx = ((sMin - timelineStartMin) / totalMinutes) * totalPixelWidth;
+                            const barWidthPx = ((eMin - sMin) / totalMinutes) * totalPixelWidth;
+                            const startLabel = parseDbTime(it.startRaw);
+                            const endLabel = parseDbTime(it.endRaw);
 
-                        return (
-                            <div key={it.id} className="flex items-center gap-4">
-                                <div className="flex w-28 items-center font-medium sm:w-48">
-                                    <span className="mr-2 w-6 text-right font-mono text-sm">{it.user_id ?? (it.user && it.user.id) ?? '—'}</span>
-                                    <span className="truncate">{it.user ? it.user.name : '—'}</span>
-                                </div>
+                            return (
+                                <div key={it.id} className="flex items-center gap-4">
+                                    <div className="flex w-28 items-center font-medium sm:w-48">
+                                        {/* checkbox for marking absent */}
+                                        <input
+                                            type="checkbox"
+                                            className="mr-2"
+                                            checked={!!absentMap[Number(it.id ?? 0)]}
+                                            onChange={(e) => toggleAbsent(Number(it.id ?? 0), e.target.checked)}
+                                            title="チェックで欠席扱いになります（論理削除）"
+                                        />
+                                        <span className="mr-2 w-6 text-right font-mono text-sm">{it.user_id ?? (it.user && it.user.id) ?? '—'}</span>
+                                        <span className={`truncate ${absentMap[Number(it.id ?? 0)] ? 'text-gray-600 line-through opacity-60' : ''}`}>
+                                            {it.user ? it.user.name : '—'}
+                                        </span>
+                                    </div>
 
-                                <div className="relative h-10 flex-1">
-                                    <div
-                                        className="absolute inset-0 bg-gray-50"
-                                        style={mode === 'break' ? { minWidth: `${timeSlots.length * columnWidth}px` } : undefined}
-                                    >
-                                        {mode === 'break' && (
-                                            <div className="grid" style={{ gridTemplateColumns: `repeat(${timeSlots.length}, ${columnWidth}px)` }}>
-                                                {timeSlots.map((t, idx) => {
-                                                    const slotMin = timelineStartMin + idx * interval;
-                                                    const within = slotMin >= sMin && slotMin <= eMin;
-                                                    // determine if this slot already contains a break for this user
-                                                    const sdBreaksLocal = (shiftDetails || []).filter(
-                                                        (s: ShiftDetail) => String(s.type ?? '') === 'break',
-                                                    );
-                                                    const combinedBreaksLocal = [
-                                                        ...(props.breaks || []),
-                                                        ...sdBreaksLocal.map((s) => ({
-                                                            id: s.id,
-                                                            shift_detail_id: s.id,
-                                                            user_id: s.user_id,
-                                                            start_time: s.start_time,
-                                                            end_time: s.end_time,
-                                                        })),
-                                                    ];
-                                                    const isBreakSlot = combinedBreaksLocal
-                                                        .filter((b: any) => Number(b.user_id) === Number(it.user_id))
-                                                        .some((b: any) => {
+                                    <div className="relative h-10 flex-1">
+                                        <div
+                                            className="absolute inset-0 bg-gray-50"
+                                            style={mode === 'break' ? { minWidth: `${timeSlots.length * columnWidth}px` } : undefined}
+                                        >
+                                            {mode === 'break' && (
+                                                <div
+                                                    className="grid"
+                                                    style={{ gridTemplateColumns: `repeat(${timeSlots.length}, ${columnWidth}px)` }}
+                                                >
+                                                    {timeSlots.map((t, idx) => {
+                                                        const slotMin = timelineStartMin + idx * interval;
+                                                        const within = slotMin >= sMin && slotMin <= eMin;
+                                                        // determine if this slot already contains a break for this user
+                                                        type CombinedBreak = {
+                                                            id?: number | null;
+                                                            user_id?: number | null;
+                                                            start_time?: string | null;
+                                                            end_time?: string | null;
+                                                            shift_detail_id?: number | null;
+                                                        };
+                                                        const sdBreaksLocal = (shiftDetails || []).filter(
+                                                            (s: ShiftDetail) =>
+                                                                String(s.type ?? '') === 'break' && String((s as any).status ?? '') !== 'absent',
+                                                        );
+                                                        const combinedBreaksLocal: CombinedBreak[] = [
+                                                            ...(props.breaks || [])
+                                                                .filter((b: Break) => String((b as any).status ?? '') !== 'absent')
+                                                                .map((b) => ({
+                                                                    id: b.id ?? null,
+                                                                    user_id: (b as unknown as { user_id?: number | null }).user_id ?? null,
+                                                                    start_time: b.start_time ?? null,
+                                                                    end_time: b.end_time ?? null,
+                                                                    shift_detail_id: b.shift_detail_id ?? null,
+                                                                    status: (b as any).status ?? 'scheduled',
+                                                                })),
+                                                            ...sdBreaksLocal.map((s) => ({
+                                                                id: s.id ?? null,
+                                                                user_id: s.user_id ?? null,
+                                                                start_time: s.start_time ?? null,
+                                                                end_time: s.end_time ?? null,
+                                                                shift_detail_id: s.id ?? null,
+                                                                status: (s as any).status ?? 'scheduled',
+                                                            })),
+                                                        ];
+
+                                                        const overlappingBreaksForUser = combinedBreaksLocal.filter((b) => {
+                                                            // belong if user_id matches OR shift_detail_id matches
+                                                            const belongsToUser =
+                                                                (b.shift_detail_id !== undefined &&
+                                                                    b.shift_detail_id !== null &&
+                                                                    Number(b.shift_detail_id) === Number(it.id)) ||
+                                                                (b.user_id !== undefined &&
+                                                                    b.user_id !== null &&
+                                                                    Number(b.user_id) === Number(it.user_id));
+                                                            if (!belongsToUser) return false;
+                                                            // ignore our own break when deduping
+                                                            if (Number(b.id) === Number(it.id)) return false;
                                                             const bs = parseDbTime(b.start_time ?? null);
                                                             const be = parseDbTime(b.end_time ?? null);
                                                             if (!bs || !be) return false;
@@ -314,111 +448,150 @@ export default function DailyTimeline(props: {
                                                             const beMin = be.hh * 60 + be.mm;
                                                             return bsMin < slotMin + interval && slotMin < beMin;
                                                         });
-                                                    // block slot only when existing break AND selected breakType is not 'actual'
-                                                    const slotBlocked = isBreakSlot && breakType !== 'actual';
-                                                    const clickable = mode === 'break' && within && !slotBlocked;
-                                                    return (
-                                                        <div
-                                                            key={`${it.id}-slot-${idx}`}
-                                                            className={`border-l ${clickable ? 'cursor-pointer' : 'pointer-events-none'}`}
-                                                            onClick={() => {
-                                                                if (!clickable) return;
-                                                                if (!selTarget || selTarget.id !== it.id) {
-                                                                    setSelTarget({ id: it.id, startIndex: idx });
-                                                                    return;
-                                                                }
-                                                                const sIndex = selTarget.startIndex ?? idx;
-                                                                const eIndex = idx;
-                                                                const s = timelineStartMin + Math.min(sIndex, eIndex) * interval;
-                                                                const e = timelineStartMin + Math.max(sIndex, eIndex) * interval;
-                                                                if (onCreateBreak) {
-                                                                    onCreateBreak({
-                                                                        shift_detail_id: it.id as number,
-                                                                        start_time: toDbString(s),
-                                                                        end_time: toDbString(e),
-                                                                        type: breakType,
-                                                                    });
-                                                                    setSelTarget(null);
-                                                                }
-                                                            }}
-                                                        />
-                                                    );
-                                                })}
-                                            </div>
-                                        )}
-                                    </div>
 
-                                    {/* shift bar: in break mode make bars more muted */}
-                                    <div
-                                        className={`absolute top-1 flex h-8 items-center overflow-hidden rounded ${mode === 'break' ? (it.shift_type === 'night' ? 'bg-indigo-200 text-indigo-800/60' : 'bg-yellow-200 text-yellow-900/60') : it.shift_type === 'night' ? 'bg-indigo-700/60 text-white' : 'bg-yellow-400/80 text-black'}`}
-                                        style={
-                                            mode === 'break'
-                                                ? {
-                                                      left: `${Math.max(0, barLeftPx)}px`,
-                                                      width: `${Math.max(0, barWidthPx)}px`,
-                                                      zIndex: 10,
-                                                      pointerEvents: 'none',
-                                                  }
-                                                : { left: `${leftPercent}%`, width: `${widthPercent}%`, zIndex: 10, pointerEvents: 'auto' }
-                                        }
-                                        onClick={() => onBarClick && onBarClick(it.id)}
-                                    >
-                                        <div className="px-2 text-sm" style={{ cursor: onBarClick ? 'pointer' : undefined }}>
-                                            {mode === 'break'
-                                                ? ''
-                                                : startLabel && endLabel
-                                                  ? `${String(startLabel.hh).padStart(2, '0')}:${String(startLabel.mm).padStart(2, '0')} - ${String(endLabel.hh).padStart(2, '0')}:${String(endLabel.mm).padStart(2, '0')}`
-                                                  : '時間未設定'}
+                                                        const hasAnyBreakOverlap = overlappingBreaksForUser.length > 0;
+                                                        const hasActualBreakOverlap = overlappingBreaksForUser.some(
+                                                            (b) => (b as any).status === 'actual',
+                                                        );
+
+                                                        let slotBlocked = false;
+                                                        if (hasActualBreakOverlap) slotBlocked = true;
+                                                        else if (hasAnyBreakOverlap && breakType !== 'actual') slotBlocked = true;
+                                                        const clickable = mode === 'break' && within && !slotBlocked;
+                                                        return (
+                                                            <div
+                                                                key={`${it.id}-slot-${idx}`}
+                                                                className={`border-l ${clickable ? 'cursor-pointer' : 'pointer-events-none'}`}
+                                                                onClick={() => {
+                                                                    if (!clickable) return;
+                                                                    if (!selTarget || selTarget.id !== it.id) {
+                                                                        setSelTarget({ id: it.id, startIndex: idx });
+                                                                        return;
+                                                                    }
+                                                                    const sIndex = selTarget.startIndex ?? idx;
+                                                                    const eIndex = idx;
+                                                                    const s = timelineStartMin + Math.min(sIndex, eIndex) * interval;
+                                                                    const e = timelineStartMin + Math.max(sIndex, eIndex) * interval;
+                                                                    if (onCreateBreak) {
+                                                                        onCreateBreak({
+                                                                            shift_detail_id: it.id as number,
+                                                                            start_time: toDbString(s),
+                                                                            end_time: toDbString(e),
+                                                                            type: breakType,
+                                                                        });
+                                                                        setSelTarget(null);
+                                                                    }
+                                                                }}
+                                                            />
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
                                         </div>
 
-                                        {/* render breaks on bar (lighter color) */}
-                                        {breaks &&
-                                            breaks
-                                                .filter((b: Break) => Number(b.shift_detail_id) === Number(it.id))
-                                                .map((b: Break) => {
-                                                    const bs = parseDbTime(b.start_time ?? null);
-                                                    const be = parseDbTime(b.end_time ?? null);
-                                                    if (!bs || !be) return null;
-                                                    const bsMin = bs.hh * 60 + bs.mm;
-                                                    const beMin = be.hh * 60 + be.mm;
-                                                    const bgColor = it.shift_type === 'night' ? 'rgba(79,70,229,0.7)' : 'rgba(245,158,11,0.7)';
-                                                    if (mode === 'break') {
-                                                        const breakLeftPx = ((bsMin - timelineStartMin) / totalMinutes) * totalPixelWidth;
-                                                        const breakWidthPx = ((beMin - bsMin) / totalMinutes) * totalPixelWidth;
-                                                        const relLeft = breakLeftPx - barLeftPx;
+                                        {/* shift bar: in break mode make bars more muted */}
+                                        <div
+                                            className={`absolute top-1 flex h-8 items-center overflow-hidden rounded ${mode === 'break' ? (it.shift_type === 'night' ? 'text-indigo-800/60' : 'text-yellow-900/60') : it.shift_type === 'night' ? 'bg-indigo-700/60 text-white' : 'bg-yellow-400/80 text-black'}`}
+                                            style={(() => {
+                                                const base =
+                                                    mode === 'break'
+                                                        ? {
+                                                              left: `${Math.max(0, barLeftPx)}px`,
+                                                              width: `${Math.max(0, barWidthPx)}px`,
+                                                              zIndex: 10,
+                                                              pointerEvents: 'none' as const,
+                                                          }
+                                                        : {
+                                                              left: `${leftPercent}%`,
+                                                              width: `${widthPercent}%`,
+                                                              zIndex: 10,
+                                                              pointerEvents: 'auto' as const,
+                                                          };
+                                                if (it.id !== undefined && absentMap && absentMap[Number(it.id)]) {
+                                                    // muted gray background for absent rows
+                                                    return { ...base, backgroundColor: '#e5e7eb' };
+                                                }
+                                                return base;
+                                            })()}
+                                            onClick={() => {
+                                                const isAbsent = it.id !== undefined && absentMap && absentMap[Number(it.id)];
+                                                if (isAbsent) return; // ignore clicks for absent rows
+                                                if (onBarClick) onBarClick(it.id);
+                                            }}
+                                        >
+                                            <div
+                                                className="px-2 text-sm"
+                                                style={{
+                                                    cursor:
+                                                        it.id !== undefined && absentMap && absentMap[Number(it.id)]
+                                                            ? 'not-allowed'
+                                                            : onBarClick
+                                                              ? 'pointer'
+                                                              : undefined,
+                                                }}
+                                            >
+                                                {mode === 'break'
+                                                    ? ''
+                                                    : startLabel && endLabel
+                                                      ? `${String(startLabel.hh).padStart(2, '0')}:${String(startLabel.mm).padStart(2, '0')} - ${String(endLabel.hh).padStart(2, '0')}:${String(endLabel.mm).padStart(2, '0')}`
+                                                      : '時間未設定'}
+                                            </div>
+
+                                            {/* render breaks on bar (lighter color) */}
+                                            {breaks &&
+                                                breaks
+                                                    .filter(
+                                                        (b: Break) =>
+                                                            Number(b.shift_detail_id) === Number(it.id) &&
+                                                            String((b as any).status ?? '') !== 'absent',
+                                                    )
+                                                    .map((b: Break) => {
+                                                        const bs = parseDbTime(b.start_time ?? null);
+                                                        const be = parseDbTime(b.end_time ?? null);
+                                                        if (!bs || !be) return null;
+                                                        const bsMin = bs.hh * 60 + bs.mm;
+                                                        const beMin = be.hh * 60 + be.mm;
+                                                        const bgColor = it.shift_type === 'night' ? 'rgba(79,70,229,0.7)' : 'rgba(245,158,11,0.7)';
+                                                        if (mode === 'break') {
+                                                            const breakLeftPx = ((bsMin - timelineStartMin) / totalMinutes) * totalPixelWidth;
+                                                            const breakWidthPx = ((beMin - bsMin) / totalMinutes) * totalPixelWidth;
+                                                            const relLeft = breakLeftPx - barLeftPx;
+                                                            return (
+                                                                <div
+                                                                    key={b.id}
+                                                                    className="absolute top-0 h-full border-r border-l border-white/40"
+                                                                    style={{
+                                                                        left: `${Math.max(0, relLeft)}px`,
+                                                                        width: `${Math.max(0, Math.min(totalPixelWidth, breakWidthPx))}px`,
+                                                                        zIndex: 20,
+                                                                        backgroundColor: bgColor,
+                                                                    }}
+                                                                />
+                                                            );
+                                                        }
+                                                        const left = ((bsMin - timelineStartMin) / totalMinutes) * 100 - leftPercent;
+                                                        const width = ((beMin - bsMin) / totalMinutes) * 100;
                                                         return (
                                                             <div
                                                                 key={b.id}
                                                                 className="absolute top-0 h-full border-r border-l border-white/40"
                                                                 style={{
-                                                                    left: `${Math.max(0, relLeft)}px`,
-                                                                    width: `${Math.max(0, Math.min(totalPixelWidth, breakWidthPx))}px`,
+                                                                    left: `${Math.max(0, left)}%`,
+                                                                    width: `${Math.max(0, Math.min(100, width))}%`,
                                                                     zIndex: 20,
                                                                     backgroundColor: bgColor,
+                                                                    // scheduled breaks should be pointer-transparent when creating actual breaks
+                                                                    pointerEvents:
+                                                                        (b as any).status === 'scheduled' && breakType === 'actual' ? 'none' : 'auto',
                                                                 }}
                                                             />
                                                         );
-                                                    }
-                                                    const left = ((bsMin - timelineStartMin) / totalMinutes) * 100 - leftPercent;
-                                                    const width = ((beMin - bsMin) / totalMinutes) * 100;
-                                                    return (
-                                                        <div
-                                                            key={b.id}
-                                                            className="absolute top-0 h-full border-r border-l border-white/40"
-                                                            style={{
-                                                                left: `${Math.max(0, left)}%`,
-                                                                width: `${Math.max(0, Math.min(100, width))}%`,
-                                                                zIndex: 20,
-                                                                backgroundColor: bgColor,
-                                                            }}
-                                                        />
-                                                    );
-                                                })}
+                                                    })}
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        );
-                    })}
+                            );
+                        })}
                 </div>
 
                 <div className="mt-4 border-t pt-3">

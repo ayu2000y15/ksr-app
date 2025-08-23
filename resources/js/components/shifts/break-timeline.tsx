@@ -87,32 +87,36 @@ export default function BreakTimeline(props: {
             return { ...(sd as ShiftDetail), sMin, eMin, startRaw: sd.start_time ?? null, endRaw: sd.end_time ?? null } as Item;
         };
 
-        return (shiftDetails || [])
-            .filter((sd) => String(sd.type ?? '') === 'work')
-            .filter((sd) => {
-                const sDate = sd.start_time ? String(sd.start_time).slice(0, 10) : sd.date ? String(sd.date).slice(0, 10) : null;
-                return sDate === date;
-            })
-            .map(parse)
-            .sort((a: Item, b: Item) => {
-                const rank = (sd: Item) => {
-                    const t = String(sd.shift_type ?? sd.type ?? '');
-                    if (t === 'day') return 0;
-                    if (t === 'night') return 2;
-                    return 1;
-                };
-                const ra = rank(a);
-                const rb = rank(b);
-                if (ra !== rb) return ra - rb;
-                const aUid = Number(a.user_id ?? (a.user && (a.user as { id?: number }).id) ?? 0);
-                const bUid = Number(b.user_id ?? (b.user && (b.user as { id?: number }).id) ?? 0);
-                if (aUid !== bUid) return aUid - bUid;
-                const aStart = String(a.startRaw ?? '');
-                const bStart = String(b.startRaw ?? '');
-                if (aStart < bStart) return -1;
-                if (aStart > bStart) return 1;
-                return 0;
-            });
+        return (
+            (shiftDetails || [])
+                .filter((sd) => String(sd.type ?? '') === 'work')
+                // exclude shifts that are marked absent in the database
+                .filter((sd) => String((sd as any).status ?? '') !== 'absent')
+                .filter((sd) => {
+                    const sDate = sd.start_time ? String(sd.start_time).slice(0, 10) : sd.date ? String(sd.date).slice(0, 10) : null;
+                    return sDate === date;
+                })
+                .map(parse)
+                .sort((a: Item, b: Item) => {
+                    const rank = (sd: Item) => {
+                        const t = String(sd.shift_type ?? sd.type ?? '');
+                        if (t === 'day') return 0;
+                        if (t === 'night') return 2;
+                        return 1;
+                    };
+                    const ra = rank(a);
+                    const rb = rank(b);
+                    if (ra !== rb) return ra - rb;
+                    const aUid = Number(a.user_id ?? (a.user && (a.user as { id?: number }).id) ?? 0);
+                    const bUid = Number(b.user_id ?? (b.user && (b.user as { id?: number }).id) ?? 0);
+                    if (aUid !== bUid) return aUid - bUid;
+                    const aStart = String(a.startRaw ?? '');
+                    const bStart = String(b.startRaw ?? '');
+                    if (aStart < bStart) return -1;
+                    if (aStart > bStart) return 1;
+                    return 0;
+                })
+        );
     }, [shiftDetails, date, baseDateObj, parseDateOnly]);
 
     const [timelineStartMin, timelineEndMin] = useMemo(() => {
@@ -141,8 +145,9 @@ export default function BreakTimeline(props: {
     const totalPixelWidth = timeSlots.length * columnWidth;
 
     const combinedBreaksMemo = useMemo(() => {
-        const sdBreaks = (shiftDetails || []).filter((s) => String(s.type ?? '') === 'break');
-        const rawCombined = [...(breaks || []), ...sdBreaks];
+        // exclude breaks whose status is 'absent' so they are not considered in break UI
+        const sdBreaks = (shiftDetails || []).filter((s) => String(s.type ?? '') === 'break' && String((s as any).status ?? '') !== 'absent');
+        const rawCombined = [...(breaks || []).filter((b: Break) => String((b as any).status ?? '') !== 'absent'), ...sdBreaks];
         const m = new Map<string, Break>();
         for (const b of rawCombined) {
             const key = b.id ?? `${b.start_time ?? ''}-${b.end_time ?? ''}`;
@@ -151,6 +156,46 @@ export default function BreakTimeline(props: {
         }
         return Array.from(m.values());
     }, [breaks, shiftDetails]);
+
+    // track external absent updates so break UI updates immediately when another component
+    // (e.g. DailyTimeline) marks a shift as absent without the parent shifting props
+    const [externalAbsentMap, setExternalAbsentMap] = useState<Record<number, boolean>>({});
+
+    // visibleItems for break registration: exclude shifts marked absent (db status) or externally marked absent
+    const visibleItems = useMemo(
+        () =>
+            (items || []).filter((it) => String((it as any).status ?? '') !== 'absent' && !(it.id !== undefined && externalAbsentMap[Number(it.id)])),
+        [items, externalAbsentMap],
+    );
+
+    // Listen for global updates to shift details so we can reflect absent changes immediately
+    useEffect(() => {
+        const handler = (e: Event) => {
+            try {
+                const ev = e as CustomEvent<any>;
+                const d = ev && ev.detail ? ev.detail : null;
+                if (!d || typeof d.id === 'undefined') return;
+                const id = Number(d.id);
+                const status = String(d.status ?? '');
+                setExternalAbsentMap((prev) => {
+                    const next = { ...prev };
+                    if (status === 'absent') next[id] = true;
+                    else delete next[id];
+                    return next;
+                });
+            } catch {
+                // ignore
+            }
+        };
+        if (typeof window !== 'undefined' && window.addEventListener) {
+            window.addEventListener('ksr.shiftDetail.updated', handler as EventListener);
+        }
+        return () => {
+            if (typeof window !== 'undefined' && window.removeEventListener) {
+                window.removeEventListener('ksr.shiftDetail.updated', handler as EventListener);
+            }
+        };
+    }, []);
 
     const attendanceCounts = useMemo(() => {
         const counts: number[] = Array(timeSlots.length).fill(0);
@@ -168,7 +213,7 @@ export default function BreakTimeline(props: {
             const slotEndMin = slotMin + interval;
 
             let workCount = 0;
-            for (const it of items) {
+            for (const it of visibleItems) {
                 const sMin = it.sMin ?? 0;
                 const eMin = it.eMin ?? sMin + 60;
                 if (sMin < slotEndMin && slotMin < eMin) workCount += 1;
@@ -241,7 +286,7 @@ export default function BreakTimeline(props: {
                 <div className="w-28 flex-shrink-0 sm:w-48">
                     <div className="h-10 border-b bg-white" />
                     <div className="space-y-2">
-                        {items.map((it) => (
+                        {(visibleItems || []).map((it) => (
                             <div key={`label-${it.id}`} className="flex h-10 items-center border-b bg-white pr-2">
                                 <span className="mr-2 w-6 text-right font-mono text-sm">{it.user_id ?? (it.user && it.user.id) ?? '—'}</span>
                                 <span className="truncate">{it.user ? it.user.name : '—'}</span>
@@ -268,7 +313,7 @@ export default function BreakTimeline(props: {
                         </div>
 
                         <div className="space-y-2">
-                            {items.map((it) => {
+                            {(visibleItems || []).map((it) => {
                                 const sMin = it.sMin ?? 0;
                                 const eMin = it.eMin ?? sMin + 60;
                                 const currentUserId = it.user_id ?? (it.user && it.user.id) ?? null;
@@ -289,7 +334,15 @@ export default function BreakTimeline(props: {
 
                                                 // Determine overlapping breaks for this user and slot
                                                 const overlappingBreaksForUser = combinedBreaksMemo.filter((b) => {
-                                                    if (Number(b.user_id) !== Number(currentUserId)) return false;
+                                                    // consider a break belonging to this row if either user_id matches OR shift_detail_id matches
+                                                    const belongsToUser =
+                                                        (b.shift_detail_id !== undefined &&
+                                                            b.shift_detail_id !== null &&
+                                                            Number(b.shift_detail_id) === Number(it.id)) ||
+                                                        (b.user_id !== undefined &&
+                                                            b.user_id !== null &&
+                                                            Number(b.user_id) === Number(currentUserId));
+                                                    if (!belongsToUser) return false;
                                                     const bs_parsed = parseDbTime(b.start_time ?? null);
                                                     const be_parsed = parseDbTime(b.end_time ?? null);
                                                     if (!bs_parsed || !be_parsed) return false;
@@ -316,9 +369,11 @@ export default function BreakTimeline(props: {
                                                 // slotBlocked rules:
                                                 // - when creating a planned break: block if any overlapping break exists (scheduled or actual)
                                                 // - when creating an actual break: allow if only scheduled overlaps, but block if an actual overlap exists
-                                                const slotBlocked =
-                                                    (breakType !== 'actual' && hasAnyBreakOverlap) ||
-                                                    (breakType === 'actual' && hasActualBreakOverlap);
+                                                let slotBlocked = false;
+                                                // always block if an actual break overlaps
+                                                if (hasActualBreakOverlap) slotBlocked = true;
+                                                // otherwise, if any break overlaps and we're not creating an actual break, block
+                                                else if (hasAnyBreakOverlap && breakType !== 'actual') slotBlocked = true;
 
                                                 const isSelectedStart = selTarget?.id === it.id && selTarget.startIndex === idx;
 
@@ -440,11 +495,20 @@ export default function BreakTimeline(props: {
                                                                 (currentType === 'planned' && barStatus === 'scheduled')) &&
                                                             !locked;
 
-                                                        // Always allow pointer events so we can show an unlock prompt when locked.
+                                                        // When in actual creation mode, treat scheduled breaks as transparent to clicks
+                                                        // (visual remains the same); actual breaks still receive pointer events.
+                                                        const scheduledInvisibleToPointer =
+                                                            breakStatus === 'scheduled' && (props.breakType ?? 'planned') === 'actual';
                                                         const barStyle: React.CSSProperties = {
                                                             ...breakStyle,
-                                                            pointerEvents: 'auto',
-                                                            cursor: deletionAllowedForThisBar ? 'pointer' : locked ? 'not-allowed' : 'default',
+                                                            pointerEvents: scheduledInvisibleToPointer ? 'none' : 'auto',
+                                                            cursor: scheduledInvisibleToPointer
+                                                                ? 'default'
+                                                                : deletionAllowedForThisBar
+                                                                  ? 'pointer'
+                                                                  : locked
+                                                                    ? 'not-allowed'
+                                                                    : 'default',
                                                         };
 
                                                         return (
