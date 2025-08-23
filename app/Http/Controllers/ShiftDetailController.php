@@ -43,7 +43,29 @@ class ShiftDetailController extends Controller
         // NOTE: allow overlaps when the incoming status is 'actual' (実績 can overlap 予定)
         if (isset($data['type']) && $data['type'] === 'break') {
             $status = $data['status'] ?? 'scheduled';
-            if ($status !== 'actual') {
+            if ($status === 'actual') {
+                // If creating an actual break, ensure it does not overlap other actual breaks
+                $existsOverlapActual = ShiftDetail::where('user_id', $data['user_id'])
+                    ->where('type', 'break')
+                    ->where('status', 'actual')
+                    ->where(function ($q) use ($data) {
+                        $q->where('start_time', '<', $data['end_time'])
+                            ->where('end_time', '>', $data['start_time']);
+                    })
+                    ->exists();
+
+                if ($existsOverlapActual) {
+                    if ($request->expectsJson() || $request->ajax()) {
+                        return response()->json([
+                            'message' => '実績の休憩が他の実績休憩と重複しています。',
+                            'errors' => ['start_time' => ['実績の休憩が重複しています。']],
+                        ], 422);
+                    }
+
+                    return Redirect::back()->withErrors(['start_time' => '実績の休憩が重複しています。'])->withInput();
+                }
+            } else {
+                // For non-actual (scheduled) breaks, do not allow any overlap with existing breaks
                 $existsOverlap = ShiftDetail::where('user_id', $data['user_id'])
                     ->where('type', 'break')
                     ->where(function ($q) use ($data) {
@@ -115,13 +137,35 @@ class ShiftDetailController extends Controller
         // If the resulting record is a break, ensure no overlap with other breaks for the same user
         $resultingType = $data['type'] ?? $shiftDetail->type;
         if ($resultingType === 'break') {
-            // If the updated/remaining status is 'actual', allow overlaps
             $status = $data['status'] ?? $shiftDetail->status ?? 'scheduled';
-            if ($status !== 'actual') {
-                $userId = $shiftDetail->user_id;
-                $start = $data['start_time'];
-                $end = $data['end_time'];
+            $userId = $shiftDetail->user_id;
+            $start = $data['start_time'];
+            $end = $data['end_time'];
 
+            if ($status === 'actual') {
+                // When setting to actual, ensure it doesn't overlap other actual breaks
+                $existsOverlapActual = ShiftDetail::where('user_id', $userId)
+                    ->where('type', 'break')
+                    ->where('status', 'actual')
+                    ->where('id', '<>', $shiftDetail->id)
+                    ->where(function ($q) use ($start, $end) {
+                        $q->where('start_time', '<', $end)
+                            ->where('end_time', '>', $start);
+                    })
+                    ->exists();
+
+                if ($existsOverlapActual) {
+                    if ($request->expectsJson() || $request->ajax()) {
+                        return response()->json([
+                            'message' => '実績の休憩が他の実績休憩と重複しています。',
+                            'errors' => ['start_time' => ['実績の休憩が重複しています。']],
+                        ], 422);
+                    }
+
+                    return Redirect::back()->withErrors(['start_time' => '実績の休憩が重複しています。'])->withInput();
+                }
+            } else {
+                // For scheduled (or other non-actual) ensure no overlap with any break
                 $existsOverlap = ShiftDetail::where('user_id', $userId)
                     ->where('type', 'break')
                     ->where('id', '<>', $shiftDetail->id)
