@@ -103,7 +103,7 @@ class ShiftController extends Controller
         $shiftDetails = ShiftDetail::with('user')
             ->where(function ($q) use ($d, $startOfDay, $endOfDay) {
                 // match if the date column equals the day
-                $q->whereDate('date', $d)
+                $q->whereRaw('date(date) = ?', [$d])
                     // OR if the shift interval overlaps the day window
                     ->orWhere(function ($qq) use ($startOfDay, $endOfDay) {
                         $qq->where('start_time', '<=', $endOfDay)
@@ -125,7 +125,7 @@ class ShiftController extends Controller
                 $rawDate = $attrs['date'] ?? ($arr['date'] ?? null);
                 $shiftDate = $rawDate ? Carbon::parse($rawDate)->toDateString() : null;
                 if ($shiftDate && isset($attrs['user_id'])) {
-                    $shiftRec = Shift::where('user_id', $attrs['user_id'])->whereDate('date', $shiftDate)->first();
+                    $shiftRec = Shift::where('user_id', $attrs['user_id'])->whereRaw('date(date) = ?', [$shiftDate])->first();
                     $arr['shift_type'] = $shiftRec ? $shiftRec->shift_type : null;
                 } else {
                     $arr['shift_type'] = null;
@@ -141,6 +141,8 @@ class ShiftController extends Controller
         return Inertia::render('shifts/daily', [
             'date' => $d,
             'shiftDetails' => $shiftDetails,
+            // include active users so the daily page can show a user picker for quick-add
+            'users' => User::select('id', 'name', 'status')->where('status', 'active')->orderBy('id')->get(),
             'queryParams' => $request->query() ?: null,
         ]);
     }
@@ -166,15 +168,15 @@ class ShiftController extends Controller
 
         foreach ($data['entries'] as $entry) {
             // upsert by user_id + date
-            $shift = Shift::where('user_id', $entry['user_id'])->whereDate('date', $entry['date'])->first();
+            $shift = Shift::where('user_id', $entry['user_id'])->whereRaw('date(date) = ?', [$entry['date']])->first();
             if ($shift) {
                 // If client cleared the value or set to leave, remove scheduled shift_details for that date
                 if (is_null($entry['shift_type']) || $entry['shift_type'] === '') {
-                    ShiftDetail::where('user_id', $entry['user_id'])->whereDate('date', $entry['date'])->where('status', 'scheduled')->delete();
+                    ShiftDetail::where('user_id', $entry['user_id'])->whereRaw('date(date) = ?', [$entry['date']])->where('status', 'scheduled')->delete();
                     $shift->delete();
                 } elseif ($entry['shift_type'] === 'leave') {
                     // update to leave and remove any scheduled details
-                    ShiftDetail::where('user_id', $entry['user_id'])->whereDate('date', $entry['date'])->where('status', 'scheduled')->delete();
+                    ShiftDetail::where('user_id', $entry['user_id'])->whereRaw('date(date) = ?', [$entry['date']])->where('status', 'scheduled')->delete();
                     $shift->update(['shift_type' => $entry['shift_type']]);
                 } else {
                     // day or night: update and ensure shift_details exist
@@ -190,7 +192,7 @@ class ShiftController extends Controller
                     ]);
                     // If leave was set, ensure there are no scheduled shift_details; otherwise create from defaults
                     if ($entry['shift_type'] === 'leave') {
-                        ShiftDetail::where('user_id', $entry['user_id'])->whereDate('date', $entry['date'])->where('status', 'scheduled')->delete();
+                        ShiftDetail::where('user_id', $entry['user_id'])->whereRaw('date(date) = ?', [$entry['date']])->where('status', 'scheduled')->delete();
                     } else {
                         $this->applyDefaultShiftDetails($entry['user_id'], $entry['date'], $entry['shift_type']);
                     }
@@ -223,7 +225,7 @@ class ShiftController extends Controller
             'date' => 'required|date',
         ]);
 
-        $shift = Shift::where('user_id', $data['user_id'])->whereDate('date', $data['date'])->first();
+        $shift = Shift::where('user_id', $data['user_id'])->whereRaw('date(date) = ?', [$data['date']])->first();
         if ($shift) {
             $shift->update(['shift_type' => 'leave']);
         } else {
@@ -231,7 +233,7 @@ class ShiftController extends Controller
         }
 
         // For a leave day, remove any scheduled shift_details for that user/date
-        ShiftDetail::where('user_id', $data['user_id'])->whereDate('date', $data['date'])->where('status', 'scheduled')->delete();
+        ShiftDetail::where('user_id', $data['user_id'])->whereRaw('date(date) = ?', [$data['date']])->where('status', 'scheduled')->delete();
 
         if ($request->expectsJson() || $request->ajax()) {
             return response()->json(['message' => '休に変更しました。'], 200);
@@ -289,10 +291,26 @@ class ShiftController extends Controller
 
         // find default shifts for weekday and shift_type
         $defaults = DefaultShift::where('day_of_week', $weekday)->where('shift_type', $shiftType)->get();
-        if ($defaults->isEmpty()) return;
+        // If no defaults exist, create a placeholder scheduled work ShiftDetail from 00:00 to 00:00
+        if ($defaults->isEmpty()) {
+            // remove existing scheduled details for that user/date to avoid duplicates
+            ShiftDetail::where('user_id', $userId)->whereRaw('date(date) = ?', [$date])->where('status', 'scheduled')->delete();
+
+            $zero = Carbon::parse($date . ' 00:00:00')->toDateTimeString();
+            ShiftDetail::create([
+                'user_id' => $userId,
+                'date' => $date,
+                'type' => 'work',
+                'start_time' => $zero,
+                'end_time' => $zero,
+                'status' => 'scheduled',
+            ]);
+
+            return;
+        }
 
         // remove existing scheduled details for that user/date to avoid duplicates
-        ShiftDetail::where('user_id', $userId)->whereDate('date', $date)->where('status', 'scheduled')->delete();
+        ShiftDetail::where('user_id', $userId)->whereRaw('date(date) = ?', [$date])->where('status', 'scheduled')->delete();
 
         foreach ($defaults as $df) {
             // build datetime for start/end using the date and default's time (HH:MM)

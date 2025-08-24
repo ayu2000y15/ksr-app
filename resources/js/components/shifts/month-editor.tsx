@@ -112,9 +112,36 @@ export default function MonthEditor({
 
     const containerRef = useRef<HTMLDivElement | null>(null);
 
+    const scrolledToTodayRef = useRef(false);
+
     const scrollBy = (delta: number) => {
         if (containerRef.current) containerRef.current.scrollBy({ left: delta, behavior: 'smooth' });
     };
+
+    // on first render (or when visibleDays changes), auto-scroll so today is visible in the viewport
+    useEffect(() => {
+        try {
+            if (scrolledToTodayRef.current) return;
+            if (!containerRef.current) return;
+            // build today's yyyy-mm-dd key in local timezone
+            const now = new Date();
+            const pad = (n: number) => String(n).padStart(2, '0');
+            const key = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+            if (!visibleDays.includes(key)) return;
+
+            const container = containerRef.current;
+            // find the header cell for today
+            const th = container.querySelector(`th[data-date="${key}"]`) as HTMLElement | null;
+            if (!th) return;
+
+            // center the column in the visible area when possible
+            const targetLeft = Math.max(0, th.offsetLeft - container.clientWidth / 2 + th.clientWidth / 2);
+            container.scrollTo({ left: targetLeft, behavior: 'auto' });
+            scrolledToTodayRef.current = true;
+        } catch {
+            // noop on errors
+        }
+    }, [visibleDays]);
 
     const handlePrev = () => {
         let ty = currentYear;
@@ -245,7 +272,11 @@ export default function MonthEditor({
                                         const isToday = tDate.getTime() === today.getTime();
 
                                         return (
-                                            <th key={d} className={`w-12 p-1 text-center ${isToday ? 'bg-green-100' : (accentClass ?? '')}`}>
+                                            <th
+                                                key={d}
+                                                data-date={d}
+                                                className={`w-12 p-1 text-center ${isToday ? 'bg-green-100' : (accentClass ?? '')}`}
+                                            >
                                                 <div className="mb-1">
                                                     <input
                                                         type="checkbox"
@@ -286,6 +317,12 @@ export default function MonthEditor({
                                                       : cellVal === 'leave'
                                                         ? 'bg-red-100 text-red-800'
                                                         : '';
+                                            // determine if this date is strictly before today (local) -> disable select
+                                            const dt = parseLocal(d);
+                                            const dayStart = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime();
+                                            const today = new Date();
+                                            today.setHours(0, 0, 0, 0);
+                                            const isPast = dayStart < today.getTime();
                                             return (
                                                 <td key={d} className="p-1 text-center">
                                                     <select
@@ -295,7 +332,9 @@ export default function MonthEditor({
                                                             setCell(u.id, d, val);
                                                             queueSave(u.id, d, val);
                                                         }}
-                                                        className={`rounded border p-1 text-xs ${bgClass}`}
+                                                        className={`rounded border p-1 text-xs ${bgClass} ${isPast ? 'cursor-not-allowed opacity-60' : ''}`}
+                                                        disabled={isPast}
+                                                        title={isPast ? '過去日は変更できません' : ''}
                                                     >
                                                         <option value=""> </option>
                                                         <option value="day">昼</option>

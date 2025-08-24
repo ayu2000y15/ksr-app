@@ -1,3 +1,4 @@
+import { usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -36,7 +37,40 @@ export default function DailyTimeline(props: {
     onCreateBreak?: (p: BreakPayload) => void;
     breaks?: Break[];
 }) {
+    // read Inertia shared props via usePage() to reliably access users
+    const page = usePage();
+    const pageProps = (page && (page.props as any)) || {};
+    const allUsers = pageProps.users || [];
+    // users are read from Inertia page props; availableUsers is computed later after we
+    // destructure props (we need `date` and `shiftDetails` to determine who is already present)
+    const [showAddUser, setShowAddUser] = useState(false);
+    const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+    const [adding, setAdding] = useState(false);
+    const [selectedShiftType, setSelectedShiftType] = useState<'day' | 'night'>('day');
     const { date, shiftDetails = [], initialInterval = 15, onBarClick, mode, breakType, onCreateBreak, breaks = [] } = props;
+
+    // determine which users already have a work shift on this date (present users)
+    const presentUserIds = new Set<number>(
+        (shiftDetails || [])
+            .map((sd: any) => {
+                try {
+                    const startDate = sd.start_time ? String(sd.start_time).slice(0, 10) : sd.date ? String(sd.date).slice(0, 10) : null;
+                    return startDate === date ? Number(sd.user_id ?? (sd.user && sd.user.id) ?? NaN) : NaN;
+                } catch {
+                    return NaN;
+                }
+            })
+            .filter((n: number) => Number.isFinite(n)),
+    );
+
+    // filter only active users (status enum: 'active','retired','shared')
+    // and exclude users already present on this date so dropdown shows only not-yet-scheduled users
+    const availableUsers = Array.isArray(allUsers)
+        ? allUsers.filter((u: any) => String(u.status ?? 'active') === 'active' && !presentUserIds.has(Number(u.id)))
+        : [];
+    // compute max id width for simple alignment in the select options
+    const maxIdLen =
+        Array.isArray(availableUsers) && availableUsers.length > 0 ? Math.max(...availableUsers.map((u: any) => String(u.id ?? '').length)) : 0;
 
     const [interval] = useState<number>(initialInterval);
     const [selTarget, setSelTarget] = useState<{ id: number | null; startIndex: number | null } | null>(null);
@@ -235,6 +269,112 @@ export default function DailyTimeline(props: {
     }, [items, shiftDetails, props.breaks, timelineStartMin, interval, timeSlots, absentMap]);
 
     const displayDate = date ? String(date).slice(0, 10).replace(/-/g, '/') : '';
+
+    const addUserShift = async () => {
+        if (!selectedUserId) return alert('ユーザーを選択してください');
+        setAdding(true);
+        try {
+            // Use the bulk update endpoint so the server will create Shift and DefaultShift-based ShiftDetails
+            const payload = { entries: [{ user_id: selectedUserId, date: date, shift_type: selectedShiftType }] };
+            const res = await axios.post(route('shifts.bulk_update'), payload);
+
+            // bulk_update returns a simple message on success; notify and ask parent to refresh
+            try {
+                // Build a temporary optimistic ShiftDetail so UI can show the new row without reloading
+                const userObj = (availableUsers || []).find((u: any) => Number(u.id) === Number(selectedUserId));
+                const tempId = `tmp-${Date.now()}`;
+                const tempShiftDetail: any = {
+                    id: tempId,
+                    user_id: selectedUserId,
+                    user: userObj ? { id: userObj.id, name: userObj.name } : { id: selectedUserId, name: 'ユーザー' },
+                    date: date,
+                    type: 'work',
+                    shift_type: selectedShiftType,
+                    status: 'scheduled',
+                    start_time: null,
+                    end_time: null,
+                };
+
+                if (typeof window !== 'undefined' && window.dispatchEvent) {
+                    // notify pages to append the optimistic row
+                    window.dispatchEvent(new CustomEvent('ksr.shiftDetail.added', { detail: tempShiftDetail }));
+                    window.dispatchEvent(
+                        new CustomEvent('ksr.shiftDetail.toast', {
+                            detail: { message: (res && res.data && res.data.message) || 'ユーザーを追加しました', type: 'success' },
+                        }),
+                    );
+                    // attempt to fetch the authoritative ShiftDetail created by server and replace the temp row
+                    (async () => {
+                        const maxAttempts = 3;
+                        let attempt = 0;
+                        let found: any = null;
+                        while (attempt < maxAttempts && !found) {
+                            attempt += 1;
+                            try {
+                                const apiRes = await axios.get(route('shift-details.api'), { params: { date: date, user_id: selectedUserId } });
+                                const list = apiRes && apiRes.data && apiRes.data.shiftDetails ? apiRes.data.shiftDetails : [];
+                                if (Array.isArray(list) && list.length > 0) {
+                                    // prefer a work-type entry that has start_time/end_time set
+                                    found = list.find((s: any) => String(s.type ?? s.shift_type ?? '') === 'work' && (s.start_time || s.end_time));
+                                    if (!found) {
+                                        // fallback to first work entry
+                                        found = list.find((s: any) => String(s.type ?? s.shift_type ?? '') === 'work') || null;
+                                    }
+                                }
+                            } catch (e) {
+                                // ignore and retry
+                            }
+                            if (!found) await new Promise((r) => setTimeout(r, 600));
+                        }
+
+                        if (found) {
+                            try {
+                                // dispatch replace event so the page can swap tmp row with the real record
+                                window.dispatchEvent(new CustomEvent('ksr.shiftDetail.replace', { detail: { tempId, shiftDetail: found } }));
+                                // also emit an updated event for compatibility
+                                window.dispatchEvent(
+                                    new CustomEvent('ksr.shiftDetail.updated', { detail: { id: found.id, status: found.status ?? null } }),
+                                );
+                            } catch {
+                                // ignore
+                            }
+                        } else {
+                            // as a fallback, request a lightweight Inertia reload (handled by page listener)
+                            try {
+                                window.dispatchEvent(
+                                    new CustomEvent('ksr.shiftDetail.updated', { detail: { refresh: true, user_id: selectedUserId } }),
+                                );
+                            } catch {
+                                // ignore
+                            }
+                        }
+                    })();
+                }
+            } catch {
+                // ignore
+            }
+
+            setShowAddUser(false);
+            setSelectedUserId(null);
+            setSelectedShiftType('day');
+        } catch (err) {
+            console.error('failed to add user shift', err);
+            const msg =
+                (err &&
+                    (err as any).response &&
+                    (err as any).response.data &&
+                    ((err as any).response.data.message || JSON.stringify((err as any).response.data))) ||
+                '追加に失敗しました';
+            try {
+                if (typeof window !== 'undefined' && window.dispatchEvent)
+                    window.dispatchEvent(new CustomEvent('ksr.shiftDetail.toast', { detail: { message: msg, type: 'error' } }));
+            } catch {
+                // ignore
+            }
+        } finally {
+            setAdding(false);
+        }
+    };
 
     const toggleAbsent = async (id: number, makeAbsent: boolean) => {
         // optimistic update
@@ -596,7 +736,17 @@ export default function DailyTimeline(props: {
 
                 <div className="mt-4 border-t pt-3">
                     <div className="flex justify-start gap-6 text-sm text-muted-foreground">
-                        <div className="font-medium">出勤人数</div>
+                        <div className="flex items-center font-medium">
+                            <span>出勤人数</span>
+                            <button
+                                type="button"
+                                className="ml-3 rounded border bg-white px-2 py-0.5 text-sm hover:bg-gray-50"
+                                title="ユーザーを追加"
+                                onClick={() => setShowAddUser((s) => !s)}
+                            >
+                                ＋
+                            </button>
+                        </div>
                         <div>
                             <span className="text-xs text-muted-foreground">昼 </span>
                             <span className="ml-1 font-medium text-yellow-800">{counts.dayCount}人</span>
@@ -606,6 +756,74 @@ export default function DailyTimeline(props: {
                             <span className="ml-1 font-medium text-indigo-700">{counts.nightCount}人</span>
                         </div>
                     </div>
+
+                    {/* 小さな追加フォーム */}
+                    {showAddUser && (
+                        <div className="mt-2 flex items-center gap-3">
+                            <div>
+                                <select
+                                    value={selectedUserId ?? ''}
+                                    onChange={(e) => setSelectedUserId(e.target.value ? Number(e.target.value) : null)}
+                                    className="rounded border p-2 text-sm"
+                                    style={{ minWidth: 180 }}
+                                >
+                                    <option value="">-- ユーザーを選択 --</option>
+                                    {(availableUsers || []).map((u: any) => (
+                                        <option key={u.id} value={u.id}>
+                                            {`${String(u.id ?? '').padStart(maxIdLen, ' ')} ${u.name}`}
+                                        </option>
+                                    ))}
+                                </select>
+                                {(!availableUsers || availableUsers.length === 0) && (
+                                    <div className="mt-1 text-xs text-muted-foreground">追加可能なユーザーがいません。</div>
+                                )}
+                            </div>
+
+                            {/* day/night radio */}
+                            <div className="flex items-center gap-3 text-sm">
+                                <label className="inline-flex items-center gap-1">
+                                    <input
+                                        type="radio"
+                                        name="ksr_shift_type"
+                                        value="day"
+                                        checked={selectedShiftType === 'day'}
+                                        onChange={() => setSelectedShiftType('day')}
+                                    />
+                                    <span className="ml-1">昼</span>
+                                </label>
+                                <label className="inline-flex items-center gap-1">
+                                    <input
+                                        type="radio"
+                                        name="ksr_shift_type"
+                                        value="night"
+                                        checked={selectedShiftType === 'night'}
+                                        onChange={() => setSelectedShiftType('night')}
+                                    />
+                                    <span className="ml-1">夜</span>
+                                </label>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <button
+                                    className="rounded bg-indigo-600 px-3 py-1 text-sm text-white hover:bg-indigo-700 disabled:opacity-60"
+                                    onClick={addUserShift}
+                                    disabled={adding || !selectedUserId}
+                                >
+                                    追加
+                                </button>
+                                <button
+                                    className="rounded border px-3 py-1 text-sm"
+                                    onClick={() => {
+                                        setShowAddUser(false);
+                                        setSelectedUserId(null);
+                                        setSelectedShiftType('day');
+                                    }}
+                                >
+                                    キャンセル
+                                </button>
+                            </div>
+                        </div>
+                    )}
 
                     {/* per-slot attendance counts only visible in break mode */}
                     {mode === 'break' && (

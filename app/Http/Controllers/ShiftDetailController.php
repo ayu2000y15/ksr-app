@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Shift;
 use Illuminate\Support\Facades\Redirect;
+use Carbon\Carbon;
 
 class ShiftDetailController extends Controller
 {
@@ -127,6 +128,83 @@ class ShiftDetailController extends Controller
             'type.in' => 'タイプの値が不正です。',
         ]);
 
+        // If client asks to adjust by delta_minutes, handle server-side arithmetic to avoid client-side formatting issues
+        if ($request->has('delta_minutes')) {
+            $delta = intval($request->input('delta_minutes'));
+
+            // compute new end_time by adding delta minutes to current end_time
+            try {
+                $currentEnd = $shiftDetail->end_time;
+                $newEnd = Carbon::parse($currentEnd)->addMinutes($delta)->format('Y-m-d H:i:s');
+            } catch (\Exception $ex) {
+                if ($request->expectsJson() || $request->ajax()) {
+                    return response()->json(['message' => '終了時刻の計算に失敗しました。'], 422);
+                }
+                return Redirect::back()->withErrors(['end_time' => '終了時刻の計算に失敗しました。'])->withInput();
+            }
+
+            // perform overlap checks if this is a break
+            $resultingType = $shiftDetail->type;
+            if ($resultingType === 'break') {
+                $status = $shiftDetail->status ?? 'scheduled';
+                $userId = $shiftDetail->user_id;
+                $start = $shiftDetail->start_time;
+                $end = $newEnd;
+
+                if ($status === 'actual') {
+                    $existsOverlapActual = ShiftDetail::where('user_id', $userId)
+                        ->where('type', 'break')
+                        ->where('status', 'actual')
+                        ->where('id', '<>', $shiftDetail->id)
+                        ->where(function ($q) use ($start, $end) {
+                            $q->where('start_time', '<', $end)
+                                ->where('end_time', '>', $start);
+                        })
+                        ->exists();
+
+                    if ($existsOverlapActual) {
+                        if ($request->expectsJson() || $request->ajax()) {
+                            return response()->json([
+                                'message' => '実績の休憩が他の実績休憩と重複しています。',
+                                'errors' => ['start_time' => ['実績の休憩が重複しています。']],
+                            ], 422);
+                        }
+                        return Redirect::back()->withErrors(['start_time' => '実績の休憩が重複しています。'])->withInput();
+                    }
+                } else {
+                    $existsOverlap = ShiftDetail::where('user_id', $userId)
+                        ->where('type', 'break')
+                        ->where('id', '<>', $shiftDetail->id)
+                        ->where(function ($q) use ($start, $end) {
+                            $q->where('start_time', '<', $end)
+                                ->where('end_time', '>', $start);
+                        })
+                        ->exists();
+
+                    if ($existsOverlap) {
+                        if ($request->expectsJson() || $request->ajax()) {
+                            return response()->json([
+                                'message' => '休憩時間が他の休憩と重複しています。',
+                                'errors' => ['start_time' => ['休憩時間が重複しています。']],
+                            ], 422);
+                        }
+                        return Redirect::back()->withErrors(['start_time' => '休憩時間が重複しています。'])->withInput();
+                    }
+                }
+            }
+
+            // persist new end_time
+            $shiftDetail->end_time = $newEnd;
+            $shiftDetail->save();
+            $shiftDetail->refresh();
+            $shiftDetail->load('user');
+
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json(['message' => '勤務詳細を更新しました。', 'shiftDetail' => $shiftDetail], 200);
+            }
+            return Redirect::back()->with('success', '勤務詳細を更新しました。');
+        }
+
         $data = $request->validate([
             'start_time' => 'required|date_format:Y-m-d H:i:s',
             'end_time' => 'required|date_format:Y-m-d H:i:s|after:start_time',
@@ -227,5 +305,67 @@ class ShiftDetailController extends Controller
         }
 
         return Redirect::back()->with('success', '勤務詳細を削除しました。');
+    }
+
+    /**
+     * Lightweight JSON endpoint to fetch shiftDetails for a date and optional user_id.
+     * Used by the frontend to refresh newly-created ShiftDetail records without a full Inertia render.
+     */
+    public function apiIndex(Request $request)
+    {
+        $date = $request->get('date');
+        $userId = $request->get('user_id');
+
+        if (!$date) {
+            return response()->json(['message' => 'date is required'], 400);
+        }
+
+        try {
+            $d = Carbon::parse($date)->toDateString();
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'invalid date'], 400);
+        }
+
+        $startOfDay = Carbon::parse($d)->startOfDay()->toDateTimeString();
+        $endOfDay = Carbon::parse($d)->endOfDay()->toDateTimeString();
+
+        $query = ShiftDetail::with('user')
+            ->where(function ($q) use ($d, $startOfDay, $endOfDay) {
+                $q->whereRaw('date(date) = ?', [$d])
+                    ->orWhere(function ($qq) use ($startOfDay, $endOfDay) {
+                        $qq->where('start_time', '<=', $endOfDay)
+                            ->where('end_time', '>=', $startOfDay);
+                    });
+            });
+
+        if ($userId) {
+            $query->where('user_id', $userId);
+        }
+
+        $shiftDetails = $query->get()->map(function ($sd) {
+            $arr = $sd->toArray();
+            $attrs = $sd->getAttributes();
+            $arr['start_time'] = $attrs['start_time'] ?? null;
+            $arr['end_time'] = $attrs['end_time'] ?? null;
+            $arr['date'] = $attrs['date'] ?? ($arr['date'] ?? null);
+            try {
+                $rawDate = $attrs['date'] ?? ($arr['date'] ?? null);
+                $shiftDate = $rawDate ? Carbon::parse($rawDate)->toDateString() : null;
+                if ($shiftDate && isset($attrs['user_id'])) {
+                    // attach shift_type from Shift table if present
+                    $shiftRec = \App\Models\Shift::where('user_id', $attrs['user_id'])
+                        ->whereRaw('date(date) = ?', [$shiftDate])
+                        ->first();
+                    $arr['shift_type'] = $shiftRec ? $shiftRec->shift_type : null;
+                } else {
+                    $arr['shift_type'] = null;
+                }
+            } catch (\Exception $e) {
+                $arr['shift_type'] = null;
+            }
+            return $arr;
+        });
+
+        return response()->json(['shiftDetails' => $shiftDetails], 200);
     }
 }

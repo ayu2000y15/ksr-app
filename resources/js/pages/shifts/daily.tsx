@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import Toast from '@/components/ui/toast';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { BreadcrumbItem } from '@/types';
+import { Inertia } from '@inertiajs/inertia';
 import { Head, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { useEffect, useState } from 'react';
@@ -14,6 +15,16 @@ import { useEffect, useState } from 'react';
 export default function Daily() {
     const page = usePage();
     const props = page.props as any;
+    // DEBUG: log Inertia props obtained via usePage() to inspect available props at runtime
+    try {
+        // eslint-disable-next-line no-console
+        console.log('usePage props:', props);
+        // also log props.users explicitly for quick inspection
+        // eslint-disable-next-line no-console
+        console.log('props.users:', window.page && window.page.props && window.page.props.users);
+    } catch {
+        // ignore
+    }
     const date = props?.queryParams?.date ?? props?.date ?? null;
     const displayDate = date ? String(date).slice(0, 10).replace(/-/g, '/') : '';
     const breadcrumbs: BreadcrumbItem[] = [
@@ -37,10 +48,24 @@ export default function Daily() {
             try {
                 const ev = e as CustomEvent<any>;
                 const d = ev && ev.detail ? ev.detail : null;
-                if (!d || typeof d.id === 'undefined') return;
-                const id = Number(d.id);
-                const status = d.status;
-                setShiftDetails((prev: any[]) => prev.map((p: any) => (Number(p.id) === id ? { ...p, status } : p)));
+                if (!d) return;
+                // quick status update by id
+                if (typeof d.id !== 'undefined') {
+                    const id = Number(d.id);
+                    const status = d.status;
+                    setShiftDetails((prev: any[]) => prev.map((p: any) => (Number(p.id) === id ? { ...p, status } : p)));
+                    return;
+                }
+
+                // refresh request after bulk-add: fetch the ShiftDetails for the user/date and append newly created scheduled work entry
+                if (d.refresh && d.user_id) {
+                    // Lightweight props refresh via Inertia: re-fetch only shiftDetails so UI updates without full navigation
+                    try {
+                        Inertia.reload({ only: ['shiftDetails'] });
+                    } catch {
+                        // ignore
+                    }
+                }
             } catch (err) {
                 // ignore
             }
@@ -48,6 +73,36 @@ export default function Daily() {
         if (typeof window !== 'undefined' && window.addEventListener) {
             window.addEventListener('ksr.shiftDetail.updated', handler as EventListener);
         }
+        // optimistic add handler: append a temporary shiftDetail object created by the add form
+        const addHandler = (e: Event) => {
+            try {
+                const ev = e as CustomEvent<any>;
+                const d = ev && ev.detail ? ev.detail : null;
+                if (!d) return;
+                // if id already exists, do nothing
+                const exists = shiftDetails.some((s) => String(s.id) === String(d.id));
+                if (exists) return;
+                setShiftDetails((prev) => [...prev, d]);
+            } catch {
+                // ignore
+            }
+        };
+        if (typeof window !== 'undefined' && window.addEventListener) window.addEventListener('ksr.shiftDetail.added', addHandler as EventListener);
+        // replace handler: swap optimistic temp row with authoritative server-created record
+        const replaceHandler = (e: Event) => {
+            try {
+                const ev = e as CustomEvent<any>;
+                const d = ev && ev.detail ? ev.detail : null;
+                if (!d || !d.tempId || !d.shiftDetail) return;
+                const tempId = d.tempId;
+                const real = d.shiftDetail;
+                setShiftDetails((prev) => prev.map((p) => (String(p.id) === String(tempId) ? real : p)));
+            } catch {
+                // ignore
+            }
+        };
+        if (typeof window !== 'undefined' && window.addEventListener)
+            window.addEventListener('ksr.shiftDetail.replace', replaceHandler as EventListener);
         // toast listener
         const toastHandler = (e: Event) => {
             try {
@@ -55,7 +110,8 @@ export default function Daily() {
                 const d = ev && ev.detail ? ev.detail : null;
                 if (!d) return;
                 const msg = d.message ?? (d.status === 'absent' ? '欠席にしました' : '更新しました');
-                setToast({ message: String(msg), type: 'success' });
+                const t = d && d.type ? d.type : 'success';
+                setToast({ message: String(msg), type: t });
             } catch {
                 // ignore
             }
@@ -67,6 +123,8 @@ export default function Daily() {
             if (typeof window !== 'undefined' && window.removeEventListener) {
                 window.removeEventListener('ksr.shiftDetail.updated', handler as EventListener);
                 window.removeEventListener('ksr.shiftDetail.toast', toastHandler as EventListener);
+                window.removeEventListener('ksr.shiftDetail.added', addHandler as EventListener);
+                window.removeEventListener('ksr.shiftDetail.replace', replaceHandler as EventListener);
             }
         };
     }, []);
@@ -273,10 +331,46 @@ export default function Daily() {
                     {mode === 'break' && (
                         <div className="flex items-center gap-2">
                             <label className="text-sm">種別:</label>
-                            <select value={breakType} onChange={(e) => setBreakType(e.target.value as any)} className="rounded border p-1 text-sm">
-                                <option value="planned">予定</option>
-                                <option value="actual">実績</option>
-                            </select>
+                            <button
+                                className={`rounded px-2 py-1 text-sm ${breakType === 'actual' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}
+                                title={breakType === 'actual' ? '実績モード（クリックで予定に切り替え）' : '予定モード（クリックで実績に切り替え）'}
+                                onClick={() => setBreakType((s) => (s === 'actual' ? 'planned' : 'actual'))}
+                            >
+                                <span className="inline-flex items-center">
+                                    <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+                                        {breakType === 'actual' ? (
+                                            <>
+                                                <path
+                                                    d="M12 2v6"
+                                                    stroke="currentColor"
+                                                    strokeWidth="1.5"
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                />
+                                                <rect x="4" y="8" width="16" height="14" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                                            </>
+                                        ) : (
+                                            <>
+                                                <path
+                                                    d="M4 12h16"
+                                                    stroke="currentColor"
+                                                    strokeWidth="1.5"
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                />
+                                                <path
+                                                    d="M12 4v16"
+                                                    stroke="currentColor"
+                                                    strokeWidth="1.5"
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                />
+                                            </>
+                                        )}
+                                    </svg>
+                                    <span>{breakType === 'actual' ? '実績' : '予定'}</span>
+                                </span>
+                            </button>
                             <button
                                 className={`rounded px-2 py-1 text-sm ${breakLocked ? 'bg-gray-200 text-gray-700' : 'bg-green-600 text-white'}`}
                                 title={
@@ -909,6 +1003,126 @@ export default function Daily() {
                                                                 </div>
                                                             ) : (
                                                                 <div className="flex items-center justify-end gap-2">
+                                                                    {/* ±15 ボタンを編集ボタンの左側に置き、誤操作防止のため間隔を確保 */}
+                                                                    <div className="mr-2 flex items-center gap-2">
+                                                                        <button
+                                                                            className="rounded border bg-gray-50 px-2 py-1 text-xs hover:bg-gray-100"
+                                                                            title="-15分"
+                                                                            onClick={async () => {
+                                                                                if (breakLocked && !promptToUnlock()) return;
+                                                                                if (!canUpdateBreak)
+                                                                                    return setToast({ message: '権限がありません。', type: 'error' });
+                                                                                try {
+                                                                                    // compute new end using available fields
+                                                                                    // ask server to subtract 15 minutes
+                                                                                    const res = await axios.patch(
+                                                                                        route('shift-details.update', b.id),
+                                                                                        { delta_minutes: -15 },
+                                                                                    );
+                                                                                    const returned =
+                                                                                        res &&
+                                                                                        res.data &&
+                                                                                        (res.data.shiftDetail || res.data.shift_detail)
+                                                                                            ? res.data.shiftDetail || res.data.shift_detail
+                                                                                            : null;
+                                                                                    if (returned) {
+                                                                                        setShiftDetails((prev) =>
+                                                                                            prev.map((p) => (p.id === returned.id ? returned : p)),
+                                                                                        );
+                                                                                        if (typeof window !== 'undefined' && window.dispatchEvent)
+                                                                                            window.dispatchEvent(
+                                                                                                new CustomEvent('ksr.shiftDetail.toast', {
+                                                                                                    detail: {
+                                                                                                        message: '終了時刻を更新しました',
+                                                                                                        type: 'success',
+                                                                                                    },
+                                                                                                }),
+                                                                                            );
+                                                                                    } else {
+                                                                                        setShiftDetails((prev) =>
+                                                                                            prev.map((p) =>
+                                                                                                p.id === b.id ? { ...p, end_time: newEnd } : p,
+                                                                                            ),
+                                                                                        );
+                                                                                        if (typeof window !== 'undefined' && window.dispatchEvent)
+                                                                                            window.dispatchEvent(
+                                                                                                new CustomEvent('ksr.shiftDetail.toast', {
+                                                                                                    detail: {
+                                                                                                        message: '終了時刻を更新しました',
+                                                                                                        type: 'success',
+                                                                                                    },
+                                                                                                }),
+                                                                                            );
+                                                                                    }
+                                                                                } catch (err) {
+                                                                                    console.error(err);
+                                                                                    const msg = extractAxiosErrorMessage(err);
+                                                                                    setToast({ message: msg, type: 'error' });
+                                                                                }
+                                                                            }}
+                                                                        >
+                                                                            -15
+                                                                        </button>
+
+                                                                        <button
+                                                                            className="rounded border bg-gray-50 px-2 py-1 text-xs hover:bg-gray-100"
+                                                                            title="+15分"
+                                                                            onClick={async () => {
+                                                                                if (breakLocked && !promptToUnlock()) return;
+                                                                                if (!canUpdateBreak)
+                                                                                    return setToast({ message: '権限がありません。', type: 'error' });
+                                                                                try {
+                                                                                    // ask server to add 15 minutes
+                                                                                    const res = await axios.patch(
+                                                                                        route('shift-details.update', b.id),
+                                                                                        { delta_minutes: 15 },
+                                                                                    );
+                                                                                    const returned =
+                                                                                        res &&
+                                                                                        res.data &&
+                                                                                        (res.data.shiftDetail || res.data.shift_detail)
+                                                                                            ? res.data.shiftDetail || res.data.shift_detail
+                                                                                            : null;
+                                                                                    if (returned) {
+                                                                                        setShiftDetails((prev) =>
+                                                                                            prev.map((p) => (p.id === returned.id ? returned : p)),
+                                                                                        );
+                                                                                        if (typeof window !== 'undefined' && window.dispatchEvent)
+                                                                                            window.dispatchEvent(
+                                                                                                new CustomEvent('ksr.shiftDetail.toast', {
+                                                                                                    detail: {
+                                                                                                        message: '終了時刻を更新しました',
+                                                                                                        type: 'success',
+                                                                                                    },
+                                                                                                }),
+                                                                                            );
+                                                                                    } else {
+                                                                                        setShiftDetails((prev) =>
+                                                                                            prev.map((p) =>
+                                                                                                p.id === b.id ? { ...p, end_time: newEnd } : p,
+                                                                                            ),
+                                                                                        );
+                                                                                        if (typeof window !== 'undefined' && window.dispatchEvent)
+                                                                                            window.dispatchEvent(
+                                                                                                new CustomEvent('ksr.shiftDetail.toast', {
+                                                                                                    detail: {
+                                                                                                        message: '終了時刻を更新しました',
+                                                                                                        type: 'success',
+                                                                                                    },
+                                                                                                }),
+                                                                                            );
+                                                                                    }
+                                                                                } catch (err) {
+                                                                                    console.error(err);
+                                                                                    const msg = extractAxiosErrorMessage(err);
+                                                                                    setToast({ message: msg, type: 'error' });
+                                                                                }
+                                                                            }}
+                                                                        >
+                                                                            +15
+                                                                        </button>
+                                                                    </div>
+
                                                                     {canUpdateBreak && (
                                                                         <Button
                                                                             variant="outline"
@@ -923,6 +1137,7 @@ export default function Daily() {
                                                                             編集
                                                                         </Button>
                                                                     )}
+
                                                                     {canDeleteBreak && (
                                                                         <Button
                                                                             variant="destructive"
@@ -1005,6 +1220,32 @@ function formatDateLabelFromDate(rawDate?: string | null) {
     const dt = new Date(Y, M - 1, D);
     const jp = ['日', '月', '火', '水', '木', '金', '土'];
     return `${M}/${D} (${jp[dt.getDay()]})`;
+}
+
+// axios エラーからユーザー向けメッセージを安全に取り出す
+function extractAxiosErrorMessage(err: unknown): string {
+    if (!err || typeof err !== 'object') return 'エラーが発生しました';
+    const maybe = err as { response?: { data?: unknown } };
+    if (maybe.response && maybe.response.data !== undefined) {
+        const data = maybe.response.data as unknown;
+        if (data && typeof data === 'object') {
+            const dr = data as Record<string, unknown>;
+            if ('message' in dr && typeof dr.message === 'string') return dr.message as string;
+            if ('errors' in dr && typeof dr.errors === 'object' && dr.errors !== null) {
+                const errs = dr.errors as Record<string, unknown>;
+                const firstKey = Object.keys(errs)[0];
+                const firstVal = errs[firstKey];
+                if (Array.isArray(firstVal) && firstVal.length > 0 && typeof firstVal[0] === 'string') return firstVal[0] as string;
+            }
+            try {
+                return JSON.stringify(data);
+            } catch {
+                return 'エラーが発生しました';
+            }
+        }
+    }
+    if (err && typeof err === 'object' && 'message' in err && typeof (err as any).message === 'string') return (err as any).message;
+    return 'エラーが発生しました';
 }
 
 function EditableShiftRow({
@@ -1105,11 +1346,107 @@ function EditableShiftRow({
         }
     };
 
-    useEffect(() => {
-        if (sd && sd._openEdit) {
-            setEditing(true);
+    // adjust end time by delta minutes (positive to extend, negative to shorten)
+    const adjustEnd = async (deltaMins: number) => {
+        if (!canUpdate) return alert('権限がありません。');
+        // don't run while saving or editing
+        if (editing) return;
+        setSaving(true);
+        try {
+            const rawEnd = sd.end_time ?? sd.endRaw ?? null;
+            const rawStart = sd.start_time ?? sd.startRaw ?? null;
+            const endDisplay = timeValueFromRaw(rawEnd);
+            const startDisplay = timeValueFromRaw(rawStart) || '0:00';
+            if (!endDisplay) {
+                try {
+                    if (typeof window !== 'undefined' && window.dispatchEvent) {
+                        window.dispatchEvent(
+                            new CustomEvent('ksr.shiftDetail.toast', { detail: { message: '終了時刻が未設定のため調整できません', type: 'error' } }),
+                        );
+                    }
+                } catch {
+                    // ignore
+                }
+                return;
+            }
+            const [eh, em] = endDisplay.split(':').map((v) => Number(v));
+            const [sh, sm] = startDisplay.split(':').map((v) => Number(v));
+            let endMinutes = eh * 60 + em + deltaMins;
+            // normalize to 0..1439 (minutes in day)
+            const MIN_DAY = 24 * 60;
+            while (endMinutes < 0) endMinutes += MIN_DAY;
+            endMinutes = ((endMinutes % MIN_DAY) + MIN_DAY) % MIN_DAY;
+            const adjH = Math.floor(endMinutes / 60);
+            const adjM = endMinutes % 60;
+            const hhmm = `${String(adjH).padStart(2, '0')}:${String(adjM).padStart(2, '0')}`;
+
+            // determine addDays: if adjusted end is <= start, treat as next-day end (same as other edits)
+            const startMinutes = sh * 60 + sm;
+            const addDays = endMinutes <= startMinutes ? 1 : 0;
+
+            const baseDate = sd.date ?? sd.start_time ?? null;
+            const newEnd = toServerDateTimeFromDateAndTime(baseDate, hhmm, addDays);
+            if (!newEnd) {
+                try {
+                    if (typeof window !== 'undefined' && window.dispatchEvent) {
+                        window.dispatchEvent(
+                            new CustomEvent('ksr.shiftDetail.toast', { detail: { message: '無効な日時で更新できませんでした', type: 'error' } }),
+                        );
+                    }
+                } catch {
+                    // ignore
+                }
+                return;
+            }
+
+            const payload: any = { end_time: newEnd };
+            const res = await axios.patch(route('shift-details.update', sd.id), payload);
+            const returned =
+                res && res.data && (res.data.shiftDetail || res.data.shift_detail) ? res.data.shiftDetail || res.data.shift_detail : null;
+            if (returned) {
+                onSaved(returned);
+                try {
+                    if (typeof window !== 'undefined' && window.dispatchEvent) {
+                        window.dispatchEvent(
+                            new CustomEvent('ksr.shiftDetail.toast', { detail: { message: '終了時刻を更新しました', type: 'success' } }),
+                        );
+                    }
+                } catch {
+                    // ignore
+                }
+            } else {
+                // fallback: update local copy
+                onSaved({ id: sd.id, end_time: newEnd });
+                try {
+                    if (typeof window !== 'undefined' && window.dispatchEvent) {
+                        window.dispatchEvent(
+                            new CustomEvent('ksr.shiftDetail.toast', { detail: { message: '終了時刻を更新しました', type: 'success' } }),
+                        );
+                    }
+                } catch {
+                    // ignore
+                }
+            }
+        } catch (e) {
+            console.error(e);
+            try {
+                if (typeof window !== 'undefined' && window.dispatchEvent) {
+                    window.dispatchEvent(
+                        new CustomEvent('ksr.shiftDetail.toast', { detail: { message: '終了時刻の更新に失敗しました', type: 'error' } }),
+                    );
+                }
+            } catch {
+                // ignore
+            }
+        } finally {
+            setSaving(false);
         }
-    }, [sd && sd._openEdit]);
+    };
+
+    const sdOpenEdit = sd && sd._openEdit;
+    useEffect(() => {
+        if (sdOpenEdit) setEditing(true);
+    }, [sdOpenEdit]);
 
     const clearOpen = () => {
         if (onClearOpen) onClearOpen(sd.id);
@@ -1146,7 +1483,7 @@ function EditableShiftRow({
                         if (st === 'day') return <Badge className="bg-yellow-100 text-yellow-800">昼</Badge>;
                         if (st === 'night') return <Badge className="bg-blue-100 text-blue-800">夜</Badge>;
                         return <Badge variant="outline">—</Badge>;
-                    } catch (_) {
+                    } catch {
                         return <Badge variant="outline">—</Badge>;
                     }
                 })()}
@@ -1176,11 +1513,88 @@ function EditableShiftRow({
                     </div>
                 ) : (
                     <div className="flex items-center justify-end gap-2">
+                        {/* +/-15 buttons placed left of Edit to avoid misclicks */}
+                        {!editing && canUpdate && !isAbsent && (
+                            <div className="mr-8 flex items-center gap-1">
+                                <button
+                                    className="rounded border bg-gray-50 px-2 py-1 text-xs hover:bg-gray-100"
+                                    title="-15分"
+                                    onClick={async () => {
+                                        if (!canUpdate) return alert('権限がありません。');
+                                        setSaving(true);
+                                        try {
+                                            const res = await axios.patch(route('shift-details.update', sd.id), { delta_minutes: -15 });
+                                            const returned =
+                                                res && res.data && (res.data.shiftDetail || res.data.shift_detail)
+                                                    ? res.data.shiftDetail || res.data.shift_detail
+                                                    : null;
+                                            if (returned) {
+                                                onSaved(returned);
+                                            }
+                                            if (typeof window !== 'undefined' && window.dispatchEvent)
+                                                window.dispatchEvent(
+                                                    new CustomEvent('ksr.shiftDetail.toast', {
+                                                        detail: { message: '終了時刻を更新しました', type: 'success' },
+                                                    }),
+                                                );
+                                        } catch (err) {
+                                            console.error(err);
+                                            const msg = extractAxiosErrorMessage(err);
+                                            if (typeof window !== 'undefined' && window.dispatchEvent)
+                                                window.dispatchEvent(
+                                                    new CustomEvent('ksr.shiftDetail.toast', { detail: { message: msg, type: 'error' } }),
+                                                );
+                                        } finally {
+                                            setSaving(false);
+                                        }
+                                    }}
+                                >
+                                    -15
+                                </button>
+                                <button
+                                    className="ml-2 rounded border bg-gray-50 px-2 py-1 text-xs hover:bg-gray-100"
+                                    title="+15分"
+                                    onClick={async () => {
+                                        if (!canUpdate) return alert('権限がありません。');
+                                        setSaving(true);
+                                        try {
+                                            const res = await axios.patch(route('shift-details.update', sd.id), { delta_minutes: 15 });
+                                            const returned =
+                                                res && res.data && (res.data.shiftDetail || res.data.shift_detail)
+                                                    ? res.data.shiftDetail || res.data.shift_detail
+                                                    : null;
+                                            if (returned) {
+                                                onSaved(returned);
+                                            }
+                                            if (typeof window !== 'undefined' && window.dispatchEvent)
+                                                window.dispatchEvent(
+                                                    new CustomEvent('ksr.shiftDetail.toast', {
+                                                        detail: { message: '終了時刻を更新しました', type: 'success' },
+                                                    }),
+                                                );
+                                        } catch (err) {
+                                            console.error(err);
+                                            const msg = extractAxiosErrorMessage(err);
+                                            if (typeof window !== 'undefined' && window.dispatchEvent)
+                                                window.dispatchEvent(
+                                                    new CustomEvent('ksr.shiftDetail.toast', { detail: { message: msg, type: 'error' } }),
+                                                );
+                                        } finally {
+                                            setSaving(false);
+                                        }
+                                    }}
+                                >
+                                    +15
+                                </button>
+                            </div>
+                        )}
+
                         {!isAbsent && canUpdate && (
                             <Button variant="outline" onClick={() => setEditing(true)}>
                                 編集
                             </Button>
                         )}
+
                         {!isAbsent && canDelete && (
                             <Button variant="destructive" onClick={destroy}>
                                 削除

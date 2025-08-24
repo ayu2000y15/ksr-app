@@ -110,6 +110,9 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
     // ShiftDetail 削除（勤務詳細の削除）
     Route::delete('/shift-details/{shift_detail}', [App\Http\Controllers\ShiftDetailController::class, 'destroy'])->name('shift-details.destroy');
 
+    // Lightweight JSON API to fetch shiftDetails for a date (used by frontend optimistic replacement)
+    Route::get('/shift-details/api', [App\Http\Controllers\ShiftDetailController::class, 'apiIndex'])->name('shift-details.api');
+
     // --- 休暇申請（シフト申請） ---
     Route::resource('shift-applications', App\Http\Controllers\ShiftApplicationController::class)->only([
         'index',
