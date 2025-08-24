@@ -6,7 +6,7 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, usePage } from '@inertiajs/react';
 import axios from 'axios';
-import { ja } from 'date-fns/locale'; //【追加】日本語ロケールをインポート
+import { ja } from 'date-fns/locale';
 import { CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -298,6 +298,16 @@ export default function Dashboard() {
                         }
                     });
 
+                // sort: day shifts first, then by user id ascending
+                annotatedWorks.sort((a: any, b: any) => {
+                    const aIsNight = String(a.shift_type ?? a.type ?? '') === 'night';
+                    const bIsNight = String(b.shift_type ?? b.type ?? '') === 'night';
+                    if (aIsNight !== bIsNight) return aIsNight ? 1 : -1; // day (not night) first
+                    const aId = Number(a.user?.id ?? a.user_id ?? 0);
+                    const bId = Number(b.user?.id ?? b.user_id ?? 0);
+                    return aId - bId;
+                });
+
                 if (annotatedWorks.length > 0) {
                     const dayStart = new Date(currentDate);
                     dayStart.setHours(0, 0, 0, 0);
@@ -347,6 +357,11 @@ export default function Dashboard() {
         setCurrentDate(newDate);
     };
 
+    //【追加】今日に戻るための関数
+    const goToToday = () => {
+        setCurrentDate(new Date());
+    };
+
     const handleDateSelect = (date: Date | undefined) => {
         if (date) {
             setCurrentDate(date);
@@ -354,9 +369,19 @@ export default function Dashboard() {
         setIsCalendarOpen(false);
     };
 
-    const formattedDate = new Intl.DateTimeFormat('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' }).format(
-        currentDate,
-    );
+    //【修正】今日の日付かどうかを判定し、表示を切り替える
+    let formattedDate;
+    const today = new Date();
+    if (
+        currentDate.getFullYear() === today.getFullYear() &&
+        currentDate.getMonth() === today.getMonth() &&
+        currentDate.getDate() === today.getDate()
+    ) {
+        const dayOfWeek = new Intl.DateTimeFormat('ja-JP', { weekday: 'short' }).format(currentDate);
+        formattedDate = `本日 (${dayOfWeek})`;
+    } else {
+        formattedDate = new Intl.DateTimeFormat('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' }).format(currentDate);
+    }
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -386,15 +411,13 @@ export default function Dashboard() {
                                         </Button>
                                     </PopoverTrigger>
                                     <PopoverContent className="w-auto p-0">
-                                        <Calendar
-                                            mode="single"
-                                            selected={currentDate}
-                                            onSelect={handleDateSelect}
-                                            initialFocus
-                                            locale={ja} //【変更】日本語ロケールを適用
-                                        />
+                                        <Calendar mode="single" selected={currentDate} onSelect={handleDateSelect} initialFocus locale={ja} />
                                     </PopoverContent>
                                 </Popover>
+                                {/*【追加】本日ボタンを配置*/}
+                                <Button variant="outline" onClick={goToToday}>
+                                    本日
+                                </Button>
                                 <Button variant="outline" size="icon" onClick={goToPreviousDay}>
                                     <ChevronLeft className="h-4 w-4" />
                                 </Button>
