@@ -1,8 +1,13 @@
+import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head, usePage } from '@inertiajs/react'; //【追加】usePageをインポート
+import { Head, usePage } from '@inertiajs/react';
 import axios from 'axios';
+import { ja } from 'date-fns/locale'; //【追加】日本語ロケールをインポート
+import { CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -46,10 +51,19 @@ function TimeScale({ offsetMinutes, totalWidth }: { offsetMinutes: number; total
 }
 
 // Right-side gantt bar only (used when left labels are rendered in a fixed column)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function GanttBar({ shift, isAbsent, visualOffsetMinutes }: { shift: any; isAbsent?: boolean; visualOffsetMinutes: number }) {
+function GanttBar({
+    shift,
+    isAbsent,
+    visualOffsetMinutes,
+    currentDate,
+}: {
+    shift: any;
+    isAbsent?: boolean;
+    visualOffsetMinutes: number;
+    currentDate: Date;
+}) {
     const parse = (s: string | null) => (s ? new Date(s) : null);
-    const dayStart = new Date();
+    const dayStart = new Date(currentDate);
     dayStart.setHours(0, 0, 0, 0);
     const minutesFromStart = (d: Date) => (d.getTime() - dayStart.getTime()) / 60000;
 
@@ -229,19 +243,18 @@ function GanttBar({ shift, isAbsent, visualOffsetMinutes }: { shift: any; isAbse
 }
 
 export default function Dashboard() {
+    const [currentDate, setCurrentDate] = useState(new Date());
     const [shifts, setShifts] = useState<any[]>([]);
     const [ganttWidth, setGanttWidth] = useState(900);
     const [ganttOffset, setGanttOffset] = useState(300);
-
-    //【追加】usePageフックでログインユーザー情報を取得
+    const [isCalendarOpen, setIsCalendarOpen] = useState(false);
     const { auth } = usePage().props as any;
 
     useEffect(() => {
         (async () => {
             try {
-                const today = new Date();
                 const pad = (n: number) => String(n).padStart(2, '0');
-                const key = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+                const key = `${currentDate.getFullYear()}-${pad(currentDate.getMonth() + 1)}-${pad(currentDate.getDate())}`;
                 const res = await axios.get(route('shift-details.api'), { params: { date: key } });
                 const payload = res.data || {};
                 const raw = payload.shiftDetails ?? payload;
@@ -258,8 +271,8 @@ export default function Dashboard() {
                     return Boolean(r.shift_type || r.start_time || r.end_time);
                 });
 
-                const todayKey = new Date();
-                todayKey.setHours(0, 0, 0, 0);
+                const dateKey = new Date(currentDate);
+                dateKey.setHours(0, 0, 0, 0);
 
                 const annotatedWorks = works
                     .map((w: any) => {
@@ -279,14 +292,14 @@ export default function Dashboard() {
                             const start = w.start_time ? new Date(w.start_time) : w.date ? new Date(w.date + ' 00:00:00') : null;
                             if (!start) return false;
                             const d = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-                            return d.getTime() >= todayKey.getTime();
+                            return d.getTime() >= dateKey.getTime();
                         } catch {
                             return false;
                         }
                     });
 
                 if (annotatedWorks.length > 0) {
-                    const dayStart = new Date();
+                    const dayStart = new Date(currentDate);
                     dayStart.setHours(0, 0, 0, 0);
                     const minutesFromStart = (d: Date) => (d.getTime() - dayStart.getTime()) / 60000;
                     const parse = (s: string | null) => (s ? new Date(s) : null);
@@ -305,7 +318,6 @@ export default function Dashboard() {
                     });
 
                     const PADDING_MINUTES = 60;
-
                     const newOffset = minStartMinute - PADDING_MINUTES;
                     const newTotalWidth = maxEndMinute + PADDING_MINUTES - newOffset;
 
@@ -321,7 +333,30 @@ export default function Dashboard() {
                 setShifts([]);
             }
         })();
-    }, []);
+    }, [currentDate]);
+
+    const goToPreviousDay = () => {
+        const newDate = new Date(currentDate);
+        newDate.setDate(newDate.getDate() - 1);
+        setCurrentDate(newDate);
+    };
+
+    const goToNextDay = () => {
+        const newDate = new Date(currentDate);
+        newDate.setDate(newDate.getDate() + 1);
+        setCurrentDate(newDate);
+    };
+
+    const handleDateSelect = (date: Date | undefined) => {
+        if (date) {
+            setCurrentDate(date);
+        }
+        setIsCalendarOpen(false);
+    };
+
+    const formattedDate = new Intl.DateTimeFormat('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' }).format(
+        currentDate,
+    );
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -341,12 +376,36 @@ export default function Dashboard() {
 
                 <div>
                     <Card>
-                        <CardHeader>
-                            <CardTitle>本日のシフト</CardTitle>
+                        <CardHeader className="flex flex-row items-center justify-between">
+                            <CardTitle className="text-lg sm:text-xl">{formattedDate}</CardTitle>
+                            <div className="flex items-center gap-2">
+                                <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
+                                    <PopoverTrigger asChild>
+                                        <Button variant="outline" size="icon">
+                                            <CalendarIcon className="h-4 w-4" />
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0">
+                                        <Calendar
+                                            mode="single"
+                                            selected={currentDate}
+                                            onSelect={handleDateSelect}
+                                            initialFocus
+                                            locale={ja} //【変更】日本語ロケールを適用
+                                        />
+                                    </PopoverContent>
+                                </Popover>
+                                <Button variant="outline" size="icon" onClick={goToPreviousDay}>
+                                    <ChevronLeft className="h-4 w-4" />
+                                </Button>
+                                <Button variant="outline" size="icon" onClick={goToNextDay}>
+                                    <ChevronRight className="h-4 w-4" />
+                                </Button>
+                            </div>
                         </CardHeader>
                         <CardContent>
                             {shifts.length === 0 ? (
-                                <div className="text-sm text-muted-foreground">本日のシフトはありません</div>
+                                <div className="text-sm text-muted-foreground">この日のシフトはありません</div>
                             ) : (
                                 <div>
                                     {/* Desktop View */}
@@ -358,7 +417,6 @@ export default function Dashboard() {
                                                     const absent =
                                                         String(s.status ?? '') === 'absent' ||
                                                         (Array.isArray(s.breaks) && s.breaks.some((b: any) => String(b.status ?? '') === 'absent'));
-                                                    //【追加】ログインユーザーのIDと比較
                                                     const isCurrentUser = auth.user && Number(s.user?.id ?? s.user_id) === Number(auth.user.id);
                                                     return (
                                                         <div
@@ -384,14 +442,18 @@ export default function Dashboard() {
                                                             String(s.status ?? '') === 'absent' ||
                                                             (Array.isArray(s.breaks) &&
                                                                 s.breaks.some((b: any) => String(b.status ?? '') === 'absent'));
-                                                        //【追加】ログインユーザーのIDと比較
                                                         const isCurrentUser = auth.user && Number(s.user?.id ?? s.user_id) === Number(auth.user.id);
                                                         return (
                                                             <div
                                                                 key={s.id}
                                                                 className={`border-b ${isCurrentUser ? 'bg-blue-50' : 'border-transparent bg-gray-50'}`}
                                                             >
-                                                                <GanttBar shift={s} isAbsent={absent} visualOffsetMinutes={ganttOffset} />
+                                                                <GanttBar
+                                                                    shift={s}
+                                                                    isAbsent={absent}
+                                                                    visualOffsetMinutes={ganttOffset}
+                                                                    currentDate={currentDate}
+                                                                />
                                                             </div>
                                                         );
                                                     })}
@@ -409,7 +471,6 @@ export default function Dashboard() {
                                                     const absent =
                                                         String(s.status ?? '') === 'absent' ||
                                                         (Array.isArray(s.breaks) && s.breaks.some((b: any) => String(b.status ?? '') === 'absent'));
-                                                    //【追加】ログインユーザーのIDと比較
                                                     const isCurrentUser = auth.user && Number(s.user?.id ?? s.user_id) === Number(auth.user.id);
                                                     return (
                                                         <div
@@ -435,14 +496,18 @@ export default function Dashboard() {
                                                             String(s.status ?? '') === 'absent' ||
                                                             (Array.isArray(s.breaks) &&
                                                                 s.breaks.some((b: any) => String(b.status ?? '') === 'absent'));
-                                                        //【追加】ログインユーザーのIDと比較
                                                         const isCurrentUser = auth.user && Number(s.user?.id ?? s.user_id) === Number(auth.user.id);
                                                         return (
                                                             <div
                                                                 key={s.id}
                                                                 className={`border-b ${isCurrentUser ? 'bg-blue-50' : 'border-transparent bg-gray-50'}`}
                                                             >
-                                                                <GanttBar shift={s} isAbsent={absent} visualOffsetMinutes={ganttOffset} />
+                                                                <GanttBar
+                                                                    shift={s}
+                                                                    isAbsent={absent}
+                                                                    visualOffsetMinutes={ganttOffset}
+                                                                    currentDate={currentDate}
+                                                                />
                                                             </div>
                                                         );
                                                     })}
