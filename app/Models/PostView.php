@@ -4,17 +4,16 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\User;
 
-class Reaction extends Model
+class PostView extends Model
 {
     use HasFactory;
 
-    protected $table = 'post_reactions';
+    protected $table = 'post_views';
 
-    protected $fillable = ['user_id', 'emoji'];
+    protected $fillable = ['user_id'];
 
-    public function reactable()
+    public function viewable()
     {
         return $this->morphTo();
     }

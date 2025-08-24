@@ -10,6 +10,7 @@ import { BreadcrumbItem } from '@/types';
 import { Inertia } from '@inertiajs/inertia';
 import { Head, usePage } from '@inertiajs/react';
 import axios from 'axios';
+import { Edit, Trash } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 export default function Daily() {
@@ -1123,7 +1124,7 @@ export default function Daily() {
                                                                         </button>
                                                                     </div>
 
-                                                                    {canUpdateBreak && (
+                                                                    {/* {canUpdateBreak && (
                                                                         <Button
                                                                             variant="outline"
                                                                             onClick={() => {
@@ -1134,9 +1135,9 @@ export default function Daily() {
                                                                                 setEditStatus((b.status as any) ?? 'scheduled');
                                                                             }}
                                                                         >
-                                                                            編集
+                                                                            <Edit className="mr-2 h-4 w-4" /> 編集
                                                                         </Button>
-                                                                    )}
+                                                                    )} */}
 
                                                                     {canDeleteBreak && (
                                                                         <Button
@@ -1154,7 +1155,7 @@ export default function Daily() {
                                                                                 }
                                                                             }}
                                                                         >
-                                                                            削除
+                                                                            <Trash className="mr-2 h-4 w-4" /> 削除
                                                                         </Button>
                                                                     )}
                                                                 </div>
@@ -1591,13 +1592,13 @@ function EditableShiftRow({
 
                         {!isAbsent && canUpdate && (
                             <Button variant="outline" onClick={() => setEditing(true)}>
-                                編集
+                                <Edit className="mr-2 h-4 w-4" /> 編集
                             </Button>
                         )}
 
                         {!isAbsent && canDelete && (
                             <Button variant="destructive" onClick={destroy}>
-                                削除
+                                <Trash className="mr-2 h-4 w-4" /> 削除
                             </Button>
                         )}
                     </div>

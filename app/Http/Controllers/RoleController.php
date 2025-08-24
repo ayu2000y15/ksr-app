@@ -13,12 +13,19 @@ class RoleController extends Controller
     public function index()
     {
         // システム管理者の場合は権限チェックをスキップ
-        if (Auth::user() && Auth::user()->hasRole('システム管理者')) {
+        $user = Auth::user();
+        if ($user && $user->hasRole('システム管理者')) {
             return Role::with('permissions')->orderBy('id')->get();
         }
-        
+
         $this->authorize('viewAny', Role::class);
-        // Order by the order_column so frontend displays in saved order
+
+        // 非システム管理者は、自分が所属しているロールのみ返す
+        if ($user) {
+            $roleIds = $user->roles->pluck('id')->values()->all();
+            return Role::with('permissions')->whereIn('id', $roleIds)->orderBy('id')->get();
+        }
+
         return Role::with('permissions')->orderBy('id')->get();
     }
 
@@ -29,7 +36,7 @@ class RoleController extends Controller
             $role = Role::create($request->only(['name',]));
             return response()->json($role, 201);
         }
-        
+
         $this->authorize('create', Role::class);
         $role = Role::create($request->only(['name',]));
         return response()->json($role, 201);
@@ -41,7 +48,7 @@ class RoleController extends Controller
         if (Auth::user()->hasRole('システム管理者')) {
             return $role->load('permissions');
         }
-        
+
         $this->authorize('view', $role);
         return $role->load('permissions');
     }
@@ -53,7 +60,7 @@ class RoleController extends Controller
             $role->update($request->only(['name']));
             return response()->json($role);
         }
-        
+
         $this->authorize('update', $role);
         $role->update($request->only(['name']));
         return response()->json($role);
@@ -66,7 +73,7 @@ class RoleController extends Controller
             $role->delete();
             return response()->json(null, 204);
         }
-        
+
         $this->authorize('delete', $role);
         $role->delete();
         return response()->json(null, 204);
@@ -79,7 +86,7 @@ class RoleController extends Controller
             $role->syncPermissions($request->input('permission_ids', []));
             return response()->json($role->load('permissions'));
         }
-        
+
         $this->authorize('update', $role);
         // 👈 メソッド名をパッケージ標準の syncPermissions に変更
         $role->syncPermissions($request->input('permission_ids', []));

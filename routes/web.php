@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\UserController; // UserControllerをインポート
+use App\Http\Controllers\PostController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -122,6 +123,13 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
         'update',
         'destroy'
     ]);
+
+    // --- 掲示板（Inertia pages） ---
+    Route::inertia('/posts', 'posts/index')->name('posts.index');
+    Route::inertia('/posts/create', 'posts/create')->name('posts.create');
+    // Use controller for show so we can pass the post as an Inertia prop
+    Route::get('/posts/{post}', [PostController::class, 'showPage'])->name('posts.show');
+    Route::inertia('/posts/{post}/edit', 'posts/edit')->name('posts.edit');
 });
 
 require __DIR__ . '/auth.php';

@@ -27,7 +27,11 @@ class PermissionPolicy
      */
     public function viewAny(User $user): bool
     {
-        return $user->hasPermissionTo('role.view');
+        try {
+            return $user->hasPermissionTo('role.view');
+        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
+            return false;
+        }
     }
 
     /**
@@ -35,7 +39,11 @@ class PermissionPolicy
      */
     public function view(User $user, Permission $permission): bool
     {
-        return $user->hasPermissionTo('role.view');
+        try {
+            return $user->hasPermissionTo('role.view');
+        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
+            return false;
+        }
     }
 
     /**
@@ -43,7 +51,11 @@ class PermissionPolicy
      */
     public function create(User $user): bool
     {
-        return $user->hasPermissionTo('role.create');
+        try {
+            return $user->hasPermissionTo('role.create');
+        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
+            return false;
+        }
     }
 
     /**
@@ -51,7 +63,11 @@ class PermissionPolicy
      */
     public function update(User $user, Permission $permission): bool
     {
-        return $user->hasPermissionTo('role.update');
+        try {
+            return $user->hasPermissionTo('role.update');
+        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
+            return false;
+        }
     }
 
     /**
@@ -59,6 +75,10 @@ class PermissionPolicy
      */
     public function delete(User $user, Permission $permission): bool
     {
-        return $user->hasPermissionTo('role.delete');
+        try {
+            return $user->hasPermissionTo('role.delete');
+        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
+            return false;
+        }
     }
 }

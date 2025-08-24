@@ -25,6 +25,7 @@ class AuthServiceProvider extends ServiceProvider
      * @var array
      */
     protected $policies = [
+        \App\Models\Post::class => \App\Policies\PostPolicy::class,
         User::class => UserPolicy::class,
         Role::class => RolePolicy::class,
         Permission::class => PermissionPolicy::class,
@@ -44,15 +45,8 @@ class AuthServiceProvider extends ServiceProvider
 
         // Super-admin role bypass: users with role name 'システム管理者' are allowed everything
         Gate::before(function ($user, $ability) {
-            Log::info('Gate::before called', [
-                'user_id' => $user ? $user->id : null,
-                'user_name' => $user ? $user->name : null,
-                'ability' => $ability,
-                'has_role' => $user ? $user->hasRole('システム管理者') : false,
-            ]);
 
             if ($user && $user->hasRole('システム管理者')) {
-                Log::info('Gate::before - システム管理者として許可');
                 return true;
             }
         });

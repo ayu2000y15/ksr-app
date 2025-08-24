@@ -9,26 +9,46 @@ class UserShiftSettingPolicy
 {
     public function viewAny(User $user)
     {
-        return $user->hasRole('システム管理者') || $user->can('user_shift_setting.view');
+        try {
+            return $user->hasRole('システム管理者') || $user->hasPermissionTo('user_shift_setting.view');
+        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
+            return $user->hasRole('システム管理者');
+        }
     }
 
     public function view(User $user, UserShiftSetting $model)
     {
-        return $user->hasRole('システム管理者') || $user->can('user_shift_setting.view');
+        try {
+            return $user->hasRole('システム管理者') || $user->hasPermissionTo('user_shift_setting.view');
+        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
+            return $user->hasRole('システム管理者');
+        }
     }
 
     public function create(User $user)
     {
-        return $user->hasRole('システム管理者') || $user->can('user_shift_setting.create');
+        try {
+            return $user->hasRole('システム管理者') || $user->hasPermissionTo('user_shift_setting.create');
+        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
+            return $user->hasRole('システム管理者');
+        }
     }
 
     public function update(User $user, UserShiftSetting $model)
     {
-        return $user->hasRole('システム管理者') || $user->can('user_shift_setting.update');
+        try {
+            return $user->hasRole('システム管理者') || $user->hasPermissionTo('user_shift_setting.update');
+        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
+            return $user->hasRole('システム管理者');
+        }
     }
 
     public function delete(User $user, UserShiftSetting $model)
     {
-        return $user->hasRole('システム管理者') || $user->can('user_shift_setting.delete');
+        try {
+            return $user->hasRole('システム管理者') || $user->hasPermissionTo('user_shift_setting.delete');
+        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
+            return $user->hasRole('システム管理者');
+        }
     }
 }

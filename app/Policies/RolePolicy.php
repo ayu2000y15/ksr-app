@@ -16,16 +16,8 @@ class RolePolicy
      */
     public function before(User $user, string $ability): bool|null
     {
-        // デバッグ用ログ
-        Log::info('RolePolicy::before called', [
-            'user_id' => $user->id,
-            'user_name' => $user->name,
-            'ability' => $ability,
-            'has_role' => $user->hasRole('システム管理者'),
-        ]);
 
         if ($user->hasRole('システム管理者')) {
-            Log::info('RolePolicy::before - システム管理者として許可');
             return true;
         }
 
@@ -37,7 +29,11 @@ class RolePolicy
      */
     public function viewAny(User $user): bool
     {
-        return $user->hasPermissionTo('role.view');
+        try {
+            return $user->hasPermissionTo('role.view');
+        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
+            return false;
+        }
     }
 
     /**
@@ -45,7 +41,11 @@ class RolePolicy
      */
     public function view(User $user, Role $role): bool
     {
-        return $user->hasPermissionTo('role.view');
+        try {
+            return $user->hasPermissionTo('role.view');
+        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
+            return false;
+        }
     }
 
     /**
@@ -53,7 +53,11 @@ class RolePolicy
      */
     public function create(User $user): bool
     {
-        return $user->hasPermissionTo('role.create');
+        try {
+            return $user->hasPermissionTo('role.create');
+        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
+            return false;
+        }
     }
 
     /**
@@ -61,7 +65,11 @@ class RolePolicy
      */
     public function update(User $user, Role $role): bool
     {
-        return $user->hasPermissionTo('role.update');
+        try {
+            return $user->hasPermissionTo('role.update');
+        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
+            return false;
+        }
     }
 
     /**
@@ -69,6 +77,10 @@ class RolePolicy
      */
     public function delete(User $user, Role $role): bool
     {
-        return $user->hasPermissionTo('role.delete');
+        try {
+            return $user->hasPermissionTo('role.delete');
+        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
+            return false;
+        }
     }
 }

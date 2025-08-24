@@ -5,158 +5,162 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { MultiSelectCombobox } from '@/components/ui/multi-select-combobox';
+import { MultiSelectCombobox } from '@/components/ui/multi-select-combobox'; // New component import
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
-// 1. usePageフックをインポート
-import { Head, Link, useForm, usePage } from '@inertiajs/react';
+import { BreadcrumbItem } from '@/types';
+import { Head, Link, useForm } from '@inertiajs/react';
 import { X } from 'lucide-react';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
-// `declare const page` は不要になるので削除してもOKです
-// declare const page: any;
+// declare global Inertia `page` object used by templates
+declare const page: any;
 
-const breadcrumbs = [
+const breadcrumbs: BreadcrumbItem[] = [
     { title: 'ダッシュボード', href: route('dashboard') },
     { title: '掲示板', href: route('posts.index') },
-    { title: '投稿編集', href: '' },
+    { title: '新規投稿', href: route('posts.create') },
 ];
 
-export default function PostEdit() {
-    // 2. usePageフックを呼び出してpropsを取得
-    const { props } = usePage();
-    const initialPostData = props.post as Record<string, any> | null;
-
-    type RoleItem = { id: number; name: string };
-    type UserItem = { id: number; name: string };
-    const [initialPost, setInitialPost] = useState(initialPostData);
-
+export default function PostCreate() {
     const { data, setData, processing, errors, reset } = useForm({
         title: '',
         body: '',
     });
-
     const [attachments, setAttachments] = useState<File[]>([]);
-    const [isPublic, setIsPublic] = useState<boolean>(true);
+    // default to draft (非公開) instead of public
+    const [isPublic, setIsPublic] = useState<boolean>(false);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
-    const [previews, setPreviews] = useState<any[]>([]);
+    const [previews, setPreviews] = useState<{ url: string; file: File; isImage: boolean }[]>([]);
     const [modalOpen, setModalOpen] = useState(false);
     const [modalStartIndex, setModalStartIndex] = useState(0);
     const [bodyHtml, setBodyHtml] = useState<string>('');
-    const [serverErrors, setServerErrors] = useState<Record<string, string[]>>({});
-    const [audience, setAudience] = useState<'all' | 'restricted'>('all');
-    const [availableRoles, setAvailableRoles] = useState<RoleItem[]>([]);
-    const [availableUsers, setAvailableUsers] = useState<UserItem[]>([]);
-
-    const [selectedRoles, setSelectedRoles] = useState<number[]>([]);
-    const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
-
-    useEffect(() => {
-        if (initialPost) return;
-        const m = window.location.pathname.match(/\/posts\/(\d+)\/edit/);
-        const id = m ? m[1] : null;
-        if (!id) return;
-
-        fetch(`/api/posts/${id}`, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
-            .then((r) => r.json())
-            .then((d) => setInitialPost(d))
-            .catch(console.error);
-    }, []);
-
-    useEffect(() => {
-        if (!initialPost) return;
-
-        console.log('--- サーバーからの投稿データ (initialPost) ---', initialPost);
-
-        setData({
-            title: initialPost.title || '',
-            body: initialPost.body || '',
-        });
-        setBodyHtml(initialPost.body || '');
-        setAudience(initialPost.audience || 'all');
-        setIsPublic(!(initialPost.is_public === false || initialPost.is_public === '0' || initialPost.is_public === 0));
-
-        const rolesFromData = Array.isArray(initialPost.roles) ? initialPost.roles.map((r: any) => Number(r.id)) : [];
-        const usersFromData = Array.isArray(initialPost.users) ? initialPost.users.map((u: any) => Number(u.id)) : [];
-
-        setSelectedRoles(rolesFromData);
-        setSelectedUsers(usersFromData);
-
-        console.log('--- 状態設定後の選択済みID ---');
-        console.log('選択済みロールID (selectedRoles):', rolesFromData);
-        console.log('選択済みユーザーID (selectedUsers):', usersFromData);
-
-        const existingAttachments = Array.isArray(initialPost.attachments) ? initialPost.attachments : [];
-        setPreviews(
-            existingAttachments.map((a: any) => {
-                let url = a.file_path || a.url || a.path || '';
-                if (url && typeof url === 'string' && !url.match(/^https?:\/\//) && !url.startsWith('/')) {
-                    url = '/storage/' + url;
-                }
-                const isImage = typeof url === 'string' && /\.(png|jpe?g|gif|svg|webp)(\?|$)/i.test(url);
-                return { url, file: undefined, isImage, existing: true };
-            }),
-        );
-    }, [initialPost]);
-
-    useEffect(() => {
-        fetch('/api/roles', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
-            .then((r) => r.json())
-            .then((d) => setAvailableRoles(d || []))
-            .catch(() => setAvailableRoles([]));
-
-        fetch('/api/users', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
-            .then((r) => r.json())
-            .then((d) => setAvailableUsers(d || []))
-            .catch(() => setAvailableUsers([]));
-    }, []);
-
-    const roleOptions = useMemo(() => {
-        const map = new Map<number, { value: number; label: string }>();
-        (availableRoles || []).forEach((r) => map.set(r.id, { value: r.id, label: r.name }));
-        (initialPost?.roles || []).forEach((r: any) => map.set(r.id, { value: r.id, label: r.name }));
-        return Array.from(map.values());
-    }, [availableRoles, initialPost]);
-
-    const userOptions = useMemo(() => {
-        const map = new Map<number, { value: number; label: string }>();
-        (availableUsers || []).forEach((u) => map.set(u.id, { value: u.id, label: u.name }));
-        (initialPost?.users || []).forEach((u: any) => map.set(u.id, { value: u.id, label: u.name }));
-        return Array.from(map.values());
-    }, [availableUsers, initialPost]);
 
     function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
         if (!e.target.files) return;
         const files = Array.from(e.target.files);
         setAttachments(files);
     }
-    useEffect(() => {
-        setPreviews((prev) => {
-            const existing = prev.filter((p) => p.existing);
-            const newFiles = attachments.map((f) => ({ url: URL.createObjectURL(f), file: f, isImage: f.type.startsWith('image/') }));
-            prev.filter((p) => !p.existing).forEach((p) => URL.revokeObjectURL(p.url));
-            return [...existing, ...newFiles];
-        });
 
+    // build previews when attachments change
+    useEffect(() => {
+        // revoke old urls
+        setPreviews((prev) => {
+            prev.forEach((p) => URL.revokeObjectURL(p.url));
+            return [];
+        });
+        if (!attachments || attachments.length === 0) return;
+        const next = attachments.map((f) => ({ url: URL.createObjectURL(f), file: f, isImage: f.type.startsWith('image/') }));
+        setPreviews(next);
         return () => {
-            previews.filter((p) => !p.existing).forEach((p) => URL.revokeObjectURL(p.url));
+            next.forEach((p) => URL.revokeObjectURL(p.url));
         };
     }, [attachments]);
+
+    const [serverErrors, setServerErrors] = useState<Record<string, string[]>>({});
+    const [audience, setAudience] = useState<'all' | 'restricted'>('all');
+    const [availableRoles, setAvailableRoles] = useState<any[]>([]);
+    const [availableUsers, setAvailableUsers] = useState<any[]>([]);
+    const [selectedRoles, setSelectedRoles] = useState<number[]>([]);
+    const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
+
+    useEffect(() => {
+        // fetch roles and users for selection
+        fetch('/api/roles', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+            .then((r) => r.json())
+            .then((d) => {
+                const roles = (d || []) as Array<{ id: number; name: string }>;
+                try {
+                    type InertiaPage = { props?: { auth?: { user?: { id?: number; name?: string; roles?: Array<{ id: number; name: string }> } } } };
+                    declare const page: InertiaPage | undefined;
+                    const currentUser = page?.props?.auth?.user || null;
+                    const currentRoleNames = Array.isArray(currentUser?.roles)
+                        ? currentUser.roles.map((rr: { id: number; name: string }) => rr.name)
+                        : [];
+                    // システム管理者はすべて見る
+                    if (currentRoleNames.includes('システム管理者')) {
+                        setAvailableRoles(roles);
+                    } else {
+                        // 一般ユーザーは自分が所属するロールのみ表示
+                        const currentRoleIds = Array.isArray(currentUser?.roles)
+                            ? currentUser.roles.map((rr: { id: number; name: string }) => rr.id)
+                            : [];
+                        const filtered = roles.filter((r) => currentRoleIds.includes(r.id));
+                        setAvailableRoles(filtered);
+                    }
+                } catch {
+                    setAvailableRoles(roles);
+                }
+            })
+            .catch(() => setAvailableRoles([]));
+        fetch('/api/users', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+            .then((r) => r.json())
+            .then((d) => setAvailableUsers(d || []))
+            .catch(() => setAvailableUsers([]));
+    }, []);
+
     const submit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         setServerErrors({});
         const form = new FormData();
         form.append('title', data.title);
-        const html = bodyHtml && bodyHtml.length > 0 ? bodyHtml : data.body || '';
-        form.append('body', html);
+        const rawHtml = bodyHtml && bodyHtml.length > 0 ? bodyHtml : data.body || '';
+
+        // transform plain-text #tags and @mentions into spans so class attributes are stored
+        const transformHtmlForSave = (raw: string) => {
+            const container = document.createElement('div');
+            container.innerHTML = raw || '';
+            const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
+            const nodes: Node[] = [];
+            let n: Node | null = walker.nextNode();
+            while (n) {
+                nodes.push(n);
+                n = walker.nextNode();
+            }
+            nodes.forEach((tn) => {
+                const v = tn.nodeValue || '';
+                if (!v) return;
+                if (/#([^\s#@]+)|@([^\s@#]+)/.test(v)) {
+                    const frag = document.createDocumentFragment();
+                    let lastIndex = 0;
+                    const re = /(#([^\s#@]+))|(@([^\s@#]+))/g;
+                    let m: RegExpExecArray | null;
+                    while ((m = re.exec(v))) {
+                        const before = v.slice(lastIndex, m.index);
+                        if (before) frag.appendChild(document.createTextNode(before));
+                        if (m[1]) {
+                            const span = document.createElement('span');
+                            span.className = 'hashtag';
+                            span.textContent = m[1];
+                            frag.appendChild(span);
+                        } else if (m[3]) {
+                            const span = document.createElement('span');
+                            span.className = 'mention';
+                            span.textContent = m[3];
+                            frag.appendChild(span);
+                        }
+                        lastIndex = re.lastIndex;
+                    }
+                    const rest = v.slice(lastIndex);
+                    if (rest) frag.appendChild(document.createTextNode(rest));
+                    tn.parentNode?.replaceChild(frag, tn);
+                }
+            });
+            return container.innerHTML;
+        };
+
+        const transformedHtml = transformHtmlForSave(rawHtml);
+        form.append('body', transformedHtml);
         form.append('is_public', isPublic ? '1' : '0');
         form.append('audience', audience);
         if (audience === 'restricted') {
             selectedRoles.forEach((id) => form.append('roles[]', String(id)));
             selectedUsers.forEach((id) => form.append('users[]', String(id)));
         }
+        // extract simple tags from plain text: #tag (stops at whitespace/#/@)
         try {
+            // convert HTML to plain text to avoid capturing tags like </p>
             const tmp = document.createElement('div');
-            tmp.innerHTML = html;
+            tmp.innerHTML = rawHtml;
             const text = tmp.textContent || tmp.innerText || '';
             const re = /#([^\s#@]+)/g;
             let m: RegExpExecArray | null = null;
@@ -171,15 +175,14 @@ export default function PostEdit() {
                     }
                 }
             }
-        } catch (_err) {}
+        } catch {
+            // ignore
+        }
         attachments.forEach((f) => form.append('attachments[]', f));
 
         try {
             const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-            const postId = initialPost?.id;
-            form.append('_method', 'PATCH');
-            const url = `/api/posts/${postId}`;
-            const res = await fetch(url, {
+            const res = await fetch('/api/posts', {
                 method: 'POST',
                 credentials: 'same-origin',
                 body: form,
@@ -192,12 +195,34 @@ export default function PostEdit() {
 
             const contentType = (res.headers.get('content-type') || '').toLowerCase();
 
+            // Debug logging: always log response metadata and body when possible
+            try {
+                console.log('[posts.create] response meta', { status: res.status, statusText: res.statusText, url: res.url, contentType });
+                if (contentType.includes('application/json')) {
+                    const payload = await res
+                        .clone()
+                        .json()
+                        .catch(() => null);
+                    console.log('[posts.create] response json', payload);
+                } else {
+                    const text = await res
+                        .clone()
+                        .text()
+                        .catch(() => null);
+                    console.log('[posts.create] response text', text && text.slice ? text.slice(0, 2000) : text);
+                }
+            } catch (logErr) {
+                console.error('[posts.create] failed to log response', logErr);
+            }
+
+            // handle validation errors (JSON)
             if (res.status === 422 && contentType.includes('application/json')) {
                 const payload = await res.json();
                 setServerErrors(payload.errors || {});
                 return;
             }
 
+            // If server returned HTML (debug page / 419), show text for easier debugging
             if (!contentType.includes('application/json')) {
                 const text = await res.text();
                 alert('投稿に失敗しました（非JSON応答）: ' + text.slice(0, 1000));
@@ -205,34 +230,31 @@ export default function PostEdit() {
             }
 
             if (!res.ok) {
+                // JSON error
                 const payload = await res.json();
                 alert('投稿に失敗しました: ' + (payload.message || JSON.stringify(payload)));
                 return;
             }
 
+            // success - navigate to posts index
             reset();
-            window.location.href = route('posts.show', postId);
-        } catch (_err) {
-            console.error(_err);
+            window.location.href = route('posts.index');
+        } catch (err) {
+            console.error(err);
             alert('通信エラーが発生しました');
         }
     };
 
-    console.log('--- レンダリング直前のデータ ---');
-    console.log('ロール選択肢 (roleOptions):', roleOptions);
-    console.log('選択済みロール (selectedRoles):', selectedRoles);
-    console.log('ユーザー選択肢 (userOptions):', userOptions);
-    console.log('選択済みユーザー (selectedUsers):', selectedUsers);
-
     return (
         <AppSidebarLayout breadcrumbs={breadcrumbs}>
-            <Head title="投稿編集" />
+            <Head title="新規投稿" />
+
             <div className="py-12">
                 <div className="mx-auto max-w-2xl sm:px-6 lg:px-8">
                     <form onSubmit={submit}>
                         <Card>
                             <CardHeader>
-                                <CardTitle>投稿を編集</CardTitle>
+                                <CardTitle>新しい投稿を作成</CardTitle>
                             </CardHeader>
 
                             <CardContent className="space-y-6">
@@ -250,12 +272,19 @@ export default function PostEdit() {
                                         value={data.body}
                                         onChange={(html) => setBodyHtml(html)}
                                         title={data.title}
-                                        // 3. グローバルなpage変数の代わりにpropsを使用
-                                        authorName={(props.auth as any)?.user?.name || ''}
+                                        authorName={(() => {
+                                            try {
+                                                const page = (window as any).page;
+                                                return page?.props?.auth?.user?.name || '';
+                                            } catch {
+                                                return '';
+                                            }
+                                        })()}
                                         availableUsers={availableUsers}
                                     />
                                     <InputError message={errors.body} className="mt-2" />
                                 </div>
+
                                 <div>
                                     <Label htmlFor="attachments">添付</Label>
                                     <div className="flex items-center gap-3">
@@ -266,9 +295,9 @@ export default function PostEdit() {
                                         <div className="text-sm text-muted-foreground">{attachments.length} ファイル</div>
                                     </div>
 
-                                    <div className="mt-3 flex flex-wrap items-start gap-3">
+                                    <div className="mt-3 flex items-start gap-3">
                                         {previews.map((p, idx) => (
-                                            <div key={p.url || idx} className="relative h-20 w-20 overflow-hidden rounded bg-gray-50">
+                                            <div key={idx} className="relative h-20 w-20 overflow-hidden rounded bg-gray-50">
                                                 {p.isImage ? (
                                                     <img
                                                         src={p.url}
@@ -280,19 +309,13 @@ export default function PostEdit() {
                                                         }}
                                                     />
                                                 ) : (
-                                                    <div className="flex h-full w-full items-center justify-center p-2 text-center text-xs break-all">
-                                                        {p.file?.name || 'file'}
-                                                    </div>
+                                                    <div className="flex h-full w-full items-center justify-center p-2 text-xs">{p.file.name}</div>
                                                 )}
                                                 <button
                                                     type="button"
                                                     className="absolute top-1 right-1 rounded bg-white/80 p-0.5 text-gray-700 hover:bg-white"
                                                     onClick={() => {
-                                                        if (p.existing) {
-                                                            setPreviews((prev) => prev.filter((_, i) => i !== idx));
-                                                        } else {
-                                                            setAttachments((prev) => prev.filter((f) => f !== p.file));
-                                                        }
+                                                        setAttachments((prev) => prev.filter((_, i) => i !== idx));
                                                     }}
                                                     title="削除"
                                                 >
@@ -304,6 +327,7 @@ export default function PostEdit() {
 
                                     {serverErrors.attachments && <InputError message={serverErrors.attachments.join(', ')} className="mt-2" />}
                                 </div>
+
                                 <div>
                                     <Label htmlFor="is_public">公開設定</Label>
                                     <div className="mt-2">
@@ -318,8 +342,9 @@ export default function PostEdit() {
                                         </select>
                                     </div>
                                 </div>
+
                                 <div>
-                                    <Label htmlFor="audience">公開範囲</Label>
+                                    <Label htmlFor="audience">閲覧範囲</Label>
                                     <div className="mt-2 space-y-2">
                                         <div>
                                             <label className="inline-flex items-center">
@@ -351,7 +376,10 @@ export default function PostEdit() {
                                                 <div>
                                                     <Label className="text-sm font-medium">ロールで指定</Label>
                                                     <MultiSelectCombobox
-                                                        options={roleOptions}
+                                                        options={availableRoles.map((r) => ({
+                                                            value: r.id,
+                                                            label: r.name,
+                                                        }))}
                                                         selected={selectedRoles}
                                                         onChange={setSelectedRoles}
                                                         placeholder="ロールを選択..."
@@ -362,7 +390,10 @@ export default function PostEdit() {
                                                 <div>
                                                     <Label className="text-sm font-medium">ユーザーで指定</Label>
                                                     <MultiSelectCombobox
-                                                        options={userOptions}
+                                                        options={availableUsers.map((u) => ({
+                                                            value: u.id,
+                                                            label: u.name,
+                                                        }))}
                                                         selected={selectedUsers}
                                                         onChange={setSelectedUsers}
                                                         placeholder="ユーザーを選択..."
@@ -381,7 +412,7 @@ export default function PostEdit() {
                                         キャンセル
                                     </Button>
                                 </Link>
-                                <Button disabled={processing}>更新する</Button>
+                                <Button disabled={processing}>投稿する</Button>
                             </CardFooter>
                         </Card>
                     </form>

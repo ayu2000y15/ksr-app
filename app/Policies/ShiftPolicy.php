@@ -21,26 +21,46 @@ class ShiftPolicy
 
     public function viewAny(User $user)
     {
-        return $user->hasPermissionTo('shift.view');
+        try {
+            return $user->hasPermissionTo('shift.view');
+        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
+            return false;
+        }
     }
 
     public function view(User $user, Shift $shift)
     {
-        return $user->hasPermissionTo('shift.view');
+        try {
+            return $user->hasPermissionTo('shift.view');
+        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
+            return false;
+        }
     }
 
     public function create(User $user)
     {
-        return $user->hasPermissionTo('shift.create');
+        try {
+            return $user->hasPermissionTo('shift.create');
+        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
+            return false;
+        }
     }
 
     public function update(User $user, Shift $shift)
     {
-        return $user->hasPermissionTo('shift.update');
+        try {
+            return $user->hasPermissionTo('shift.update');
+        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
+            return false;
+        }
     }
 
     public function delete(User $user, Shift $shift)
     {
-        return $user->hasPermissionTo('shift.delete');
+        try {
+            return $user->hasPermissionTo('shift.delete');
+        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
+            return false;
+        }
     }
 }

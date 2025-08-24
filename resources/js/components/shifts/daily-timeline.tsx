@@ -1,5 +1,7 @@
+import { Button } from '@/components/ui/button';
 import { usePage } from '@inertiajs/react';
 import axios from 'axios';
+import { Plus, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 type BreakPayload = { shift_detail_id: number; start_time: string; end_time: string; type?: string };
@@ -738,14 +740,9 @@ export default function DailyTimeline(props: {
                     <div className="flex justify-start gap-6 text-sm text-muted-foreground">
                         <div className="flex items-center font-medium">
                             <span>出勤人数</span>
-                            <button
-                                type="button"
-                                className="ml-3 rounded border bg-white px-2 py-0.5 text-sm hover:bg-gray-50"
-                                title="ユーザーを追加"
-                                onClick={() => setShowAddUser((s) => !s)}
-                            >
-                                ＋
-                            </button>
+                            <Button size="sm" variant="ghost" className="ml-3" title="ユーザーを追加" onClick={() => setShowAddUser((s) => !s)}>
+                                <Plus className="h-4 w-4" />
+                            </Button>
                         </div>
                         <div>
                             <span className="text-xs text-muted-foreground">昼 </span>
@@ -804,23 +801,22 @@ export default function DailyTimeline(props: {
                             </div>
 
                             <div className="flex items-center gap-2">
-                                <button
-                                    className="rounded bg-indigo-600 px-3 py-1 text-sm text-white hover:bg-indigo-700 disabled:opacity-60"
-                                    onClick={addUserShift}
-                                    disabled={adding || !selectedUserId}
-                                >
+                                <Button size="sm" onClick={addUserShift} disabled={adding || !selectedUserId}>
+                                    <Plus className="mr-1 h-4 w-4" />
                                     追加
-                                </button>
-                                <button
-                                    className="rounded border px-3 py-1 text-sm"
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
                                     onClick={() => {
                                         setShowAddUser(false);
                                         setSelectedUserId(null);
                                         setSelectedShiftType('day');
                                     }}
                                 >
+                                    <X className="mr-1 h-4 w-4" />
                                     キャンセル
-                                </button>
+                                </Button>
                             </div>
                         </div>
                     )}

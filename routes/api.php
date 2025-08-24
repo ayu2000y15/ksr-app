@@ -65,4 +65,12 @@ Route::middleware(['web', 'auth'])->group(function () {
 
     // ユーザーへのロール割り当て
     Route::post('users/{user}/roles', [UserRoleController::class, 'syncRoles']);
+
+    // 掲示板・投稿 API
+    Route::apiResource('posts', \App\Http\Controllers\PostController::class);
+    // 投稿へのリアクションと既読
+    Route::get('posts/{post}/reactions', [\App\Http\Controllers\Api\PostInteractionController::class, 'reactions']);
+    Route::post('posts/{post}/reactions', [\App\Http\Controllers\Api\PostInteractionController::class, 'toggleReaction']);
+    Route::get('posts/{post}/views', [\App\Http\Controllers\Api\PostInteractionController::class, 'views']);
+    Route::post('posts/{post}/views', [\App\Http\Controllers\Api\PostInteractionController::class, 'registerView']);
 });

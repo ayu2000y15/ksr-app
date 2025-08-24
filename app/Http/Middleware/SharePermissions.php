@@ -30,12 +30,18 @@ class SharePermissions
 
             // prepare flat permission names list for components that expect
             // `auth.permissions` as a string array (e.g. sidebar code)
-            if ($isSystemAdmin) {
-                $flatPermissions = Permission::pluck('name')->unique()->values()->all();
-            } else {
-                $flatPermissions = Permission::whereHas('roles.users', function ($q) use ($user) {
-                    $q->where('users.id', $user->id);
-                })->pluck('name')->unique()->values()->all();
+            try {
+                if ($isSystemAdmin) {
+                    $flatPermissions = Permission::pluck('name')->unique()->values()->all();
+                } else {
+                    $flatPermissions = Permission::whereHas('roles.users', function ($q) use ($user) {
+                        $q->where('users.id', $user->id);
+                    })->pluck('name')->unique()->values()->all();
+                }
+            } catch (\Throwable $e) {
+                // If permissions table is inconsistent or a permission name is missing for the guard,
+                // do not break Inertia sharing — fall back to an empty permission list.
+                $flatPermissions = [];
             }
 
             // safe permission checker: return false when the named permission does not exist

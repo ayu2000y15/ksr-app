@@ -23,26 +23,46 @@ class UserPolicy
 
     public function viewAny(User $user)
     {
-        return $user->hasPermissionTo('user.view');
+        try {
+            return $user->hasPermissionTo('user.view');
+        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
+            return false;
+        }
     }
 
     public function view(User $user, User $model)
     {
-        return $user->hasPermissionTo('user.view');
+        try {
+            return $user->hasPermissionTo('user.view');
+        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
+            return false;
+        }
     }
 
     public function create(User $user)
     {
-        return $user->hasPermissionTo('user.create');
+        try {
+            return $user->hasPermissionTo('user.create');
+        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
+            return false;
+        }
     }
 
     public function update(User $user, User $model)
     {
-        return $user->hasPermissionTo('user.update');
+        try {
+            return $user->hasPermissionTo('user.update');
+        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
+            return false;
+        }
     }
 
     public function delete(User $user, User $model)
     {
-        return $user->hasPermissionTo('user.delete');
+        try {
+            return $user->hasPermissionTo('user.delete');
+        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
+            return false;
+        }
     }
 }
