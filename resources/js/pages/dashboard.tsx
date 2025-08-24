@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/react';
+import { Head, usePage } from '@inertiajs/react'; //【追加】usePageをインポート
 import axios from 'axios';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -14,9 +14,8 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-//【修正】時間メモリを描画するコンポーネント
+// 時間メモリを描画するコンポーネント
 function TimeScale({ offsetMinutes, totalWidth }: { offsetMinutes: number; totalWidth: number }) {
-    // 表示すべき時間の開始と終了を動的に計算
     const startHour = Math.floor(offsetMinutes / 60);
     const endHour = Math.ceil((offsetMinutes + totalWidth) / 60);
     const hours = Array.from({ length: endHour - startHour + 1 }, (_, i) => startHour + i);
@@ -33,7 +32,7 @@ function TimeScale({ offsetMinutes, totalWidth }: { offsetMinutes: number; total
                         key={hour}
                         className="absolute bottom-0 text-center"
                         style={{
-                            left: `${leftPosition}px`,
+                            left: `${leftPosition - 0.5}px`,
                             transform: 'translateX(-50%)',
                         }}
                     >
@@ -232,8 +231,10 @@ function GanttBar({ shift, isAbsent, visualOffsetMinutes }: { shift: any; isAbse
 export default function Dashboard() {
     const [shifts, setShifts] = useState<any[]>([]);
     const [ganttWidth, setGanttWidth] = useState(900);
-    //【修正】オフセット値を固定値からState管理に変更
-    const [ganttOffset, setGanttOffset] = useState(300); // デフォルトは5時(300分)
+    const [ganttOffset, setGanttOffset] = useState(300);
+
+    //【追加】usePageフックでログインユーザー情報を取得
+    const { auth } = usePage().props as any;
 
     useEffect(() => {
         (async () => {
@@ -284,7 +285,6 @@ export default function Dashboard() {
                         }
                     });
 
-                //【修正】ここから表示範囲の動的計算ロジック
                 if (annotatedWorks.length > 0) {
                     const dayStart = new Date();
                     dayStart.setHours(0, 0, 0, 0);
@@ -304,16 +304,14 @@ export default function Dashboard() {
                         if (endM > maxEndMinute) maxEndMinute = endM;
                     });
 
-                    const PADDING_MINUTES = 60; // 前後に1時間ずつの余白
+                    const PADDING_MINUTES = 60;
 
-                    // 新しいオフセットと幅を計算
                     const newOffset = minStartMinute - PADDING_MINUTES;
                     const newTotalWidth = maxEndMinute + PADDING_MINUTES - newOffset;
 
                     setGanttOffset(newOffset);
-                    setGanttWidth(Math.max(900, newTotalWidth)); // 最低でも900pxの幅を確保
+                    setGanttWidth(Math.max(900, newTotalWidth));
                 } else {
-                    // シフトがない場合はデフォルト値に戻す
                     setGanttOffset(300);
                     setGanttWidth(900);
                 }
@@ -351,17 +349,22 @@ export default function Dashboard() {
                                 <div className="text-sm text-muted-foreground">本日のシフトはありません</div>
                             ) : (
                                 <div>
-                                    {/* Desktop View: sm(640px)以上の画面幅で表示 */}
+                                    {/* Desktop View */}
                                     <div className="hidden sm:flex">
                                         <div className="w-40 flex-shrink-0">
                                             <div className="h-8 border-b border-gray-200"></div>
-                                            <div className="flex flex-col gap-3">
+                                            <div className="flex flex-col">
                                                 {shifts.map((s) => {
                                                     const absent =
                                                         String(s.status ?? '') === 'absent' ||
                                                         (Array.isArray(s.breaks) && s.breaks.some((b: any) => String(b.status ?? '') === 'absent'));
+                                                    //【追加】ログインユーザーのIDと比較
+                                                    const isCurrentUser = auth.user && Number(s.user?.id ?? s.user_id) === Number(auth.user.id);
                                                     return (
-                                                        <div key={s.id} className="flex h-10 items-center text-sm font-medium">
+                                                        <div
+                                                            key={s.id}
+                                                            className={`flex h-10 items-center border-b px-2 text-sm font-medium ${isCurrentUser ? 'bg-blue-50 font-semibold text-blue-900' : 'border-transparent'}`}
+                                                        >
                                                             <span className={`mr-2 font-mono ${absent ? 'text-gray-500 line-through' : ''}`}>
                                                                 {String(s.user?.id ?? s.user_id)}
                                                             </span>
@@ -375,14 +378,19 @@ export default function Dashboard() {
                                         <div className="flex-1 overflow-x-auto">
                                             <div style={{ minWidth: `${ganttWidth}px` }}>
                                                 <TimeScale offsetMinutes={ganttOffset} totalWidth={ganttWidth} />
-                                                <div className="flex flex-col gap-3">
+                                                <div className="flex flex-col">
                                                     {shifts.map((s) => {
                                                         const absent =
                                                             String(s.status ?? '') === 'absent' ||
                                                             (Array.isArray(s.breaks) &&
                                                                 s.breaks.some((b: any) => String(b.status ?? '') === 'absent'));
+                                                        //【追加】ログインユーザーのIDと比較
+                                                        const isCurrentUser = auth.user && Number(s.user?.id ?? s.user_id) === Number(auth.user.id);
                                                         return (
-                                                            <div key={s.id} className="bg-gray-50">
+                                                            <div
+                                                                key={s.id}
+                                                                className={`border-b ${isCurrentUser ? 'bg-blue-50' : 'border-transparent bg-gray-50'}`}
+                                                            >
                                                                 <GanttBar shift={s} isAbsent={absent} visualOffsetMinutes={ganttOffset} />
                                                             </div>
                                                         );
@@ -392,17 +400,22 @@ export default function Dashboard() {
                                         </div>
                                     </div>
 
-                                    {/* Mobile View: sm(640px)未満の画面幅で表示 */}
+                                    {/* Mobile View */}
                                     <div className="flex sm:hidden">
                                         <div className="pr-2">
                                             <div className="h-8 border-b border-transparent"></div>
-                                            <div className="flex flex-col gap-3">
+                                            <div className="flex flex-col">
                                                 {shifts.map((s) => {
                                                     const absent =
                                                         String(s.status ?? '') === 'absent' ||
                                                         (Array.isArray(s.breaks) && s.breaks.some((b: any) => String(b.status ?? '') === 'absent'));
+                                                    //【追加】ログインユーザーのIDと比較
+                                                    const isCurrentUser = auth.user && Number(s.user?.id ?? s.user_id) === Number(auth.user.id);
                                                     return (
-                                                        <div key={s.id} className="flex h-10 items-center text-sm font-medium">
+                                                        <div
+                                                            key={s.id}
+                                                            className={`flex h-10 items-center border-b px-1 text-sm font-medium ${isCurrentUser ? 'bg-blue-50 font-semibold text-blue-900' : 'border-transparent'}`}
+                                                        >
                                                             <span className={`mr-2 font-mono ${absent ? 'text-gray-500 line-through' : ''}`}>
                                                                 {String(s.user?.id ?? s.user_id)}
                                                             </span>
@@ -416,14 +429,19 @@ export default function Dashboard() {
                                         <div className="flex-1 overflow-x-auto">
                                             <div style={{ minWidth: `${ganttWidth}px` }}>
                                                 <TimeScale offsetMinutes={ganttOffset} totalWidth={ganttWidth} />
-                                                <div className="flex flex-col gap-3">
+                                                <div className="flex flex-col">
                                                     {shifts.map((s) => {
                                                         const absent =
                                                             String(s.status ?? '') === 'absent' ||
                                                             (Array.isArray(s.breaks) &&
                                                                 s.breaks.some((b: any) => String(b.status ?? '') === 'absent'));
+                                                        //【追加】ログインユーザーのIDと比較
+                                                        const isCurrentUser = auth.user && Number(s.user?.id ?? s.user_id) === Number(auth.user.id);
                                                         return (
-                                                            <div key={s.id} className="bg-gray-50">
+                                                            <div
+                                                                key={s.id}
+                                                                className={`border-b ${isCurrentUser ? 'bg-blue-50' : 'border-transparent bg-gray-50'}`}
+                                                            >
                                                                 <GanttBar shift={s} isAbsent={absent} visualOffsetMinutes={ganttOffset} />
                                                             </div>
                                                         );
