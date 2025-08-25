@@ -25,13 +25,7 @@ export default function PostEdit() {
     // We'll read initial post data from window.page.props (Inertia provides it)
     const [initialPost, setInitialPost] = useState<any>((window as any).page?.props?.post || null);
 
-    // DEBUG: log initial props so we can see whether the server provided post/items
-    try {
-        // eslint-disable-next-line no-console
-        console.log('[posts.edit] window.page.props (initial):', (window as any).page?.props || {});
-        // eslint-disable-next-line no-console
-        console.log('[posts.edit] initialPost (state):', (window as any).page?.props?.post || null);
-    } catch (e) {}
+    // ...existing code...
 
     // initialPost may be provided via Inertia page props
 
@@ -73,6 +67,15 @@ export default function PostEdit() {
             : [{ text: '', files: [], previews: [] }]) as any,
     );
     const dragSrcIndex = React.useRef<number | null>(null);
+    // Initialize manualTag from existing post tags (if any) so they show in the edit input
+    const existingTagsStr =
+        initialPost && Array.isArray(initialPost.tags)
+            ? initialPost.tags
+                  .map((t: any) => (typeof t === 'string' ? t : t.name || ''))
+                  .filter(Boolean)
+                  .join(',')
+            : '';
+    const [manualTag, setManualTag] = useState<string>(initialPost?.body || existingTagsStr || '');
 
     const moveItem = (from: number, to: number) => {
         setManualItems((prev: any[]) => {
@@ -201,9 +204,7 @@ export default function PostEdit() {
     // when initialPost becomes available, populate form state and related fields
     useEffect(() => {
         if (!initialPost) return;
-        // DEBUG: log when initialPost is observed by effect
-        // eslint-disable-next-line no-console
-        console.log('[posts.edit] initialPost effect run:', initialPost);
+        // ...existing code...
         try {
             setData('title', initialPost.title || '');
             setData('body', initialPost.body || '');
@@ -260,6 +261,25 @@ export default function PostEdit() {
             });
             setManualItems(itemsInit as any);
         }
+        // populate manualTag from existing tags (if any) so edit input shows current tags
+        try {
+            const tagsSource = Array.isArray(initialPost.tags)
+                ? initialPost.tags
+                : Array.isArray(initialPost.tag_list)
+                  ? initialPost.tag_list
+                  : Array.isArray(initialPost.tags_list)
+                    ? initialPost.tags_list
+                    : null;
+            if (Array.isArray(tagsSource) && tagsSource.length > 0) {
+                const joined = tagsSource
+                    .map((t: any) => (typeof t === 'string' ? t : t.name || ''))
+                    .filter(Boolean)
+                    .join(',');
+                setManualTag(joined);
+            }
+        } catch (e) {
+            // ignore
+        }
         // initialPost applied
     }, [initialPost]);
 
@@ -268,10 +288,7 @@ export default function PostEdit() {
 
     // DEBUG: watch data.type and manualItems to help diagnose rendering issue
     useEffect(() => {
-        try {
-            // eslint-disable-next-line no-console
-            console.log('[posts.edit] data.type:', data.type, 'manualItems count:', manualItems.length, 'manualItems:', manualItems);
-        } catch (e) {}
+        // ...existing code...
     }, [data.type, manualItems]);
 
     const submit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -378,6 +395,18 @@ export default function PostEdit() {
             form.append('body', transformedHtml);
             attachments.forEach((f) => form.append('attachments[]', f));
         }
+        // for manual posts, DO NOT save manualTag into body; we send tags[] separately
+
+        // If manual type, also parse comma-separated manualTag into tags[] so server treats them like board tags
+        if ((data.type || 'board') === 'manual') {
+            if (manualTag && manualTag.trim()) {
+                const parts = manualTag
+                    .split(/[,，\s]+/) // allow comma, fullwidth comma, and whitespace
+                    .map((t) => t.trim())
+                    .filter((t) => t.length > 0);
+                parts.forEach((t) => form.append('tags[]', t));
+            }
+        }
 
         if ((data.type || 'board') === 'manual') {
             manualItems.forEach((it, i) => {
@@ -391,12 +420,6 @@ export default function PostEdit() {
         }
 
         try {
-            // DEBUG: dump FormData entries to console to verify items ids are being sent
-            try {
-                // eslint-disable-next-line no-console
-                console.log('[posts.edit] FormData entries before submit:', Array.from((form as any).entries ? (form as any).entries() : []));
-            } catch (e) {}
-
             const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
             const postId = initialPost?.id;
             // Use POST with method override for updates to avoid client/server Inertia method/version edge cases
@@ -423,24 +446,7 @@ export default function PostEdit() {
             const contentType = (res.headers.get('content-type') || '').toLowerCase();
 
             // Debug logging
-            try {
-                console.log('[posts.edit] response meta', { status: res.status, statusText: res.statusText, url: res.url, contentType });
-                if (contentType.includes('application/json')) {
-                    const payload = await res
-                        .clone()
-                        .json()
-                        .catch(() => null);
-                    console.log('[posts.edit] response json', payload);
-                } else {
-                    const text = await res
-                        .clone()
-                        .text()
-                        .catch(() => null);
-                    console.log('[posts.edit] response text', text && text.slice ? text.slice(0, 2000) : text);
-                }
-            } catch (logErr) {
-                console.error('[posts.edit] failed to log response', logErr);
-            }
+            // response handling
 
             if (res.status === 422 && contentType.includes('application/json')) {
                 const payload = await res.json();
@@ -492,38 +498,21 @@ export default function PostEdit() {
             <div className="py-12">
                 <div className="mx-auto max-w-2xl sm:px-6 lg:px-8">
                     <form onSubmit={submit}>
-                        {Object.keys(serverErrors || {}).length > 0 && (
-                            <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-                                <div className="font-medium">入力エラーがあります。以下を修正してください：</div>
-                                <ul className="mt-2 list-disc pl-5">
-                                    {Object.entries(serverErrors).map(([field, msgs]) =>
-                                        (msgs || []).map((m, i) => <li key={`${field}-${i}`}>{m}</li>),
-                                    )}
-                                </ul>
-                            </div>
-                        )}
                         <Card>
                             <CardHeader>
                                 <CardTitle>投稿を編集</CardTitle>
                             </CardHeader>
-
                             <CardContent className="space-y-6">
-                                <div>
-                                    <Label htmlFor="type">投稿タイプ</Label>
-                                    <div className="mt-2">
-                                        {/* 編集画面では投稿タイプを変更不可にする */}
-                                        <select
-                                            id="type"
-                                            className="rounded border bg-gray-100 p-2 text-sm"
-                                            value={data.type}
-                                            disabled
-                                            aria-disabled="true"
-                                        >
-                                            <option value="board">掲示板</option>
-                                            <option value="manual">マニュアル</option>
-                                        </select>
+                                {Object.keys(serverErrors || {}).length > 0 && (
+                                    <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                                        <div className="font-medium">入力エラーがあります。以下を修正してください：</div>
+                                        <ul className="mt-2 list-disc pl-5">
+                                            {Object.entries(serverErrors).map(([field, msgs]) =>
+                                                (msgs || []).map((m, i) => <li key={`${field}-${i}`}>{m}</li>),
+                                            )}
+                                        </ul>
                                     </div>
-                                </div>
+                                )}
 
                                 <div>
                                     <Label htmlFor="title">
@@ -819,6 +808,20 @@ export default function PostEdit() {
                                             )}
                                         </div>
                                     </>
+                                )}
+
+                                {isManual && (
+                                    <div>
+                                        <Label htmlFor="manual_tag">タグ</Label>
+                                        <Input
+                                            id="manual_tag"
+                                            type="text"
+                                            value={manualTag}
+                                            onChange={(e) => setManualTag(e.target.value)}
+                                            placeholder="タグを入力 (例: 機材名)"
+                                            className="mt-2"
+                                        />
+                                    </div>
                                 )}
 
                                 <div>

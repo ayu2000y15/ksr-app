@@ -84,6 +84,7 @@ export default function PostCreate() {
     const [manualModalImages, setManualModalImages] = useState<string[]>([]);
     const [manualModalStartIndex, setManualModalStartIndex] = useState(0);
     const [bodyHtml, setBodyHtml] = useState<string>('');
+    const [manualTag, setManualTag] = useState<string>('');
 
     function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
         if (!e.target.files) return;
@@ -245,6 +246,7 @@ export default function PostCreate() {
             form.append('body', transformedHtml);
             attachments.forEach((f) => form.append('attachments[]', f));
         }
+        // for manual posts, do NOT save manualTag into body; tags[] are appended below
         // extract simple tags from plain text: #tag (stops at whitespace/#/@)
         try {
             // convert HTML to plain text to avoid capturing tags like </p>
@@ -267,6 +269,17 @@ export default function PostCreate() {
         } catch {
             // ignore
         }
+        // If manual type, also parse comma-separated manualTag into tags[] so server treats them like board tags
+        if ((data.type || 'board') === 'manual') {
+            if (manualTag && manualTag.trim()) {
+                const parts = manualTag
+                    .split(/[,，\s]+/) // allow comma, fullwidth comma, and whitespace
+                    .map((t) => t.trim())
+                    .filter((t) => t.length > 0);
+                parts.forEach((t) => form.append('tags[]', t));
+            }
+        }
+
         attachments.forEach((f) => form.append('attachments[]', f));
 
         // if manual type, append items and their files; otherwise do not send manual items
@@ -279,6 +292,12 @@ export default function PostCreate() {
         }
 
         try {
+            // DEBUG: dump FormData entries to console to verify body/manual_tag are being sent
+            try {
+                // eslint-disable-next-line no-console
+                console.log('[posts.create] FormData entries before submit:', Array.from((form as any).entries ? (form as any).entries() : []));
+            } catch (e) {}
+
             const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
             const res = await fetch('/api/posts', {
                 method: 'POST',
@@ -664,6 +683,20 @@ export default function PostCreate() {
                                             )}
                                         </div>
                                     </>
+                                )}
+
+                                {data.type === 'manual' && (
+                                    <div>
+                                        <Label htmlFor="manual_tag">タグ</Label>
+                                        <Input
+                                            id="manual_tag"
+                                            type="text"
+                                            value={manualTag}
+                                            onChange={(e) => setManualTag(e.target.value)}
+                                            placeholder="タグを入力 (例: 機材名)"
+                                            className="mt-2"
+                                        />
+                                    </div>
                                 )}
 
                                 <div>
