@@ -42,7 +42,12 @@ export default function PostShow() {
 
     type Reaction = { id: number; emoji: string; user?: { id?: number; name?: string; email?: string } };
     const [reactions, setReactions] = useState<Reaction[]>(post?.reactions || []);
-    const [viewers, setViewers] = useState<{ id?: number; name?: string; email?: string }[]>(post?.viewers || []);
+    // initialize viewers sorted by id (ascending)
+    const [viewers, setViewers] = useState<{ id?: number; name?: string; email?: string }[]>(
+        (post?.viewers || []).slice().sort((a: any, b: any) => (Number(a?.id || 0) - Number(b?.id || 0))),
+    );
+    const [showViewersMobile, setShowViewersMobile] = useState(false);
+    const viewersRef = useRef<HTMLDivElement | null>(null);
     const [pickerOpen, setPickerOpen] = useState(false);
     const pickerToggleRef = useRef<HTMLDivElement | null>(null);
     const pickerContainerRef = useRef<HTMLDivElement | null>(null);
@@ -95,7 +100,11 @@ export default function PostShow() {
                 if (res.ok) {
                     const payload = await res.json().catch(() => null);
                     const list = payload?.data ? payload.data : payload;
-                    if (Array.isArray(list)) setViewers(list.map((v: any) => v.user || v));
+                    if (Array.isArray(list)) {
+                        const mapped = list.map((v: any) => v.user || v);
+                        mapped.sort((a: any, b: any) => Number(a?.id || 0) - Number(b?.id || 0));
+                        setViewers(mapped);
+                    }
                 }
             } catch (e) {
                 console.error(e);
@@ -123,6 +132,19 @@ export default function PostShow() {
         };
         loadReactions();
     }, [post?.id]);
+
+    // Close mobile viewers popup when tapping outside
+    useEffect(() => {
+        if (!showViewersMobile) return;
+        const onDocClick = (ev: MouseEvent) => {
+            if (!viewersRef.current) return;
+            if (!viewersRef.current.contains(ev.target as Node)) {
+                setShowViewersMobile(false);
+            }
+        };
+        document.addEventListener('click', onDocClick);
+        return () => document.removeEventListener('click', onDocClick);
+    }, [showViewersMobile]);
 
     const toggleReaction = useCallback(
         async (emoji: string) => {
@@ -179,19 +201,40 @@ export default function PostShow() {
         }
     }, [pickerOpen]);
 
-    const reactionSummary = (list: Reaction[]) => {
-        const map: Record<string, { count: number; reactedByMe: boolean }> = {};
-        (list || []).forEach((r) => {
-            if (!map[r.emoji]) map[r.emoji] = { count: 0, reactedByMe: false };
+    const reactionMap = (() => {
+        const map: Record<string, { users: Array<{ id?: number; name?: string; email?: string }>; count: number; reactedByMe: boolean }> = {};
+        (reactions || []).forEach((r) => {
+            if (!map[r.emoji]) map[r.emoji] = { users: [], count: 0, reactedByMe: false };
             map[r.emoji].count++;
+            if (r.user) map[r.emoji].users.push(r.user);
             if (r.user?.id === currentUserId) map[r.emoji].reactedByMe = true;
         });
+        // sort each emoji's users by id ascending
+        Object.keys(map).forEach((k) => {
+            map[k].users.sort((a: any, b: any) => Number(a?.id || 0) - Number(b?.id || 0));
+        });
         return map;
-    };
+    })();
+
+    const [activeReaction, setActiveReaction] = useState<string | null>(null);
+    const reactionPopupRef = useRef<HTMLDivElement | null>(null);
 
     const userHasReacted = useMemo(() => {
         return reactions.some((r) => r.user?.id === currentUserId);
     }, [reactions, currentUserId]);
+
+    // close reaction popup when tapping outside (useful for mobile)
+    useEffect(() => {
+        if (!activeReaction) return;
+        const onDocClick = (ev: MouseEvent) => {
+            if (!reactionPopupRef.current) return;
+            if (!reactionPopupRef.current.contains(ev.target as Node)) {
+                setActiveReaction(null);
+            }
+        };
+        document.addEventListener('click', onDocClick);
+        return () => document.removeEventListener('click', onDocClick);
+    }, [activeReaction]);
 
     const tagNodes = (post?.tags || []).map((t: { id?: number; name: string }) => (
         <Link key={t.id || t.name} href={route('posts.index') + '?tag=' + encodeURIComponent(t.name)}>
@@ -369,47 +412,105 @@ export default function PostShow() {
                                 </div>
                             )}
                             <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-2">
                                     {!userHasReacted && (
                                         <div ref={pickerToggleRef}>
                                             <button
                                                 type="button"
-                                                className="flex items-center rounded-md border bg-white px-2 py-1 text-sm"
+                                                className="inline-flex h-8 min-w-[44px] items-center gap-1 rounded-md border bg-white px-3 text-sm leading-none"
                                                 onClick={() => setPickerOpen((s) => !s)}
                                             >
-                                                <Plus className="mr-1 h-4 w-4" />
+                                                <Plus className="h-4 w-4" />
                                                 <Smile className="h-4 w-4 text-black" aria-hidden />
                                             </button>
                                         </div>
                                     )}
                                     <div className="flex items-center gap-2">
-                                        {Object.entries(reactionSummary(reactions)).map(([emoji, meta]) => (
-                                            <button
-                                                key={emoji}
-                                                type="button"
-                                                onClick={() => toggleReaction(emoji)}
-                                                className={`flex items-center gap-1 rounded-md border px-2 py-1 text-sm ${meta.reactedByMe ? 'border-blue-200 bg-blue-50' : 'bg-white'}`}
-                                            >
-                                                <span>{emoji}</span>
-                                                <span className="text-xs text-gray-600">{meta.count}</span>
-                                            </button>
-                                        ))}
+                                        {Object.entries(reactionMap).map(([emoji, m]) => {
+                                            const meta = m as {
+                                                users: Array<{ id?: number; name?: string; email?: string }>;
+                                                count: number;
+                                                reactedByMe: boolean;
+                                            };
+                                            return (
+                                                <div key={emoji} className="relative inline-flex items-center">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => toggleReaction(emoji)}
+                                                        onMouseEnter={() => setActiveReaction(emoji)}
+                                                        onMouseLeave={() => setActiveReaction(null)}
+                                                        className={`inline-flex h-8 min-w-[44px] items-center gap-1 rounded-md border px-3 text-sm leading-none ${meta.reactedByMe ? 'border-blue-200 bg-blue-50' : 'bg-white'}`}
+                                                    >
+                                                        <span className="inline-flex items-center justify-center text-base leading-none">
+                                                            {emoji}
+                                                        </span>
+                                                        <span className="ml-1 text-xs leading-none text-gray-600">{meta.count}</span>
+                                                    </button>
+
+                                                    {activeReaction === emoji && (
+                                                        <div
+                                                            ref={reactionPopupRef}
+                                                            className="absolute top-full left-0 z-20 mt-1 w-56 rounded border bg-white p-2 text-xs shadow"
+                                                        >
+                                                            {meta.users && meta.users.length > 0 ? (
+                                                                <ul className="max-h-40 space-y-1 overflow-auto">
+                                                                    {meta.users.map((u: { id?: number; name?: string; email?: string }) => (
+                                                                        <li key={u.id || u.email || u.name} className="truncate">
+                                                                            {u.name || u.email || '匿名'}
+                                                                        </li>
+                                                                    ))}
+                                                                </ul>
+                                                            ) : (
+                                                                <div className="text-xs text-gray-500">まだ誰もリアクションしていません</div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                                 <div className="text-sm text-gray-600">
-                                    <div className="group relative inline-block">
-                                        <span className="cursor-default">既読: {viewers ? viewers.length : 0} 人</span>
-                                        <div className="pointer-events-none absolute top-full right-0 z-10 mt-1 hidden w-60 rounded border bg-white p-2 text-left text-xs shadow group-hover:block">
-                                            {viewers && viewers.length > 0 ? (
-                                                <ul className="max-h-40 space-y-1 overflow-auto">
-                                                    {viewers.map((v) => (
-                                                        <li key={v.id} className="truncate">
-                                                            {v.name || v.email || '匿名'}
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            ) : (
-                                                <div className="text-xs text-gray-500">まだ閲覧者はいません</div>
+                                    {/* Desktop: hover to show (existing behavior) */}
+                                    <div className="hidden md:inline-block">
+                                        <div className="group relative inline-block">
+                                            <span className="cursor-default">既読: {viewers ? viewers.length : 0} 人</span>
+                                            <div className="pointer-events-none absolute top-full right-0 z-10 mt-1 hidden w-60 rounded border bg-white p-2 text-left text-xs shadow group-hover:block">
+                                                {viewers && viewers.length > 0 ? (
+                                                    <ul className="max-h-40 space-y-1 overflow-auto">
+                                                        {viewers.map((v) => (
+                                                            <li key={v.id} className="truncate">
+                                                                {v.name || v.email || '匿名'}
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                ) : (
+                                                    <div className="text-xs text-gray-500">まだ閲覧者はいません</div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Mobile: tap to toggle viewers list; tapping outside closes it */}
+                                    <div className="md:hidden">
+                                        <div className="relative inline-block" ref={viewersRef}>
+                                            <button type="button" className="cursor-pointer" onClick={() => setShowViewersMobile((s) => !s)}>
+                                                既読: {viewers ? viewers.length : 0} 人
+                                            </button>
+                                            {showViewersMobile && (
+                                                <div className="absolute top-full right-0 z-10 mt-1 w-60 rounded border bg-white p-2 text-left text-xs shadow">
+                                                    {viewers && viewers.length > 0 ? (
+                                                        <ul className="max-h-40 space-y-1 overflow-auto">
+                                                            {viewers.map((v) => (
+                                                                <li key={v.id} className="truncate">
+                                                                    {v.name || v.email || '匿名'}
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    ) : (
+                                                        <div className="text-xs text-gray-500">まだ閲覧者はいません</div>
+                                                    )}
+                                                </div>
                                             )}
                                         </div>
                                     </div>

@@ -24,8 +24,8 @@ class PostController extends Controller
     {
         $user = $request->user();
 
-    // include views.user so we can determine whether the current user has viewed each post
-    $query = Post::with(['user', 'attachments', 'comments', 'reactions', 'tags', 'roles', 'allowedUsers', 'views.user'])
+        // include views.user so we can determine whether the current user has viewed each post
+        $query = Post::with(['user', 'attachments', 'comments', 'reactions', 'tags', 'roles', 'allowedUsers', 'views.user'])
             ->where(function ($q) use ($user) {
                 // always show public posts
                 $q->where('is_public', true)->where('audience', 'all');
@@ -46,8 +46,27 @@ class PostController extends Controller
                     // also include their own posts (for editing/drafts)
                     $q->orWhere('user_id', $user->id);
                 }
-            })
-            ->orderBy('created_at', 'desc');
+            });
+        // server-side sorting: accept ?sort=column&direction=asc|desc
+        $sortable = ['title', 'audience', 'type', 'updated_at', 'user'];
+        $sort = $request->query('sort');
+        $direction = strtolower($request->query('direction', 'desc')) === 'asc' ? 'asc' : 'desc';
+        if (!empty($sort) && in_array($sort, $sortable)) {
+            if ($sort === 'user') {
+                // sort by author's name
+                $query->leftJoin('users', 'posts.user_id', '=', 'users.id')
+                    ->select('posts.*')
+                    ->orderBy('users.name', $direction);
+            } elseif ($sort === 'updated_at') {
+                $query->orderBy('updated_at', $direction);
+            } else {
+                // title, audience, type
+                $query->orderBy($sort, $direction);
+            }
+        } else {
+            // default ordering when no explicit sort requested
+            $query->orderBy('created_at', 'desc');
+        }
 
         // optional: filter by tag name when provided as query param ?tag=tagname
         $tag = $request->query('tag');

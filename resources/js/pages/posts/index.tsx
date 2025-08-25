@@ -14,35 +14,78 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: '掲示板', href: route('posts.index') },
 ];
 
+const SortableHeader = ({ children, sort_key, queryParams }: { children: React.ReactNode; sort_key: string; queryParams: any }) => {
+    const currentSort = queryParams?.sort || 'created_at';
+    const currentDirection = queryParams?.direction || 'desc';
+
+    const isCurrentSort = currentSort === sort_key;
+    const newDirection = isCurrentSort && currentDirection === 'asc' ? 'desc' : 'asc';
+
+    return (
+        <Link href={route('posts.index', { sort: sort_key, direction: newDirection })} preserveState preserveScroll>
+            <div className={`flex items-center gap-2 ${isCurrentSort ? 'text-indigo-600' : 'text-muted-foreground'}`}>
+                <span>{children}</span>
+                <svg className="h-3 w-3" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    {isCurrentSort ? (
+                        currentDirection === 'asc' ? (
+                            <path d="M5 12l5-5 5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        ) : (
+                            <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        )
+                    ) : (
+                        <path d="M5 12l5-5 5 5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" opacity="0.4" />
+                    )}
+                </svg>
+            </div>
+        </Link>
+    );
+};
+
 export default function PostsIndex() {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const [posts, setPosts] = useState<any[]>([]);
+    type QueryParams = Record<string, string | undefined> | {};
+    const [posts, setPosts] = useState<unknown[]>([]);
     const [nextPageUrl, setNextPageUrl] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [activeTag, setActiveTag] = useState<string | null>(null);
     const [activeType, setActiveType] = useState<string | null>(null);
     const [activeAudience, setActiveAudience] = useState<string | null>(null);
     const [activeRole, setActiveRole] = useState<string | null>(null);
-    const [rolesList, setRolesList] = useState<any[]>([]);
+    const [queryParams, setQueryParams] = useState<QueryParams>({});
+    // rolesList may be used to map role id to name; keep as unknown[] to avoid any
+    const [_rolesList, setRolesList] = useState<unknown[]>([]);
     const page = usePage();
     const currentUserId = Number((page.props as any).auth?.user?.id) || null;
 
     const loadInitial = useCallback(
-        async (filters?: { tag?: string | null; type?: string | null; audience?: string | null; role?: string | null }) => {
+        async (options?: {
+            tag?: string | null;
+            type?: string | null;
+            audience?: string | null;
+            role?: string | null;
+            sort?: string | null;
+            direction?: string | null;
+        }) => {
             setLoading(true);
             try {
                 const base = '/api/posts';
                 const params: string[] = [];
-                if (filters?.tag) params.push('tag=' + encodeURIComponent(filters.tag));
-                if (filters?.type) params.push('type=' + encodeURIComponent(filters.type));
-                if (filters?.audience) params.push('audience=' + encodeURIComponent(filters.audience));
-                if (filters?.role) params.push('role=' + encodeURIComponent(filters.role));
+                if (options?.tag) params.push('tag=' + encodeURIComponent(options.tag));
+                if (options?.type) params.push('type=' + encodeURIComponent(options.type));
+                if (options?.audience) params.push('audience=' + encodeURIComponent(options.audience));
+                if (options?.role) params.push('role=' + encodeURIComponent(options.role));
+                if (options?.sort) params.push('sort=' + encodeURIComponent(options.sort));
+                if (options?.direction) params.push('direction=' + encodeURIComponent(options.direction));
                 const url = params.length > 0 ? base + '?' + params.join('&') : base;
                 const res = await fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } });
                 if (!res.ok) throw new Error('Failed to fetch');
                 const payload = await res.json();
                 const list = payload.data || payload;
                 setPosts(list);
+                // preserve query params for SortableHeader and pagination
+                setQueryParams({
+                    sort: options?.sort || new URLSearchParams(window.location.search).get('sort') || undefined,
+                    direction: options?.direction || new URLSearchParams(window.location.search).get('direction') || undefined,
+                });
                 // debug: inspect posts shape and current user id
                 console.debug('posts.index: loaded', { currentUserId, count: Array.isArray(list) ? list.length : null, sample: list[0] });
                 setNextPageUrl(payload.next_page_url || null);
@@ -57,32 +100,42 @@ export default function PostsIndex() {
 
     // loadInitial is called once on mount
     useEffect(() => {
-        // read optional ?tag= from URL and load accordingly
-        const params = new URLSearchParams(window.location.search);
-        const t = params.get('tag');
-        const ty = params.get('type');
-        const a = params.get('audience');
-        const r = params.get('role');
-        if (t) setActiveTag(t);
-        if (ty) setActiveType(ty);
-        if (a) setActiveAudience(a);
-        if (r) setActiveRole(r);
-        loadInitial({ tag: t, type: ty, audience: a, role: r });
-    }, [loadInitial]);
+        // read optional query params from URL and load accordingly, including sort/direction
+        const doLoad = () => {
+            const params = new URLSearchParams(window.location.search);
+            const t = params.get('tag');
+            const ty = params.get('type');
+            const a = params.get('audience');
+            const r = params.get('role');
+            const s = params.get('sort');
+            const d = params.get('direction');
+            if (t) setActiveTag(t);
+            if (ty) setActiveType(ty);
+            if (a) setActiveAudience(a);
+            if (r) setActiveRole(r);
+            // preserve sort/direction so headers render current state
+            setQueryParams({ sort: s || undefined, direction: d || undefined });
+            loadInitial({ tag: t, type: ty, audience: a, role: r, sort: s, direction: d });
+        };
+
+        // initial load
+        doLoad();
+        // also re-run when Inertia page URL changes (so header clicks update the list)
+    }, [loadInitial, page.url]);
 
     // fetch all roles so we can show role name when ?role= is an id
     useEffect(() => {
         fetch('/api/roles', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
             .then((r) => r.json())
             .then((d) => {
-                const list = d || [];
+                const list: Array<{ id?: number; name?: string }> = (d || []) as any;
                 setRolesList(list);
                 // if URL has ?role= and it's numeric, map to name
                 const params = new URLSearchParams(window.location.search);
                 const rparam = params.get('role');
                 if (rparam) {
                     if (/^\d+$/.test(rparam)) {
-                        const found = list.find((it: any) => String(it.id) === rparam);
+                        const found = list.find((it) => String(it.id) === rparam);
                         if (found && found.name) setActiveRole(found.name);
                     } else {
                         setActiveRole(rparam);
@@ -93,6 +146,34 @@ export default function PostsIndex() {
                 // ignore
             });
     }, []);
+
+    // helpers to show friendly Japanese labels for query params
+    const audienceLabel = (a?: string | null) => {
+        if (!a) return '';
+        if (a === 'all') return '全体公開';
+        if (a === 'restricted') return '限定公開';
+        return a;
+    };
+
+    const typeLabel = (t?: string | null) => {
+        if (!t) return '';
+        if (t === 'board') return '掲示板';
+        if (t === 'manual') return 'マニュアル';
+        return t;
+    };
+
+    // date formatter used by both table and mobile cards
+    const formatDateTime = (iso: string | undefined) => {
+        if (!iso) return '—';
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return '—';
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1); // no leading zero
+        const dd = String(d.getDate());
+        const hh = String(d.getHours());
+        const mi = String(d.getMinutes()).padStart(2, '0');
+        return `${y}/${m}/${dd} ${hh}:${mi}`;
+    };
 
     const loadMore = () => {
         if (!nextPageUrl) return;
@@ -134,7 +215,7 @@ export default function PostsIndex() {
                     <div className="mb-4 rounded border-l-4 border-blue-300 bg-blue-50 p-4 text-sm">
                         <div className="flex items-center justify-between">
                             <div>
-                                <span className="mr-2 inline-block text-blue-700">タイプ「{activeType}」で絞り込み中。</span>
+                                <span className="mr-2 inline-block text-blue-700">タイプ「{typeLabel(activeType)}」で絞り込み中。</span>
                                 <Link href={route('posts.index')} className="text-blue-700 underline">
                                     タイプ絞り込みを解除
                                 </Link>
@@ -147,7 +228,7 @@ export default function PostsIndex() {
                     <div className="mb-4 rounded border-l-4 border-green-300 bg-green-50 p-4 text-sm">
                         <div className="flex items-center justify-between">
                             <div>
-                                <span className="mr-2 inline-block text-green-700">閲覧範囲「{activeAudience}」で絞り込み中。</span>
+                                <span className="mr-2 inline-block text-green-700">閲覧範囲「{audienceLabel(activeAudience)}」で絞り込み中。</span>
                                 <Link href={route('posts.index')} className="text-green-700 underline">
                                     閲覧範囲絞り込みを解除
                                 </Link>
@@ -181,15 +262,41 @@ export default function PostsIndex() {
                     </CardHeader>
                     <CardContent>
                         <div>
-                            <Table>
+                            {/* Desktop/table view (hidden on small screens) */}
+                            <div className="hidden md:block">
+                                <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead>タイトル</TableHead>
-                                        <TableHead>閲覧範囲</TableHead>
-                                        <TableHead>投稿タイプ</TableHead>
-                                        <TableHead>タグ</TableHead>
-                                        <TableHead>投稿者</TableHead>
-                                        <TableHead>最終更新日時</TableHead>
+                                        <TableHead>
+                                            <SortableHeader sort_key="title" queryParams={queryParams}>
+                                                タイトル
+                                            </SortableHeader>
+                                        </TableHead>
+                                        <TableHead>
+                                            <SortableHeader sort_key="audience" queryParams={queryParams}>
+                                                閲覧範囲
+                                            </SortableHeader>
+                                        </TableHead>
+                                        <TableHead>
+                                            <SortableHeader sort_key="type" queryParams={queryParams}>
+                                                投稿タイプ
+                                            </SortableHeader>
+                                        </TableHead>
+                                        <TableHead>
+                                            <SortableHeader sort_key="tags" queryParams={queryParams}>
+                                                タグ
+                                            </SortableHeader>
+                                        </TableHead>
+                                        <TableHead>
+                                            <SortableHeader sort_key="user" queryParams={queryParams}>
+                                                投稿者
+                                            </SortableHeader>
+                                        </TableHead>
+                                        <TableHead>
+                                            <SortableHeader sort_key="updated_at" queryParams={queryParams}>
+                                                最終更新日時
+                                            </SortableHeader>
+                                        </TableHead>
                                         <TableHead className="text-right">操作</TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -202,10 +309,10 @@ export default function PostsIndex() {
                                             const d = new Date(iso);
                                             if (Number.isNaN(d.getTime())) return '—';
                                             const y = d.getFullYear();
-                                            const m = String(d.getMonth() + 1).padStart(2, '0');
-                                            const dd = String(d.getDate()).padStart(2, '0');
-                                            const hh = String(d.getHours()).padStart(2, '0');
-                                            const mi = String(d.getMinutes()).padStart(2, '0');
+                                            const m = String(d.getMonth() + 1); // no leading zero
+                                            const dd = String(d.getDate()); // no leading zero
+                                            const hh = String(d.getHours()); // no leading zero
+                                            const mi = String(d.getMinutes()).padStart(2, '0'); // minutes two-digit
                                             return `${y}/${m}/${dd} ${hh}:${mi}`;
                                         };
 
@@ -437,7 +544,91 @@ export default function PostsIndex() {
                                         );
                                     })}
                                 </TableBody>
-                            </Table>
+                                </Table>
+                            </div>
+
+                            {/* Mobile stacked card view (no horizontal scroll) */}
+                            <div className="md:hidden space-y-3">
+                                {posts.map((post: any) => {
+                                    const postOwnerId = post?.user?.id ?? post?.user_id ?? null;
+                                    const isDraft = post.is_public === false || Number(post.is_public) === 0 || post.is_public === '0';
+                                    const isOwnDraft = Boolean(isDraft && postOwnerId && currentUserId && Number(postOwnerId) === currentUserId);
+                                    const roles = post.roles || post.role || [];
+                                    const allowedUsers = post.allowedUsers || post.allowed_users || post.allowed_user || [];
+
+                                    return (
+                                        <div
+                                            key={post.id}
+                                            className={`flex w-full flex-col gap-2 rounded border bg-white p-3 shadow-sm ${isOwnDraft ? 'bg-gray-50' : ''}`}
+                                            onClick={() => (window.location.href = route('posts.show', post.id) as unknown as string)}
+                                        >
+                                            <div className="flex items-start justify-between">
+                                                <div className="min-w-0">
+                                                    <div className="flex items-center gap-2">
+                                                        <h3 className="truncate text-sm font-medium">{post.title || '(無題)'}</h3>
+                                                        {post.is_public === false || post.is_public === '0' ? (
+                                                            <span className="ml-1 rounded bg-yellow-100 px-2 py-0.5 text-xs text-yellow-800">下書き</span>
+                                                        ) : null}
+                                                    </div>
+                                                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                                        <span>{post.user ? post.user.name : '—'}</span>
+                                                        <span>·</span>
+                                                        <span>{formatDateTime(post.updated_at)}</span>
+                                                    </div>
+                                                </div>
+                                                <div className="ml-2 flex items-center gap-1">
+                                                    {/* Icon-only actions on mobile */}
+                                                    {postOwnerId && currentUserId && Number(postOwnerId) === currentUserId ? (
+                                                        <>
+                                                            <Link href={route('posts.edit', post.id)} onClick={(e: MouseEvent) => e.stopPropagation()}>
+                                                                <Button variant="outline" size="sm" className="p-2">
+                                                                    <Edit className="h-4 w-4" />
+                                                                </Button>
+                                                            </Link>
+                                                            <Button size="sm" variant="destructive" className="p-2" onClick={(e: MouseEvent) => { e.stopPropagation(); (async () => {
+                                                                    if (!confirm('投稿を削除します。よろしいですか？')) return;
+                                                                    try {
+                                                                        const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+                                                                        const res = await fetch(`/api/posts/${post.id}`, { method: 'DELETE', credentials: 'same-origin', headers: { 'X-CSRF-TOKEN': token, Accept: 'application/json' } });
+                                                                        if (res.ok) setPosts((prev: any[]) => prev.filter((p) => p.id !== post.id));
+                                                                        else alert('削除に失敗しました');
+                                                                    } catch (err) { console.error(err); alert('削除に失敗しました'); }
+                                                                })(); }}>
+                                                                <Trash className="h-4 w-4" />
+                                                            </Button>
+                                                        </>
+                                                    ) : null}
+                                                </div>
+                                            </div>
+
+                                            <div className="flex flex-wrap items-center gap-2 text-xs">
+                                                {post.audience === 'all' ? (
+                                                    <Badge className="bg-green-100 text-green-800">全体公開</Badge>
+                                                ) : post.audience === 'restricted' ? (
+                                                    <Badge className="bg-purple-100 text-purple-800">限定公開</Badge>
+                                                ) : (
+                                                    <Badge variant="outline">—</Badge>
+                                                )}
+                                                {post.type ? (
+                                                    post.type === 'board' ? (
+                                                        <Badge className="bg-blue-100 text-blue-800">掲示板</Badge>
+                                                    ) : post.type === 'manual' ? (
+                                                        <Badge className="bg-sky-100 text-sky-800">マニュアル</Badge>
+                                                    ) : (
+                                                        <Badge variant="outline">{post.type}</Badge>
+                                                    )
+                                                ) : null}
+                                            </div>
+
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                {(post.tags || []).slice(0, 5).map((t: any) => (
+                                                    <span key={t.id || t.name} className="inline-block rounded bg-orange-100 px-2 py-0.5 text-xs text-orange-800">{t.name}</span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         </div>
 
                         {nextPageUrl && (

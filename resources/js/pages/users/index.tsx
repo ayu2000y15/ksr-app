@@ -132,89 +132,135 @@ export default function Index({ users: initialUsers, queryParams = {} }: PagePro
                         )}
                     </CardHeader>
                     <CardContent>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>
-                                        <SortableHeader sort_key="id" queryParams={queryParams}>
-                                            ID
-                                        </SortableHeader>
-                                    </TableHead>
-                                    <TableHead>
-                                        <SortableHeader sort_key="name" queryParams={queryParams}>
-                                            名前
-                                        </SortableHeader>
-                                    </TableHead>
-                                    <TableHead>
-                                        <SortableHeader sort_key="email" queryParams={queryParams}>
-                                            LINE名
-                                        </SortableHeader>
-                                    </TableHead>
-                                    <TableHead>
-                                        <SortableHeader sort_key="status" queryParams={queryParams}>
-                                            ステータス
-                                        </SortableHeader>
-                                    </TableHead>
-                                    <TableHead>
-                                        <SortableHeader sort_key="created_at" queryParams={queryParams}>
-                                            登録日
-                                        </SortableHeader>
-                                    </TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {users.map((user) => (
-                                    <TableRow key={user.id} className="hover:bg-gray-50">
-                                        <TableCell
-                                            className={canUpdateUsers ? 'cursor-pointer' : ''}
-                                            onClick={() => canUpdateUsers && router.get(route('users.edit', user.id), {}, { preserveScroll: true })}
-                                        >
-                                            {user.id}
-                                        </TableCell>
-                                        <TableCell
-                                            className={canUpdateUsers ? 'cursor-pointer' : ''}
-                                            onClick={() => canUpdateUsers && router.get(route('users.edit', user.id), {}, { preserveScroll: true })}
-                                        >
+                        {/* Mobile: stacked card list (no horizontal scroll) */}
+                        <div className="space-y-3 md:hidden">
+                            {users.map((user) => (
+                                <div
+                                    key={user.id}
+                                    className={`rounded-md border p-4 hover:bg-gray-50 ${canUpdateUsers ? 'cursor-pointer' : ''}`}
+                                    onClick={() => canUpdateUsers && router.get(route('users.edit', user.id), {}, { preserveScroll: true })}
+                                >
+                                    <div className="flex items-start justify-between gap-4">
+                                        <div className="min-w-0">
                                             <div className="flex items-center gap-3">
-                                                <span>{user.name}</span>
-                                                <span className="text-sm text-muted-foreground">
+                                                <div className="truncate text-sm font-medium text-foreground">{user.name}</div>
+                                                <div className="truncate text-xs text-muted-foreground">
                                                     {user.roles && user.roles.length > 0 ? (
                                                         user.roles.map((r) => r.name).join(', ')
                                                     ) : (
                                                         <span className="text-xs">未登録</span>
                                                     )}
-                                                </span>
+                                                </div>
                                             </div>
-                                        </TableCell>
-                                        <TableCell
-                                            className={canUpdateUsers ? 'cursor-pointer' : ''}
-                                            onClick={() => canUpdateUsers && router.get(route('users.edit', user.id), {}, { preserveScroll: true })}
-                                        >
-                                            {user.line_name}
-                                        </TableCell>
-                                        <TableCell
-                                            className={canUpdateUsers ? 'cursor-pointer' : ''}
-                                            onClick={() => canUpdateUsers && router.get(route('users.edit', user.id), {}, { preserveScroll: true })}
-                                        >
-                                            {renderStatusBadge(user.status)}
-                                        </TableCell>
-                                        <TableCell
-                                            className={canUpdateUsers ? 'cursor-pointer' : ''}
-                                            onClick={() => canUpdateUsers && router.get(route('users.edit', user.id), {}, { preserveScroll: true })}
-                                        >
-                                            {new Date(user.created_at).toLocaleDateString()}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            {canDeleteUsers && (
-                                                <Button variant="destructive" size="sm" onClick={() => confirmAndDelete(user)}>
-                                                    <Trash className="mr-2 h-4 w-4" /> 削除
-                                                </Button>
-                                            )}
-                                        </TableCell>
+                                            <div className="mt-1 text-xs text-muted-foreground truncate">LINE名：{user.line_name || '—'}</div>
+                                        </div>
+
+                                        <div className="flex flex-col items-end space-y-2">
+                                            <div className="text-xs text-muted-foreground">ID: {user.id}</div>
+                                            <div>{renderStatusBadge(user.status)}</div>
+                                            <div className="text-xs text-muted-foreground">{new Date(user.created_at).toLocaleDateString()}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Desktop / Tablet: table view */}
+                        <div className="hidden md:block">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>
+                                            <SortableHeader sort_key="id" queryParams={queryParams}>
+                                                ID
+                                            </SortableHeader>
+                                        </TableHead>
+                                        <TableHead>
+                                            <SortableHeader sort_key="name" queryParams={queryParams}>
+                                                名前
+                                            </SortableHeader>
+                                        </TableHead>
+                                        <TableHead>
+                                            <SortableHeader sort_key="email" queryParams={queryParams}>
+                                                LINE名
+                                            </SortableHeader>
+                                        </TableHead>
+                                        <TableHead>
+                                            <SortableHeader sort_key="status" queryParams={queryParams}>
+                                                ステータス
+                                            </SortableHeader>
+                                        </TableHead>
+                                        <TableHead>
+                                            <SortableHeader sort_key="created_at" queryParams={queryParams}>
+                                                登録日
+                                            </SortableHeader>
+                                        </TableHead>
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
+                                </TableHeader>
+                                <TableBody>
+                                    {users.map((user) => (
+                                        <TableRow key={user.id} className="hover:bg-gray-50">
+                                            <TableCell
+                                                className={canUpdateUsers ? 'cursor-pointer' : ''}
+                                                onClick={() =>
+                                                    canUpdateUsers && router.get(route('users.edit', user.id), {}, { preserveScroll: true })
+                                                }
+                                            >
+                                                {user.id}
+                                            </TableCell>
+                                            <TableCell
+                                                className={canUpdateUsers ? 'cursor-pointer' : ''}
+                                                onClick={() =>
+                                                    canUpdateUsers && router.get(route('users.edit', user.id), {}, { preserveScroll: true })
+                                                }
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <span>{user.name}</span>
+                                                    <span className="text-sm text-muted-foreground">
+                                                        {user.roles && user.roles.length > 0 ? (
+                                                            user.roles.map((r) => r.name).join(', ')
+                                                        ) : (
+                                                            <span className="text-xs">未登録</span>
+                                                        )}
+                                                    </span>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell
+                                                className={canUpdateUsers ? 'cursor-pointer' : ''}
+                                                onClick={() =>
+                                                    canUpdateUsers && router.get(route('users.edit', user.id), {}, { preserveScroll: true })
+                                                }
+                                            >
+                                                {user.line_name}
+                                            </TableCell>
+                                            <TableCell
+                                                className={canUpdateUsers ? 'cursor-pointer' : ''}
+                                                onClick={() =>
+                                                    canUpdateUsers && router.get(route('users.edit', user.id), {}, { preserveScroll: true })
+                                                }
+                                            >
+                                                {renderStatusBadge(user.status)}
+                                            </TableCell>
+                                            <TableCell
+                                                className={canUpdateUsers ? 'cursor-pointer' : ''}
+                                                onClick={() =>
+                                                    canUpdateUsers && router.get(route('users.edit', user.id), {}, { preserveScroll: true })
+                                                }
+                                            >
+                                                {new Date(user.created_at).toLocaleDateString()}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                {canDeleteUsers && (
+                                                    <Button variant="destructive" size="sm" onClick={() => confirmAndDelete(user)}>
+                                                        <Trash className="mr-2 h-4 w-4" /> 削除
+                                                    </Button>
+                                                )}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
 
                         {nextPageUrl && (
                             <div className="mt-6 text-center">
