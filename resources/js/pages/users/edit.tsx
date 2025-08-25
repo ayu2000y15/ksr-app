@@ -13,7 +13,6 @@ import { useEffect, useState } from 'react';
 
 // パンくずリスト
 const breadcrumbs = [
-    { title: 'ダッシュボード', href: route('dashboard') },
     { title: 'ユーザー管理', href: route('users.index') },
     { title: '編集', href: '' },
 ];

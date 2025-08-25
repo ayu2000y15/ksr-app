@@ -9,10 +9,7 @@ import { Head, Link, usePage } from '@inertiajs/react';
 import { Edit, Plus, Trash } from 'lucide-react';
 import { useCallback, useEffect, useState, type MouseEvent } from 'react';
 
-const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'ダッシュボード', href: route('dashboard') },
-    { title: '掲示板', href: route('posts.index') },
-];
+const breadcrumbs: BreadcrumbItem[] = [{ title: '掲示板', href: route('posts.index') }];
 
 const SortableHeader = ({ children, sort_key, queryParams }: { children: React.ReactNode; sort_key: string; queryParams: any }) => {
     const currentSort = queryParams?.sort || 'created_at';
@@ -258,7 +255,7 @@ export default function PostsIndex() {
                 )}
 
                 <Card>
-                    <CardHeader className="flex flex-row items-center justify-between">
+                    <CardHeader className="flex-row items-center justify-between">
                         <CardTitle>投稿一覧</CardTitle>
                         <Link href={route('posts.create')}>
                             <Button>
@@ -304,7 +301,7 @@ export default function PostsIndex() {
                                                     最終更新日時
                                                 </SortableHeader>
                                             </TableHead>
-                                            <TableHead className="text-right">操作</TableHead>
+                                            <TableHead className="text-right"></TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>

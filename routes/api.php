@@ -68,6 +68,9 @@ Route::middleware(['web', 'auth'])->group(function () {
 
     // 掲示板・投稿 API
     Route::apiResource('posts', \App\Http\Controllers\PostController::class);
+    // 在庫管理 API
+    Route::apiResource('inventory', \App\Http\Controllers\Api\InventoryController::class);
+    Route::post('inventory/{inventory}/adjust', [\App\Http\Controllers\Api\InventoryController::class, 'adjustStock']);
     // 投稿へのリアクションと既読
     Route::get('posts/{post}/reactions', [\App\Http\Controllers\Api\PostInteractionController::class, 'reactions']);
     Route::post('posts/{post}/reactions', [\App\Http\Controllers\Api\PostInteractionController::class, 'toggleReaction']);

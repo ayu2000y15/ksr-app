@@ -14,4 +14,14 @@ class InventoryStockLog extends Model
         'quantity_after',
         'reason',
     ];
+
+    public function inventoryStock()
+    {
+        return $this->belongsTo(InventoryStock::class, 'inventory_stock_id');
+    }
+
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
 }

@@ -15,10 +15,7 @@ import axios from 'axios';
 import { LoaderCircle, Trash } from 'lucide-react';
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 
-const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'ダッシュボード', href: route('dashboard') },
-    { title: 'シフト管理', href: route('shifts.index') },
-];
+const breadcrumbs: BreadcrumbItem[] = [{ title: 'シフト管理', href: route('shifts.index') }];
 
 const SortableHeader = ({ children, sort_key, queryParams }: { children: ReactNode; sort_key: string; queryParams: any }) => {
     const currentSort = queryParams?.sort || 'id';
@@ -293,7 +290,7 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                 </div>
 
                 <Card>
-                    <CardHeader className="flex flex-row items-center justify-between">
+                    <CardHeader className="flex-row items-center justify-between">
                         <CardTitle>シフト一覧</CardTitle>
                         {/* {canCreate && (
                             <Link href={route('shifts.create')}>
@@ -312,7 +309,7 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                                     <TableHead>ユーザー</TableHead>
                                     <TableHead>時間</TableHead>
                                     <TableHead>昼/夜</TableHead>
-                                    <TableHead className="text-right">操作</TableHead>
+                                    <TableHead className="text-right"></TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>

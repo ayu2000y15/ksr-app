@@ -29,7 +29,6 @@ export default function Create() {
     // create page は認証情報を別ページで表示するため、ここではコピーロジックを持たない
 
     const breadcrumbs = [
-        { title: 'ダッシュボード', href: route('dashboard') },
         { title: 'ユーザー管理', href: route('users.index') },
         { title: '新規作成', href: '' },
     ];

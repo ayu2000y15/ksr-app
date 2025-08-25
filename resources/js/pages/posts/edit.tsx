@@ -16,7 +16,6 @@ import React, { useEffect, useRef, useState } from 'react';
 declare const page: any;
 
 const breadcrumbs = [
-    { title: 'ダッシュボード', href: route('dashboard') },
     { title: '掲示板', href: route('posts.index') },
     { title: '投稿編集', href: '' },
 ];

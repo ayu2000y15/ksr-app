@@ -10,10 +10,7 @@ import { LoaderCircle, Plus, Trash } from 'lucide-react';
 import { ReactNode, useEffect, useState } from 'react';
 
 // パンくずリストの定義
-const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'ダッシュボード', href: route('dashboard') },
-    { title: 'ユーザー管理', href: route('users.index') },
-];
+const breadcrumbs: BreadcrumbItem[] = [{ title: 'ユーザー管理', href: route('users.index') }];
 
 // 並び替え可能なテーブルヘッダーのコンポーネント
 const SortableHeader = ({ children, sort_key, queryParams }: { children: ReactNode; sort_key: string; queryParams: any }) => {
@@ -120,7 +117,7 @@ export default function Index({ users: initialUsers, queryParams = {} }: PagePro
                     <HeadingSmall title="ユーザー管理" description="ユーザーの一覧・編集・削除を行う。" />
                 </div>
                 <Card>
-                    <CardHeader className="flex flex-row items-center justify-between">
+                    <CardHeader className="flex-row items-center justify-between">
                         <CardTitle>ユーザー一覧</CardTitle>
                         {canCreateUsers && (
                             <Link href={route('users.create')}>

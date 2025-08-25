@@ -44,7 +44,7 @@ export default function Toast({ message, type = 'info', onClose, duration = 4000
         <div className={`fixed right-6 bottom-6 z-50 max-w-sm rounded-md p-3 shadow ${bg} transition-opacity duration-300`} role="status">
             <div className="flex items-start gap-3">
                 <div className="mt-0.5">{icon}</div>
-                <div className="text-sm">{localizedMessage}</div>
+                <div className="text-sm whitespace-pre-line">{localizedMessage}</div>
             </div>
         </div>
     );

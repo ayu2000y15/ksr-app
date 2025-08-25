@@ -5,7 +5,6 @@ import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { Head, Link, usePage } from '@inertiajs/react';
 
 const breadcrumbs = [
-    { title: 'ダッシュボード', href: route('dashboard') },
     { title: '休暇申請', href: route('shift-applications.index') },
     { title: '詳細', href: '' },
 ];

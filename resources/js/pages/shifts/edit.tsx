@@ -8,7 +8,6 @@ import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 
 const breadcrumbs = [
-    { title: 'ダッシュボード', href: route('dashboard') },
     { title: 'シフト管理', href: route('shifts.index') },
     { title: '編集', href: '' },
 ];

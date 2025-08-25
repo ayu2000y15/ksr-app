@@ -130,6 +130,18 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
     // Use controller for show so we can pass the post as an Inertia prop
     Route::get('/posts/{post}', [PostController::class, 'showPage'])->name('posts.show');
     Route::get('/posts/{post}/edit', [PostController::class, 'editPage'])->name('posts.edit');
+
+    // 在庫管理（Inertia pages）
+    Route::get('/inventory', [\App\Http\Controllers\InventoryPageController::class, 'index'])->name('inventory.index');
+    Route::get('/inventory/create', [\App\Http\Controllers\InventoryPageController::class, 'create'])->name('inventory.create');
+    // 在庫カテゴリ管理 (一覧・作成・更新・削除) — 名前空間を inventory.* に揃える
+    Route::prefix('inventory')->name('inventory.')->group(function () {
+        Route::resource('categories', \App\Http\Controllers\InventoryCategoryController::class)->except(['show']);
+        // reorder categories by drag-and-drop (expects { order: [id,...] })
+        Route::post('categories/reorder', [\App\Http\Controllers\InventoryCategoryController::class, 'reorder'])->name('categories.reorder');
+        // inventory stock logs (change history)
+        Route::get('stock-logs', [\App\Http\Controllers\InventoryStockLogController::class, 'index'])->name('stock_logs.index');
+    });
 });
 
 require __DIR__ . '/auth.php';

@@ -68,7 +68,6 @@ export default function CredentialsPage() {
     };
 
     const breadcrumbs = [
-        { title: 'ダッシュボード', href: route('dashboard') },
         { title: 'ユーザー管理', href: route('users.index') },
         { title: 'ログイン情報', href: '' },
     ];

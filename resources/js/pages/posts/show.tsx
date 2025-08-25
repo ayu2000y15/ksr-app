@@ -11,7 +11,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 const breadcrumbs = [
-    { title: 'ダッシュボード', href: route('dashboard') },
     { title: '掲示板', href: route('posts.index') },
     { title: '投稿詳細', href: '' },
 ];

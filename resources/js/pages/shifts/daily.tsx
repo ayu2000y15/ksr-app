@@ -29,7 +29,6 @@ export default function Daily() {
     const date = props?.queryParams?.date ?? props?.date ?? null;
     const displayDate = date ? String(date).slice(0, 10).replace(/-/g, '/') : '';
     const breadcrumbs: BreadcrumbItem[] = [
-        { title: 'ダッシュボード', href: route('dashboard') },
         { title: 'シフト管理', href: route('shifts.index') },
         { title: `日間タイムライン: ${displayDate}`, href: '' },
     ];

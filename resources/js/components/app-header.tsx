@@ -9,9 +9,9 @@ import { AppLogo } from './app-logo';
 const mainNavItems: NavItem[] = [
     { title: 'ダッシュボード', href: route('dashboard'), icon: LayoutDashboard },
     { title: 'ユーザー管理', href: route('users.index'), icon: Users },
-    { title: 'シフト管理', href: '#', icon: ClipboardList }, // TODO
-    { title: '在庫管理', href: '#', icon: Package }, // TODO
-    { title: '物件管理', href: '#', icon: Home }, // TODO
+    { title: 'シフト管理', href: route('shifts.index'), icon: ClipboardList },
+    { title: '在庫管理', href: route('inventory.index'), icon: Package },
+    { title: '物件管理', href: route('properties.index'), icon: Home },
     { title: '各種設定', href: '#', icon: Wrench }, // TODO
 ];
 

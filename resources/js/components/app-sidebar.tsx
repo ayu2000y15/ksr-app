@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/sidebar';
 import type { NavItem, SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { ClipboardList, Home, Package, Users, Wrench } from 'lucide-react';
+import { Calendar, CalendarCheck, Home, MessageSquare, Package, Users, Wrench } from 'lucide-react';
 import * as React from 'react';
 import { AppLogo } from './app-logo';
 import { SidebarSettingsMenu } from './sidebar-settings-menu';
@@ -19,10 +19,10 @@ import { SidebarSettingsMenu } from './sidebar-settings-menu';
 // メインのナビゲーション項目を定義
 const mainNavItems: NavItem[] = [
     { title: 'ユーザー管理', href: '/users', icon: Users, permission: 'user.view' },
-    { title: '掲示板', href: '/posts', icon: ClipboardList, permission: '' },
-    { title: 'シフト管理', href: '/shifts', icon: ClipboardList, permission: 'shift.view' },
-    { title: '休暇申請', href: '/shift-applications', icon: ClipboardList, permission: 'shift_application.view' },
-    { title: '在庫管理', href: '#', icon: Package }, // TODO
+    { title: '掲示板', href: '/posts', icon: MessageSquare, permission: '' },
+    { title: 'シフト管理', href: '/shifts', icon: Calendar, permission: 'shift.view' },
+    { title: '休暇申請', href: '/shift-applications', icon: CalendarCheck, permission: 'shift_application.view' },
+    { title: '在庫管理', href: '/inventory', icon: Package },
     { title: '物件管理', href: '#', icon: Home }, // TODO
 ];
 

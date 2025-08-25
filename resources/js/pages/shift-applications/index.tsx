@@ -11,10 +11,7 @@ import axios from 'axios';
 import { LoaderCircle, Plus, Trash } from 'lucide-react';
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 
-const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'ダッシュボード', href: route('dashboard') },
-    { title: '休暇申請', href: route('shift-applications.index') },
-];
+const breadcrumbs: BreadcrumbItem[] = [{ title: '休暇申請', href: route('shift-applications.index') }];
 
 const SortableHeader = ({ children, sort_key, queryParams }: { children: ReactNode; sort_key: string; queryParams: any }) => {
     const currentSort = queryParams?.sort || 'id';
@@ -216,7 +213,7 @@ export default function Index({
                 </div>
 
                 <Card>
-                    <CardHeader className="flex flex-row items-center justify-between">
+                    <CardHeader className="flex-row items-center justify-between">
                         <CardTitle>申請一覧</CardTitle>
                         {canCreate && (
                             <Link href={route('shift-applications.create')}>
@@ -247,7 +244,7 @@ export default function Index({
                                                 </SortableHeader>
                                             </TableHead>
                                             <TableHead>理由</TableHead>
-                                            <TableHead className="text-right">操作</TableHead>
+                                            <TableHead className="text-right"></TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -304,7 +301,7 @@ export default function Index({
                 {/* Vertical calendar view */}
                 <div className="mt-6">
                     <Card className="w-full">
-                        <CardHeader className="flex w-full flex-row flex-nowrap items-center justify-between">
+                        <CardHeader className="w-full flex-row flex-nowrap items-center justify-between">
                             <div className="flex-shrink-0">
                                 <Button size="sm" onClick={prevMonth}>
                                     前の月
