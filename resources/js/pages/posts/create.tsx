@@ -6,10 +6,11 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { MultiSelectCombobox } from '@/components/ui/multi-select-combobox'; // New component import
+import { Textarea } from '@/components/ui/textarea';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/react';
-import { X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Info, X } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 
 // declare global Inertia `page` object used by templates
@@ -23,6 +24,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 export default function PostCreate() {
     const { data, setData, processing, errors, reset } = useForm({
+        type: 'board',
         title: '',
         body: '',
     });
@@ -31,14 +33,84 @@ export default function PostCreate() {
     const [isPublic, setIsPublic] = useState<boolean>(false);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const [previews, setPreviews] = useState<{ url: string; file: File; isImage: boolean }[]>([]);
+    const [manualItems, setManualItems] = useState<
+        Array<{ text: string; files: File[]; previews: { url: string; file?: File; isImage: boolean }[] }>
+    >([{ text: '', files: [], previews: [] }]);
+    const dragSrcIndex = React.useRef<number | null>(null);
+
+    const moveItem = (from: number, to: number) => {
+        setManualItems((prev) => {
+            const copy = [...prev];
+            if (from < 0 || from >= copy.length) return prev;
+            const item = copy.splice(from, 1)[0];
+            copy.splice(to, 0, item);
+            return copy;
+        });
+    };
+
+    const onDragStartItem = (e: React.DragEvent, idx: number) => {
+        e.dataTransfer.effectAllowed = 'move';
+        try {
+            e.dataTransfer.setData('text/plain', String(idx));
+        } catch (err) {}
+        dragSrcIndex.current = idx;
+    };
+
+    const onDragOverItem = (e: React.DragEvent, idx: number) => {
+        e.preventDefault();
+    };
+
+    const onDropItem = (e: React.DragEvent, idx: number) => {
+        e.preventDefault();
+        const fromStr = e.dataTransfer.getData('text/plain');
+        const from = fromStr ? Number(fromStr) : dragSrcIndex.current;
+        if (from == null || isNaN(from)) return;
+        if (from === idx) return;
+        // compute new index after removal
+        setManualItems((prev) => {
+            const copy = [...prev];
+            const item = copy.splice(from, 1)[0];
+            // if moving forward, and removing earlier index, adjust target index
+            const target = from < idx ? idx : idx;
+            copy.splice(target, 0, item);
+            return copy;
+        });
+        dragSrcIndex.current = null;
+    };
+    const manualFileInputsRef = React.useRef<Array<HTMLInputElement | null>>([]);
     const [modalOpen, setModalOpen] = useState(false);
     const [modalStartIndex, setModalStartIndex] = useState(0);
+    const [manualModalOpen, setManualModalOpen] = useState(false);
+    const [manualModalImages, setManualModalImages] = useState<string[]>([]);
+    const [manualModalStartIndex, setManualModalStartIndex] = useState(0);
     const [bodyHtml, setBodyHtml] = useState<string>('');
 
     function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
         if (!e.target.files) return;
         const files = Array.from(e.target.files);
-        setAttachments(files);
+        // append new files, but prevent duplicate file names
+        setServerErrors((s) => {
+            const copy = { ...s } as Record<string, string[]>;
+            delete copy.attachments;
+            return copy;
+        });
+        setAttachments((prev) => {
+            const existingNames = new Set(prev.map((f) => f.name));
+            const toAdd: File[] = [];
+            const dupNames: string[] = [];
+            files.forEach((f) => {
+                if (existingNames.has(f.name)) {
+                    dupNames.push(f.name);
+                } else {
+                    existingNames.add(f.name);
+                    toAdd.push(f);
+                }
+            });
+            if (dupNames.length > 0) {
+                setServerErrors((prev) => ({ ...prev, attachments: [`同名のファイルは既に選択されています: ${dupNames.join(', ')}`] }));
+            }
+            return [...prev, ...toAdd];
+        });
     }
 
     // build previews when attachments change
@@ -102,6 +174,7 @@ export default function PostCreate() {
         e.preventDefault();
         setServerErrors({});
         const form = new FormData();
+        form.append('type', data.type || 'board');
         form.append('title', data.title);
         const rawHtml = bodyHtml && bodyHtml.length > 0 ? bodyHtml : data.body || '';
 
@@ -149,12 +222,28 @@ export default function PostCreate() {
         };
 
         const transformedHtml = transformHtmlForSave(rawHtml);
-        form.append('body', transformedHtml);
+        // client-side validation: for board posts, body is required
+        if ((data.type || 'board') === 'board') {
+            if (!transformedHtml || transformedHtml.replace(/<[^>]*>/g, '').trim() === '') {
+                setServerErrors((prev) => {
+                    const copy = { ...prev } as Record<string, string[]>;
+                    copy.body = ['本文は必須です'];
+                    return copy;
+                });
+                return;
+            }
+        }
         form.append('is_public', isPublic ? '1' : '0');
         form.append('audience', audience);
         if (audience === 'restricted') {
             selectedRoles.forEach((id) => form.append('roles[]', String(id)));
             selectedUsers.forEach((id) => form.append('users[]', String(id)));
+        }
+
+        // send body and top-level attachments only for board posts
+        if ((data.type || 'board') === 'board') {
+            form.append('body', transformedHtml);
+            attachments.forEach((f) => form.append('attachments[]', f));
         }
         // extract simple tags from plain text: #tag (stops at whitespace/#/@)
         try {
@@ -179,6 +268,15 @@ export default function PostCreate() {
             // ignore
         }
         attachments.forEach((f) => form.append('attachments[]', f));
+
+        // if manual type, append items and their files; otherwise do not send manual items
+        if ((data.type || 'board') === 'manual') {
+            manualItems.forEach((it, i) => {
+                form.append(`items[${i}][order]`, String(i + 1));
+                form.append(`items[${i}][content]`, it.text || '');
+                (it.files || []).forEach((f) => form.append(`item_attachments[${i}][]`, f));
+            });
+        }
 
         try {
             const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
@@ -252,12 +350,38 @@ export default function PostCreate() {
             <div className="py-12">
                 <div className="mx-auto max-w-2xl sm:px-6 lg:px-8">
                     <form onSubmit={submit}>
+                        {/* show server-side / validation errors in a clear summary */}
+                        {Object.keys(serverErrors || {}).length > 0 && (
+                            <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                                <div className="font-medium">入力エラーがあります。以下を修正してください：</div>
+                                <ul className="mt-2 list-disc pl-5">
+                                    {Object.entries(serverErrors).map(([field, msgs]) =>
+                                        (msgs || []).map((m, i) => <li key={`${field}-${i}`}>{m}</li>),
+                                    )}
+                                </ul>
+                            </div>
+                        )}
                         <Card>
                             <CardHeader>
                                 <CardTitle>新しい投稿を作成</CardTitle>
                             </CardHeader>
 
                             <CardContent className="space-y-6">
+                                <div>
+                                    <Label htmlFor="type">投稿タイプ</Label>
+                                    <div className="mt-2">
+                                        <select
+                                            id="type"
+                                            className="rounded border p-2 text-sm"
+                                            value={data.type}
+                                            onChange={(e) => setData('type', e.target.value)}
+                                        >
+                                            <option value="board">掲示板</option>
+                                            <option value="manual">マニュアル</option>
+                                        </select>
+                                    </div>
+                                </div>
+
                                 <div>
                                     <Label htmlFor="title">
                                         タイトル <span className="text-red-500">*</span>
@@ -266,67 +390,281 @@ export default function PostCreate() {
                                     <InputError message={errors.title} className="mt-2" />
                                 </div>
 
-                                <div>
-                                    <Label htmlFor="body">本文</Label>
-                                    <RichTextEditor
-                                        value={data.body}
-                                        onChange={(html) => setBodyHtml(html)}
-                                        title={data.title}
-                                        authorName={(() => {
-                                            try {
-                                                const page = (window as any).page;
-                                                return page?.props?.auth?.user?.name || '';
-                                            } catch {
-                                                return '';
-                                            }
-                                        })()}
-                                        availableUsers={availableUsers}
-                                    />
-                                    <InputError message={errors.body} className="mt-2" />
-                                </div>
+                                {data.type === 'manual' && (
+                                    <div className="space-y-4">
+                                        <Label>マニュアル項目</Label>
+                                        <div className="mt-2 flex items-start gap-2 rounded border border-yellow-200 bg-yellow-50 p-2 text-sm text-yellow-800">
+                                            <Info className="h-5 w-5 flex-shrink-0 text-yellow-700" />
+                                            <div>項目はドラッグで並び替えできます（モバイルでは上下ボタンで移動してください）</div>
+                                        </div>
+                                        {manualItems.map((it, idx) => (
+                                            <div
+                                                key={idx}
+                                                className="rounded border p-3"
+                                                draggable
+                                                onDragStart={(e) => onDragStartItem(e as any, idx)}
+                                                onDragOver={(e) => onDragOverItem(e as any, idx)}
+                                                onDrop={(e) => onDropItem(e as any, idx)}
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <div className="text-sm font-medium">項目 {idx + 1}</div>
+                                                    <div className="flex items-center gap-2">
+                                                        <button
+                                                            type="button"
+                                                            className="p-1 text-gray-600 hover:text-gray-800"
+                                                            onClick={() => moveItem(idx, Math.max(0, idx - 1))}
+                                                            title="上へ移動"
+                                                        >
+                                                            <ChevronUp className="h-4 w-4" />
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            className="p-1 text-gray-600 hover:text-gray-800"
+                                                            onClick={() => moveItem(idx, Math.min(manualItems.length - 1, idx + 1))}
+                                                            title="下へ移動"
+                                                        >
+                                                            <ChevronDown className="h-4 w-4" />
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            className="text-sm text-red-500"
+                                                            onClick={() => setManualItems((prev) => prev.filter((_, i) => i !== idx))}
+                                                        >
+                                                            <X className="h-4 w-4" />
+                                                        </button>
+                                                    </div>
+                                                </div>
 
-                                <div>
-                                    <Label htmlFor="attachments">添付</Label>
-                                    <div className="flex items-center gap-3">
-                                        <input ref={fileInputRef} id="attachments" className="hidden" type="file" multiple onChange={handleFile} />
-                                        <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}>
-                                            ファイル選択
-                                        </Button>
-                                        <div className="text-sm text-muted-foreground">{attachments.length} ファイル</div>
-                                    </div>
+                                                <div className="mt-2">
+                                                    <Label>画像 (任意、複数)</Label>
+                                                    <div className="flex items-center gap-3">
+                                                        <input
+                                                            ref={(el) => (manualFileInputsRef.current[idx] = el)}
+                                                            id={`item_attachments_${idx}`}
+                                                            className="hidden"
+                                                            type="file"
+                                                            multiple
+                                                            onChange={(e) => {
+                                                                const files = e.target.files ? Array.from(e.target.files) : [];
+                                                                setServerErrors((s) => {
+                                                                    const copy = { ...s } as Record<string, string[]>;
+                                                                    delete copy.attachments;
+                                                                    return copy;
+                                                                });
+                                                                setManualItems((prev) => {
+                                                                    const copy = [...prev];
+                                                                    const existingFiles = copy[idx].files || [];
+                                                                    const existingNames = new Set(existingFiles.map((f) => f.name));
+                                                                    const toAdd: File[] = [];
+                                                                    const dupNames: string[] = [];
+                                                                    files.forEach((f) => {
+                                                                        if (existingNames.has(f.name)) {
+                                                                            dupNames.push(f.name);
+                                                                        } else {
+                                                                            existingNames.add(f.name);
+                                                                            toAdd.push(f);
+                                                                        }
+                                                                    });
+                                                                    if (dupNames.length > 0) {
+                                                                        setServerErrors((prev) => ({
+                                                                            ...prev,
+                                                                            attachments: [
+                                                                                `同名のファイルは既に選択されています: ${dupNames.join(', ')}`,
+                                                                            ],
+                                                                        }));
+                                                                    }
+                                                                    const newFiles = [...existingFiles, ...toAdd];
+                                                                    const newPreviews = [
+                                                                        ...(copy[idx].previews || []),
+                                                                        ...toAdd.map((f) => ({
+                                                                            url: URL.createObjectURL(f),
+                                                                            file: f,
+                                                                            isImage: f.type.startsWith('image/'),
+                                                                        })),
+                                                                    ];
+                                                                    copy[idx] = { ...copy[idx], files: newFiles, previews: newPreviews };
+                                                                    return copy;
+                                                                });
+                                                            }}
+                                                        />
+                                                        <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            onClick={() => manualFileInputsRef.current[idx]?.click()}
+                                                        >
+                                                            ファイル選択
+                                                        </Button>
+                                                        <div className="text-sm text-muted-foreground">{(it.files || []).length} ファイル</div>
+                                                    </div>
 
-                                    <div className="mt-3 flex items-start gap-3">
-                                        {previews.map((p, idx) => (
-                                            <div key={idx} className="relative h-20 w-20 overflow-hidden rounded bg-gray-50">
-                                                {p.isImage ? (
-                                                    <img
-                                                        src={p.url}
-                                                        alt={`attachment ${idx + 1}`}
-                                                        className="h-full w-full cursor-pointer object-cover"
-                                                        onClick={() => {
-                                                            setModalStartIndex(idx);
-                                                            setModalOpen(true);
-                                                        }}
+                                                    <div className="mt-3 flex items-start gap-3">
+                                                        {(it.previews || []).map((p, i) => (
+                                                            <div key={i} className="relative h-20 w-20 overflow-hidden rounded bg-gray-50">
+                                                                {p.isImage ? (
+                                                                    <img
+                                                                        src={p.url}
+                                                                        alt={`item ${idx} attachment ${i + 1}`}
+                                                                        className="h-full w-full cursor-pointer object-cover"
+                                                                        onClick={() => {
+                                                                            // open modal for this item's images
+                                                                            const imgs = (it.previews || [])
+                                                                                .filter((pp: any) => pp.isImage)
+                                                                                .map((pp: any) => pp.url);
+                                                                            setManualModalImages(imgs);
+                                                                            setManualModalStartIndex(
+                                                                                (imgs.findIndex((u: string) => u === p.url) + imgs.length) %
+                                                                                    imgs.length,
+                                                                            );
+                                                                            setManualModalOpen(true);
+                                                                        }}
+                                                                    />
+                                                                ) : (
+                                                                    <div className="flex h-full w-full items-center justify-center p-2 text-xs">
+                                                                        ファイル
+                                                                    </div>
+                                                                )}
+                                                                <button
+                                                                    type="button"
+                                                                    className="absolute top-1 right-1 rounded bg-white/80 px-1 text-gray-700 hover:bg-white"
+                                                                    onClick={() => {
+                                                                        setManualItems((prev) => {
+                                                                            const copy = [...prev];
+                                                                            copy[idx] = {
+                                                                                ...copy[idx],
+                                                                                files: (copy[idx].files || []).filter((_, j) => j !== i),
+                                                                                previews: (copy[idx].previews || []).filter((_, j) => j !== i),
+                                                                            };
+                                                                            return copy;
+                                                                        });
+                                                                    }}
+                                                                    title="削除"
+                                                                >
+                                                                    <X className="h-4 w-4" />
+                                                                </button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                <div className="mt-2">
+                                                    <Label>
+                                                        説明 <span className="text-red-500">*</span>
+                                                    </Label>
+                                                    <Textarea
+                                                        rows={3}
+                                                        value={it.text}
+                                                        required
+                                                        onChange={(e) =>
+                                                            setManualItems((prev) => {
+                                                                const copy = [...prev];
+                                                                copy[idx] = { ...copy[idx], text: e.target.value };
+                                                                return copy;
+                                                            })
+                                                        }
+                                                        className="mt-1"
                                                     />
-                                                ) : (
-                                                    <div className="flex h-full w-full items-center justify-center p-2 text-xs">{p.file.name}</div>
-                                                )}
-                                                <button
-                                                    type="button"
-                                                    className="absolute top-1 right-1 rounded bg-white/80 p-0.5 text-gray-700 hover:bg-white"
-                                                    onClick={() => {
-                                                        setAttachments((prev) => prev.filter((_, i) => i !== idx));
-                                                    }}
-                                                    title="削除"
-                                                >
-                                                    <X className="h-4 w-4" />
-                                                </button>
+                                                </div>
                                             </div>
                                         ))}
-                                    </div>
 
-                                    {serverErrors.attachments && <InputError message={serverErrors.attachments.join(', ')} className="mt-2" />}
-                                </div>
+                                        <div>
+                                            <button
+                                                type="button"
+                                                className="rounded bg-indigo-600 px-3 py-1 text-white"
+                                                onClick={() => setManualItems((prev) => [...prev, { text: '', files: [], previews: [] }])}
+                                            >
+                                                項目を追加
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {data.type === 'board' && (
+                                    <>
+                                        <div>
+                                            <Label htmlFor="body">本文</Label>
+                                            <RichTextEditor
+                                                value={data.body}
+                                                onChange={(html) => setBodyHtml(html)}
+                                                title={data.title}
+                                                authorName={(() => {
+                                                    try {
+                                                        const page = (window as any).page;
+                                                        return page?.props?.auth?.user?.name || '';
+                                                    } catch {
+                                                        return '';
+                                                    }
+                                                })()}
+                                                availableUsers={availableUsers}
+                                            />
+                                            <InputError
+                                                message={
+                                                    errors.body ||
+                                                    (serverErrors.body
+                                                        ? Array.isArray(serverErrors.body)
+                                                            ? serverErrors.body.join(', ')
+                                                            : serverErrors.body
+                                                        : undefined)
+                                                }
+                                                className="mt-2"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <Label htmlFor="attachments">添付</Label>
+                                            <div className="flex items-center gap-3">
+                                                <input
+                                                    ref={fileInputRef}
+                                                    id="attachments"
+                                                    className="hidden"
+                                                    type="file"
+                                                    multiple
+                                                    onChange={handleFile}
+                                                />
+                                                <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}>
+                                                    ファイル選択
+                                                </Button>
+                                                <div className="text-sm text-muted-foreground">{attachments.length} ファイル</div>
+                                            </div>
+
+                                            <div className="mt-3 flex items-start gap-3">
+                                                {previews.map((p, idx) => (
+                                                    <div key={idx} className="relative h-20 w-20 overflow-hidden rounded bg-gray-50">
+                                                        {p.isImage ? (
+                                                            <img
+                                                                src={p.url}
+                                                                alt={`attachment ${idx + 1}`}
+                                                                className="h-full w-full cursor-pointer object-cover"
+                                                                onClick={() => {
+                                                                    setModalStartIndex(idx);
+                                                                    setModalOpen(true);
+                                                                }}
+                                                            />
+                                                        ) : (
+                                                            <div className="flex h-full w-full items-center justify-center p-2 text-xs">
+                                                                {p.file.name}
+                                                            </div>
+                                                        )}
+                                                        <button
+                                                            type="button"
+                                                            className="absolute top-1 right-1 rounded bg-white/80 p-0.5 text-gray-700 hover:bg-white"
+                                                            onClick={() => {
+                                                                setAttachments((prev) => prev.filter((_, i) => i !== idx));
+                                                            }}
+                                                            title="削除"
+                                                        >
+                                                            <X className="h-4 w-4" />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+
+                                            {serverErrors.attachments && (
+                                                <InputError message={serverErrors.attachments.join(', ')} className="mt-2" />
+                                            )}
+                                        </div>
+                                    </>
+                                )}
 
                                 <div>
                                     <Label htmlFor="is_public">公開設定</Label>
@@ -425,6 +763,9 @@ export default function PostCreate() {
                     startIndex={modalStartIndex}
                     onClose={() => setModalOpen(false)}
                 />
+            )}
+            {manualModalOpen && (
+                <ImageModal images={manualModalImages} startIndex={manualModalStartIndex} onClose={() => setManualModalOpen(false)} />
             )}
         </AppSidebarLayout>
     );

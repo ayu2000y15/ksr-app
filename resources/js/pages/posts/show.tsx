@@ -6,7 +6,7 @@ import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { Head, Link, usePage } from '@inertiajs/react';
 // Ensure the emoji-picker web component is registered at runtime by importing the module for its side-effects.
 import 'emoji-picker-element';
-import { Edit, Globe, Plus, Smile, Tag, Trash } from 'lucide-react';
+import { Edit, Globe, Plus, Printer, Smile, Tag, Trash } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -23,10 +23,31 @@ const breadcrumbs = [
 export default function PostShow() {
     const { props } = usePage();
     const post = (props as any).post as any | null;
+    // determine if a post is a draft - support several possible backend shapes
+    const isDraft = (p: any) => {
+        if (!p) return false;
+        // explicit status
+        if (typeof p.status === 'string' && p.status.toLowerCase() === 'draft') return true;
+        // common boolean/number flags (1, '1', true, 'true')
+        const truthy = (v: any) => v === true || v === 1 || v === '1' || (typeof v === 'string' && v.toLowerCase() === 'true');
+        if (truthy(p.is_draft) || truthy(p.draft)) return true;
+        // published flags: published === false / 0 / '0' means draft
+        const falsy = (v: any) => v === false || v === 0 || v === '0' || (typeof v === 'string' && v.toLowerCase() === 'false');
+        if (falsy(p.published)) return true;
+        // post table: is_public === 0 means draft
+        if ('is_public' in p && Number(p.is_public) === 0) return true;
+        // if published_at is present and truthy it's published; if absent or null -> treat as draft
+        if ('published_at' in p && (p.published_at === null || p.published_at === undefined || p.published_at === '')) return true;
+        return false;
+    };
     const currentUserId = (props as any).auth?.user?.id;
 
     const [modalOpen, setModalOpen] = useState(false);
     const [modalStartIndex, setModalStartIndex] = useState(0);
+    const [manualModalOpen, setManualModalOpen] = useState(false);
+    const [manualModalImages, setManualModalImages] = useState<string[]>([]);
+    const [manualModalStartIndex, setManualModalStartIndex] = useState(0);
+    // printing will use a hidden iframe appended to the document
 
     const postAttachments = useMemo((): { url: string; isImage: boolean; original_name?: string }[] => {
         const attachments = post?.attachments || [];
@@ -39,6 +60,42 @@ export default function PostShow() {
             return { url, isImage, original_name: a.original_name };
         });
     }, [post?.attachments]);
+
+    const manualItems = useMemo(() => {
+        const items = Array.isArray(post?.items)
+            ? post.items.slice()
+            : Array.isArray(post?.post_items)
+              ? post.post_items.slice()
+              : Array.isArray(post?.postItems)
+                ? post.postItems.slice()
+                : [];
+        // sort by explicit order if present, otherwise keep server order
+        items.sort((a: any, b: any) => {
+            const oa = Number(a?.order || a?.sort || 0);
+            const ob = Number(b?.order || b?.sort || 0);
+            if (oa && ob) return oa - ob;
+            // fall back to id if order not present
+            return Number(a?.id || 0) - Number(b?.id || 0);
+        });
+
+        return items.map((it: any) => {
+            const attachments = Array.isArray(it.attachments) ? it.attachments : [];
+            const imgs = attachments.map((a: any) => {
+                let url = a.file_path || a.url || a.path || a.src || '';
+                if (url && typeof url === 'string' && !url.match(/^https?:\/\//) && !url.startsWith('/')) {
+                    url = '/storage/' + url;
+                }
+                const isImage = typeof url === 'string' && /\.(png|jpe?g|gif|svg|webp)(\?|$)/i.test(url);
+                return { url, isImage, original_name: a.original_name };
+            });
+            const content = it.content || it.text || it.description || it.body || '';
+            return {
+                id: it.id,
+                content,
+                attachments: imgs,
+            };
+        });
+    }, [post?.items, post?.post_items, post?.postItems]);
 
     type Reaction = { id: number; emoji: string; user?: { id?: number; name?: string; email?: string } };
     const [reactions, setReactions] = useState<Reaction[]>(post?.reactions || []);
@@ -275,6 +332,120 @@ export default function PostShow() {
         }
     }
 
+    function escapeHtml(unsafe: string) {
+        return unsafe.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+
+    function formatTextToParagraphs(txt: string) {
+        // normalize newlines
+        const normalized = txt.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        // split into paragraphs at two or more newlines
+        const paras = normalized
+            .split(/\n{2,}/)
+            .map((p) => p.trim())
+            .filter((p) => p.length > 0);
+        return paras
+            .map((p) => `<p style="margin:0 0 12px; text-align:left; white-space:pre-wrap;">${escapeHtml(p).replace(/\n/g, '<br/>')}</p>`)
+            .join('');
+    }
+
+    function handlePrint() {
+        if (!post) return;
+        const title = post.title || '(無題)';
+        const appName = (import.meta as unknown as { env?: { VITE_APP_NAME?: string } })?.env?.VITE_APP_NAME || post?.app_name || '';
+
+        const styles = `@page{margin:20mm 15mm} @page :first{margin-top:8mm} body{font-family: -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:#0f172a; padding:20px} .post-title{font-size:20px;font-weight:700;margin-bottom:6px} .meta{color:#475569;font-size:13px;margin-bottom:12px} .manual-item{border:1px solid #e5e7eb;padding:12px;margin-bottom:12px;border-radius:6px} .badge{display:inline-block;width:28px;height:28px;border-radius:14px;background:#fef3c7;color:#92400e;text-align:center;line-height:28px;font-weight:600;margin-right:8px} .attachments{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start} img.print-img{box-sizing:border-box;width:calc(50% - 8px);height:auto;object-fit:contain;border:1px solid #000;padding:2px;background:#fff} /* single image: limit printed size and center */ .attachments.single img.print-img{width:auto;max-width:100%;max-height:160mm;display:block;margin-left:auto;margin-right:auto} /* avoid breaking manual-item across pages */ .manual-item{page-break-inside:avoid;break-inside:avoid;-webkit-column-break-inside:avoid} .manual-item .attachments{page-break-inside:avoid;break-inside:avoid} .manual-item img.print-img{page-break-inside:avoid;break-inside:avoid} .print-footer{position:fixed;left:20px;bottom:12px;font-size:12px;color:#475569} @media print{ /* ensure attachments sizing */ .attachments{gap:8px} .attachments.single img.print-img{width:auto;max-width:100%;max-height:160mm;display:block;margin-left:auto;margin-right:auto} img.print-img{width:calc(50% - 8px)} .print-footer{position:fixed;left:20px;bottom:12px} }`;
+
+        let bodyHtml = `<div class="print-header" style="position:relative;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #e5e7eb;">`;
+        bodyHtml += `<div class="post-title">${escapeHtml(title)}</div>`;
+        bodyHtml += `<div class="meta">作成者: ${escapeHtml(post.user?.name || '')}</div>`;
+        bodyHtml += `<div class="print-appname" style="position:absolute;left:0;bottom:0;font-size:12px;color:#475569">${escapeHtml(appName)}</div>`;
+        bodyHtml += `</div>`;
+
+        if (post.type === 'manual') {
+            (manualItems || []).forEach(
+                (
+                    it: { id?: number | string; content?: string; attachments?: Array<{ isImage?: boolean; url?: string; original_name?: string }> },
+                    idx: number,
+                ) => {
+                    // get plain text from HTML content
+                    let txt = '';
+                    try {
+                        const tmp = document.createElement('div');
+                        tmp.innerHTML = it.content || '';
+                        txt = tmp.textContent || tmp.innerText || '';
+                    } catch {
+                        txt = it.content || '';
+                    }
+
+                    const paraHtml = formatTextToParagraphs(txt);
+                    bodyHtml += `<div class="manual-item"><div><span class="badge">${idx + 1}</span><div style="display:inline-block;vertical-align:top;max-width:calc(100% - 40px)">${paraHtml}</div></div>`;
+                    if (it.attachments && it.attachments.length > 0) {
+                        const singleClass = it.attachments.length === 1 ? ' attachments single' : ' attachments';
+                        bodyHtml += `<div class="${singleClass}">`;
+                        it.attachments.forEach((a: { isImage?: boolean; url?: string; original_name?: string }) => {
+                            if (a.isImage && a.url) {
+                                bodyHtml += `<img class="print-img" src="${escapeHtml(a.url)}" alt="${escapeHtml(a.original_name || '')}" />`;
+                            } else if (a.url) {
+                                bodyHtml += `<div>${escapeHtml(a.original_name || a.url.split('/').pop() || '')}</div>`;
+                            }
+                        });
+                        bodyHtml += `</div>`;
+                    }
+                    bodyHtml += `</div>`;
+                },
+            );
+        } else {
+            // board: include HTML body as-is
+            // ensure body paragraphs align by wrapping content in a container
+            bodyHtml += `<div class="post-body-print">${post.body || ''}</div>`;
+            if (postAttachments && postAttachments.length > 0) {
+                const singleClass = postAttachments.length === 1 ? ' attachments single' : ' attachments';
+                bodyHtml += `<div class="${singleClass}">`;
+                postAttachments.forEach((p) => {
+                    if (p.isImage && p.url)
+                        bodyHtml += `<img class="print-img" src="${escapeHtml(p.url)}" alt="${escapeHtml(p.original_name || '')}" />`;
+                    else if (p.url) bodyHtml += `<div>${escapeHtml(p.original_name || p.url.split('/').pop() || '')}</div>`;
+                });
+                bodyHtml += `</div>`;
+            }
+        }
+
+        // footer removed to avoid duplicating app name (app name is shown in header left-bottom)
+        const waitScript = `<script>(function(){
+            try{
+                const imgs = Array.from(document.images || []);
+                const prom = imgs.map(img => new Promise((res) => {
+                    if (img.complete) return res();
+                    img.addEventListener('load', res);
+                    img.addEventListener('error', res);
+                }));
+                Promise.all(prom).then(() => {
+                    setTimeout(function(){ try{ window.focus(); window.print(); }catch(e){} }, 50);
+                });
+            }catch(e){ try{ window.focus(); window.print(); }catch(e){} }
+        })();</script>`;
+
+        const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>${styles} .badge{vertical-align:top;}</style></head><body>${bodyHtml}${waitScript}</body></html>`;
+
+        // create a hidden iframe and set srcdoc so printing happens without opening a new tab or modal
+        const iframe = document.createElement('iframe');
+        iframe.style.position = 'fixed';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = '0';
+        iframe.style.visibility = 'hidden';
+        iframe.srcdoc = html;
+        const cleanup = () => {
+            if (document.body.contains(iframe)) document.body.removeChild(iframe);
+        };
+        iframe.onload = () => {
+            // iframe contains script that waits for images and calls print(); we just cleanup after a delay
+            setTimeout(cleanup, 2000);
+        };
+        document.body.appendChild(iframe);
+    }
+
     return (
         <AppSidebarLayout breadcrumbs={breadcrumbs}>
             <Head title={post?.title || '投稿'} />
@@ -322,7 +493,10 @@ export default function PostShow() {
                             <div className="flex flex-wrap items-start justify-between gap-4">
                                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
                                     <div className="min-w-0 flex-shrink-0">
-                                        <h1 className="truncate text-xl font-bold sm:text-2xl">{post?.title || '(無題)'}</h1>
+                                        <div className="flex items-center gap-2">
+                                            <h1 className="truncate text-xl font-bold sm:text-2xl">{post?.title || '(無題)'}</h1>
+                                            {isDraft(post) && <Badge className="border-yellow-300 bg-yellow-50 text-yellow-800">下書き</Badge>}
+                                        </div>
                                         <div className="mt-1 truncate text-sm text-muted-foreground">
                                             <span>{post?.user?.name || '—'}</span>
                                             <span className="mx-1.5">·</span>
@@ -368,48 +542,127 @@ export default function PostShow() {
                                         </>
                                     )}
                                 </div>
-                                {post?.user && currentUserId && currentUserId === post.user.id ? (
-                                    <div className="flex flex-shrink-0 items-center gap-2">
-                                        <Link href={post ? route('posts.edit', post.id) : '#'}>
-                                            <Button variant="outline">
-                                                <Edit className="mr-2 h-4 w-4" /> 編集
+                                <div className="flex flex-shrink-0 items-center gap-2">
+                                    <Button variant="outline" onClick={handlePrint}>
+                                        <Printer className="mr-2 h-4 w-4" /> 印刷
+                                    </Button>
+                                    {post?.user && currentUserId && currentUserId === post.user.id && (
+                                        <>
+                                            <Link href={post ? route('posts.edit', post.id) : '#'}>
+                                                <Button variant="outline">
+                                                    <Edit className="mr-2 h-4 w-4" /> 編集
+                                                </Button>
+                                            </Link>
+                                            <Button size="sm" variant="destructive" onClick={handleDelete}>
+                                                <Trash className="mr-2 h-4 w-4" /> 削除
                                             </Button>
-                                        </Link>
-                                        <Button size="sm" variant="destructive" onClick={handleDelete}>
-                                            <Trash className="mr-2 h-4 w-4" /> 削除
-                                        </Button>
-                                    </div>
-                                ) : null}
+                                        </>
+                                    )}
+                                </div>
                             </div>
                         </CardHeader>
                         <CardContent className="space-y-6 pt-6">
                             <div className="prose dark:prose-invert max-w-none">
                                 <div className="post-body" dangerouslySetInnerHTML={{ __html: post?.body || '' }} />
                             </div>
-                            {postAttachments.length > 0 && (
-                                <div>
-                                    <div className="mt-3 flex items-start gap-3">
-                                        {postAttachments.map((p, idx) => (
-                                            <div key={p.url || idx} className="relative h-20 w-20 overflow-hidden rounded bg-gray-50">
-                                                {p.isImage ? (
-                                                    <img
-                                                        src={p.url}
-                                                        alt={`attachment ${idx + 1}`}
-                                                        className="h-full w-full cursor-pointer object-cover"
-                                                        onClick={() => {
-                                                            setModalStartIndex(idx);
-                                                            setModalOpen(true);
-                                                        }}
-                                                    />
-                                                ) : (
-                                                    <div className="flex h-full w-full items-center justify-center p-2 text-xs">
-                                                        {p.original_name || p.url.split('/').pop()}
+                            {post?.type === 'manual' ? (
+                                <div className="space-y-6">
+                                    {manualItems.map(
+                                        (
+                                            it: {
+                                                id?: number | string;
+                                                content?: string;
+                                                attachments?: Array<{ url?: string; isImage?: boolean; original_name?: string }>;
+                                            },
+                                            i: number,
+                                        ) => (
+                                            <div key={it.id || i} className="rounded border p-4">
+                                                <div className="mb-3 flex items-start gap-3">
+                                                    <div className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center self-start rounded-full bg-yellow-100 font-semibold text-yellow-800">
+                                                        {i + 1}
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <div className="text-sm break-words whitespace-pre-wrap text-gray-600">
+                                                            {(() => {
+                                                                try {
+                                                                    const tmp = document.createElement('div');
+                                                                    tmp.innerHTML = it.content || '';
+                                                                    const txt = tmp.textContent || tmp.innerText || '';
+                                                                    return txt;
+                                                                } catch {
+                                                                    return '';
+                                                                }
+                                                            })()}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                {Array.isArray(it.attachments) && it.attachments.length > 0 && (
+                                                    <div className={`mt-3 grid ${it.attachments.length === 1 ? 'grid-cols-1' : 'grid-cols-2'} gap-3`}>
+                                                        {it.attachments.map(
+                                                            (a: { url?: string; isImage?: boolean; original_name?: string }, ai: number) => (
+                                                                <div
+                                                                    key={a.url || ai}
+                                                                    className="overflow-hidden rounded bg-gray-50"
+                                                                    style={{ height: it.attachments && it.attachments.length === 1 ? 360 : 200 }}
+                                                                >
+                                                                    {a.isImage ? (
+                                                                        <img
+                                                                            src={a.url}
+                                                                            alt={a.original_name || `item-${i}-img-${ai}`}
+                                                                            className="h-full w-full cursor-pointer object-contain"
+                                                                            onClick={() => {
+                                                                                const imgs = (it.attachments || [])
+                                                                                    .filter(
+                                                                                        (x: { isImage?: boolean; url?: string }) =>
+                                                                                            x.isImage && !!x.url,
+                                                                                    )
+                                                                                    .map((x: { isImage?: boolean; url?: string }) => x.url as string);
+                                                                                setManualModalImages(imgs);
+                                                                                const idx = imgs.findIndex((u: string) => u === (a.url || ''));
+                                                                                setManualModalStartIndex(idx >= 0 ? idx : 0);
+                                                                                setManualModalOpen(true);
+                                                                            }}
+                                                                        />
+                                                                    ) : (
+                                                                        <div className="flex h-full w-full items-center justify-center p-2 text-xs">
+                                                                            {a.original_name || (a.url ? a.url.split('/').pop() : '')}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            ),
+                                                        )}
                                                     </div>
                                                 )}
                                             </div>
-                                        ))}
-                                    </div>
+                                        ),
+                                    )}
                                 </div>
+                            ) : (
+                                postAttachments.length > 0 && (
+                                    <div>
+                                        <div className="mt-3 flex items-start gap-3">
+                                            {postAttachments.map((p, idx) => (
+                                                <div key={p.url || idx} className="relative h-20 w-20 overflow-hidden rounded bg-gray-50">
+                                                    {p.isImage ? (
+                                                        <img
+                                                            src={p.url}
+                                                            alt={`attachment ${idx + 1}`}
+                                                            className="h-full w-full cursor-pointer object-cover"
+                                                            onClick={() => {
+                                                                setModalStartIndex(idx);
+                                                                setModalOpen(true);
+                                                            }}
+                                                        />
+                                                    ) : (
+                                                        <div className="flex h-full w-full items-center justify-center p-2 text-xs">
+                                                            {p.original_name || p.url.split('/').pop()}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )
                             )}
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
@@ -527,6 +780,12 @@ export default function PostShow() {
                     onClose={() => setModalOpen(false)}
                 />
             )}
+
+            {manualModalOpen && (
+                <ImageModal images={manualModalImages} startIndex={manualModalStartIndex} onClose={() => setManualModalOpen(false)} />
+            )}
+
+            {/* printing handled via hidden iframe injected into document; no in-app modal */}
 
             {createPortal(
                 <div ref={pickerContainerRef} style={{ position: 'absolute', display: 'none', zIndex: 9999 }} className="rounded-lg shadow-xl">

@@ -129,7 +129,7 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
     Route::inertia('/posts/create', 'posts/create')->name('posts.create');
     // Use controller for show so we can pass the post as an Inertia prop
     Route::get('/posts/{post}', [PostController::class, 'showPage'])->name('posts.show');
-    Route::inertia('/posts/{post}/edit', 'posts/edit')->name('posts.edit');
+    Route::get('/posts/{post}/edit', [PostController::class, 'editPage'])->name('posts.edit');
 });
 
 require __DIR__ . '/auth.php';

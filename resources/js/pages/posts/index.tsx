@@ -50,6 +50,9 @@ export default function PostsIndex() {
     const [activeType, setActiveType] = useState<string | null>(null);
     const [activeAudience, setActiveAudience] = useState<string | null>(null);
     const [activeRole, setActiveRole] = useState<string | null>(null);
+    const [mobileTag, setMobileTag] = useState<string | null>(null);
+    const [mobileType, setMobileType] = useState<string | null>(null);
+    const [mobileAudience, setMobileAudience] = useState<string | null>(null);
     const [queryParams, setQueryParams] = useState<QueryParams>({});
     // rolesList may be used to map role id to name; keep as unknown[] to avoid any
     const [_rolesList, setRolesList] = useState<unknown[]>([]);
@@ -116,6 +119,10 @@ export default function PostsIndex() {
             // preserve sort/direction so headers render current state
             setQueryParams({ sort: s || undefined, direction: d || undefined });
             loadInitial({ tag: t, type: ty, audience: a, role: r, sort: s, direction: d });
+            // initialize mobile filters from url params
+            setMobileTag(t || null);
+            setMobileType(ty || null);
+            setMobileAudience(a || null);
         };
 
         // initial load
@@ -491,7 +498,7 @@ export default function PostsIndex() {
                                                                 <Link
                                                                     href={route('posts.index') + '?type=' + encodeURIComponent(post.type)}
                                                                     onClick={(e: MouseEvent) => e.stopPropagation()}
-                                                                    className="inline-flex transform cursor-pointer items-center rounded transition duration-150 hover:bg-gray-200 hover:opacity-95 hover:shadow-sm"
+                                                                    className="inline-flex transform cursor-pointer items-center rounded transition duration-150 hover:bg-gray-300 hover:opacity-95 hover:shadow-sm"
                                                                 >
                                                                     <Badge variant="outline">{post.type}</Badge>
                                                                 </Link>
@@ -551,6 +558,84 @@ export default function PostsIndex() {
                             </div>
 
                             {/* Mobile stacked card view (no horizontal scroll) */}
+                            {/* Mobile filter controls */}
+                            <div className="mb-3 block md:hidden">
+                                <div className="flex flex-col gap-2 rounded border bg-white p-3">
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            placeholder="タグで絞り込み"
+                                            value={mobileTag || ''}
+                                            onChange={(e) => setMobileTag(e.target.value || null)}
+                                            className="flex-1 rounded border p-2 text-sm"
+                                        />
+                                        <select
+                                            value={mobileType || ''}
+                                            onChange={(e) => setMobileType(e.target.value || null)}
+                                            className="rounded border p-2 text-sm"
+                                        >
+                                            <option value="">タイプ</option>
+                                            <option value="board">掲示板</option>
+                                            <option value="manual">マニュアル</option>
+                                        </select>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <select
+                                            value={mobileAudience || ''}
+                                            onChange={(e) => setMobileAudience(e.target.value || null)}
+                                            className="rounded border p-2 text-sm"
+                                        >
+                                            <option value="">閲覧範囲</option>
+                                            <option value="all">全体公開</option>
+                                            <option value="restricted">限定公開</option>
+                                        </select>
+                                        <div className="flex gap-2">
+                                            <button
+                                                type="button"
+                                                className="rounded bg-indigo-600 px-3 py-1 text-white"
+                                                onClick={() => {
+                                                    // apply mobile filters
+                                                    const tag = mobileTag || undefined;
+                                                    const ty = mobileType || undefined;
+                                                    const aud = mobileAudience || undefined;
+                                                    setActiveTag(tag || null);
+                                                    setActiveType(ty || null);
+                                                    setActiveAudience(aud || null);
+                                                    loadInitial({ tag, type: ty, audience: aud });
+                                                    // update URL params for consistency
+                                                    const params = new URLSearchParams(window.location.search);
+                                                    if (tag) params.set('tag', tag);
+                                                    else params.delete('tag');
+                                                    if (ty) params.set('type', ty);
+                                                    else params.delete('type');
+                                                    if (aud) params.set('audience', aud);
+                                                    else params.delete('audience');
+                                                    const newUrl = `${window.location.pathname}?${params.toString()}`;
+                                                    window.history.replaceState({}, '', newUrl);
+                                                }}
+                                            >
+                                                適用
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="rounded border px-3 py-1"
+                                                onClick={() => {
+                                                    setMobileTag(null);
+                                                    setMobileType(null);
+                                                    setMobileAudience(null);
+                                                    setActiveTag(null);
+                                                    setActiveType(null);
+                                                    setActiveAudience(null);
+                                                    loadInitial({});
+                                                    window.history.replaceState({}, '', window.location.pathname);
+                                                }}
+                                            >
+                                                クリア
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                             <div className="space-y-3 md:hidden">
                                 {posts.map((post: any) => {
                                     const postOwnerId = post?.user?.id ?? post?.user_id ?? null;
@@ -562,14 +647,14 @@ export default function PostsIndex() {
                                     return (
                                         <div
                                             key={post.id}
-                                            className={`flex w-full flex-col gap-2 rounded border bg-white p-3 shadow-sm ${isOwnDraft ? 'bg-gray-50' : ''}`}
+                                            className={`flex w-full flex-col gap-2 rounded border p-3 shadow-sm ${isDraft ? 'bg-gray-300' : 'bg-white'}`}
                                             onClick={() => (window.location.href = route('posts.show', post.id) as unknown as string)}
                                         >
                                             <div className="flex items-start justify-between">
                                                 <div className="min-w-0">
                                                     <div className="flex items-center gap-2">
                                                         <h3 className="truncate text-sm font-medium">{post.title || '(無題)'}</h3>
-                                                        {post.is_public === false || post.is_public === '0' ? (
+                                                        {isDraft ? (
                                                             <span className="ml-1 rounded bg-yellow-100 px-2 py-0.5 text-xs text-yellow-800">
                                                                 下書き
                                                             </span>

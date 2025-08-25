@@ -82,6 +82,12 @@ class PostController extends Controller
             $query->where('audience', $audienceParam);
         }
 
+        // optional: filter by type when provided as query param ?type=board|manual
+        $typeParam = $request->query('type');
+        if (!empty($typeParam) && in_array($typeParam, ['board', 'manual'])) {
+            $query->where('type', $typeParam);
+        }
+
         // optional: filter by role when provided as query param ?role=rolename or ?role=id
         $role = $request->query('role');
         if (!empty($role)) {
@@ -134,10 +140,20 @@ class PostController extends Controller
         ]);
     }
 
+    // Render the Inertia edit page with the post and related data (ensure postItems are loaded)
+    public function editPage(Post $post)
+    {
+        $post->load(['user', 'attachments', 'postItems.attachments', 'tags', 'roles', 'allowedUsers']);
+        return Inertia::render('posts/edit', [
+            'post' => $post,
+        ]);
+    }
+
     public function store(Request $request)
     {
         $this->authorize('create', Post::class);
         $data = $request->validate([
+            'type' => 'nullable|string|in:board,manual',
             'title' => 'nullable|string|max:255',
             'body' => 'nullable|string',
             'is_public' => 'boolean',
@@ -161,13 +177,37 @@ class PostController extends Controller
 
         DB::beginTransaction();
         try {
+            // If client requested deletion of specific attachment ids, remove their files and DB rows
+            if ($request->has('deleted_attachment_ids')) {
+                $delIds = $request->input('deleted_attachment_ids');
+                if (is_array($delIds)) {
+                    foreach ($delIds as $aid) {
+                        try {
+                            $att = Attachment::find(intval($aid));
+                            if ($att) {
+                                // remove file from storage (public disk)
+                                try {
+                                    \Illuminate\Support\Facades\Storage::disk('public')->delete($att->file_path);
+                                } catch (\Exception $e) {
+                                    // ignore storage deletion errors but continue to remove DB record
+                                }
+                                $att->delete();
+                            }
+                        } catch (\Exception $e) {
+                            // continue on individual failures
+                        }
+                    }
+                }
+            }
+            // If manual type, ensure body is an empty string to avoid any server-side checks
+            $isManual = (isset($data['type']) && $data['type'] === 'manual');
             $post = Post::create([
                 'user_id' => $user->id,
                 'title' => $data['title'] ?? null,
-                'body' => $data['body'] ?? null,
+                'body' => $isManual ? '' : ($data['body'] ?? null),
                 'is_public' => $data['is_public'] ?? true,
                 'audience' => $data['audience'] ?? 'all',
-                'type' => 'board',
+                'type' => $data['type'] ?? 'board',
             ]);
 
             // tags
@@ -188,6 +228,19 @@ class PostController extends Controller
                         'order' => $index,
                         'content' => $item['content'] ?? null,
                     ]);
+
+                    // handle per-item attachments sent as item_attachments[index][]
+                    $key = "item_attachments.{$index}";
+                    if ($request->hasFile($key)) {
+                        $files = $request->file($key);
+                        foreach ($files as $f) {
+                            $path = $this->attachmentService->store($f);
+                            $pi->attachments()->create([
+                                'file_path' => $path,
+                                'original_name' => $f->getClientOriginalName(),
+                            ]);
+                        }
+                    }
                 }
             }
 
@@ -224,6 +277,7 @@ class PostController extends Controller
         $this->authorize('update', $post);
 
         $data = $request->validate([
+            'type' => 'nullable|string|in:board,manual',
             'title' => 'nullable|string|max:255',
             'body' => 'nullable|string',
             'is_public' => 'boolean',
@@ -239,6 +293,37 @@ class PostController extends Controller
 
         DB::beginTransaction();
         try {
+            // If client requested deletion of specific attachment ids on update, remove their files and DB rows
+            if ($request->has('deleted_attachment_ids')) {
+                $delIds = $request->input('deleted_attachment_ids');
+                logger()->info('post.update received deleted_attachment_ids', ['ids' => $delIds]);
+                if (is_array($delIds)) {
+                    foreach ($delIds as $aid) {
+                        try {
+                            $idInt = intval($aid);
+                            $att = Attachment::find($idInt);
+                            if ($att) {
+                                logger()->info('post.update deleting attachment', ['id' => $idInt, 'path' => $att->file_path]);
+                                try {
+                                    \Illuminate\Support\Facades\Storage::disk('public')->delete($att->file_path);
+                                } catch (\Exception $e) {
+                                    logger()->warning('post.update storage delete failed', ['id' => $idInt, 'error' => $e->getMessage()]);
+                                }
+                                $att->delete();
+                                logger()->info('post.update attachment deleted', ['id' => $idInt]);
+                            } else {
+                                logger()->warning('post.update attachment not found', ['id' => $idInt]);
+                            }
+                        } catch (\Exception $e) {
+                            logger()->error('post.update failed deleting attachment', ['id' => $aid, 'error' => $e->getMessage()]);
+                        }
+                    }
+                }
+            }
+            // DEBUG: log incoming items payload to storage/logs/laravel.log for diagnosis
+            if ($request->has('items')) {
+                logger()->info('post.update incoming items', ['items' => $request->input('items')]);
+            }
             $post->update([
                 'title' => $data['title'] ?? $post->title,
                 'body' => $data['body'] ?? $post->body,
@@ -257,14 +342,45 @@ class PostController extends Controller
             }
 
             if (isset($data['items'])) {
-                // replace items for simplicity
-                $post->postItems()->delete();
-                foreach ($data['items'] as $index => $item) {
-                    PostItem::create([
-                        'post_id' => $post->id,
-                        'order' => $index,
-                        'content' => $item['content'] ?? null,
-                    ]);
+                // Upsert items: preserve ids where provided, update content/order, create new ones, delete missing
+                $incoming = $data['items'];
+                $incomingIds = [];
+                foreach ($incoming as $index => $item) {
+                    // normalize item id
+                    $itemId = !empty($item['id']) ? intval($item['id']) : null;
+                    if ($itemId) {
+                        $pi = PostItem::where('id', $itemId)->where('post_id', $post->id)->first();
+                        if ($pi) {
+                            $pi->update(['order' => $index, 'content' => $item['content'] ?? null]);
+                        } else {
+                            // id provided but not found or not belong to this post -> create new
+                            $pi = PostItem::create(['post_id' => $post->id, 'order' => $index, 'content' => $item['content'] ?? null]);
+                        }
+                    } else {
+                        $pi = PostItem::create(['post_id' => $post->id, 'order' => $index, 'content' => $item['content'] ?? null]);
+                    }
+                    $incomingIds[] = $pi->id;
+
+                    // handle per-item attachments sent as item_attachments[index][]
+                    $key = "item_attachments.{$index}";
+                    if ($request->hasFile($key)) {
+                        $files = $request->file($key);
+                        foreach ($files as $f) {
+                            $path = $this->attachmentService->store($f);
+                            $pi->attachments()->create([
+                                'file_path' => $path,
+                                'original_name' => $f->getClientOriginalName(),
+                            ]);
+                        }
+                    }
+                }
+
+                // delete existing items that were removed in the incoming payload
+                if (!empty($incomingIds)) {
+                    $post->postItems()->whereNotIn('id', $incomingIds)->delete();
+                } else {
+                    // no incoming items -> remove all
+                    $post->postItems()->delete();
                 }
             }
 

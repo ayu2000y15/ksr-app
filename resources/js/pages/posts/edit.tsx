@@ -6,9 +6,10 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { MultiSelectCombobox } from '@/components/ui/multi-select-combobox';
+import { Textarea } from '@/components/ui/textarea';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { Head, Link, useForm } from '@inertiajs/react';
-import { X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Info, X } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 
 // declare global Inertia `page` object used by templates
@@ -24,9 +25,18 @@ export default function PostEdit() {
     // We'll read initial post data from window.page.props (Inertia provides it)
     const [initialPost, setInitialPost] = useState<any>((window as any).page?.props?.post || null);
 
+    // DEBUG: log initial props so we can see whether the server provided post/items
+    try {
+        // eslint-disable-next-line no-console
+        console.log('[posts.edit] window.page.props (initial):', (window as any).page?.props || {});
+        // eslint-disable-next-line no-console
+        console.log('[posts.edit] initialPost (state):', (window as any).page?.props?.post || null);
+    } catch (e) {}
+
     // initialPost may be provided via Inertia page props
 
     const { data, setData, processing, errors, reset } = useForm({
+        type: initialPost?.type || 'board',
         title: initialPost?.title || '',
         body: initialPost?.body || '',
     });
@@ -46,133 +56,131 @@ export default function PostEdit() {
                 url = '/storage/' + url;
             }
             const isImage = typeof url === 'string' && /\.(png|jpe?g|gif|svg|webp)(\?|$)/i.test(url);
-            return { url, file: undefined, isImage, existing: true };
+            return { id: a.id, url, file: undefined, isImage, existing: true };
         });
     });
     const [modalOpen, setModalOpen] = useState(false);
     const [modalStartIndex, setModalStartIndex] = useState(0);
+    const [manualModalOpen, setManualModalOpen] = useState(false);
+    const [manualModalImages, setManualModalImages] = useState<string[]>([]);
+    const [manualModalStartIndex, setManualModalStartIndex] = useState(0);
     const [bodyHtml, setBodyHtml] = useState<string>(initialPost?.body || '');
+    const [manualItems, setManualItems] = useState<
+        Array<{ id?: number; text: string; files: File[]; previews: { url: string; file?: File; isImage: boolean }[] }>
+    >(
+        (initialPost && Array.isArray(initialPost.items)
+            ? initialPost.items.map((it: any) => ({ id: it.id, text: it.content || '', files: [], previews: [] }))
+            : [{ text: '', files: [], previews: [] }]) as any,
+    );
+    const dragSrcIndex = React.useRef<number | null>(null);
+
+    const moveItem = (from: number, to: number) => {
+        setManualItems((prev: any[]) => {
+            const copy = [...prev];
+            if (from < 0 || from >= copy.length) return prev;
+            const item = copy.splice(from, 1)[0];
+            copy.splice(to, 0, item);
+            return copy;
+        });
+    };
+
+    const onDragStartItem = (e: React.DragEvent, idx: number) => {
+        e.dataTransfer.effectAllowed = 'move';
+        try {
+            e.dataTransfer.setData('text/plain', String(idx));
+        } catch (err) {}
+        dragSrcIndex.current = idx;
+    };
+
+    const onDragOverItem = (e: React.DragEvent, idx: number) => {
+        e.preventDefault();
+    };
+
+    const onDropItem = (e: React.DragEvent, idx: number) => {
+        e.preventDefault();
+        const fromStr = e.dataTransfer.getData('text/plain');
+        const from = fromStr ? Number(fromStr) : dragSrcIndex.current;
+        if (from == null || isNaN(from)) return;
+        if (from === idx) return;
+        setManualItems((prev: any[]) => {
+            const copy = [...prev];
+            const item = copy.splice(from, 1)[0];
+            const target = from < idx ? idx : idx;
+            copy.splice(target, 0, item);
+            return copy;
+        });
+        dragSrcIndex.current = null;
+    };
+    const manualFileInputsRef = React.useRef<Array<HTMLInputElement | null>>([]);
+
+    const [serverErrors, setServerErrors] = useState<Record<string, string[]>>({});
+    const [audience, setAudience] = useState<'all' | 'restricted'>('all');
+    const [availableRoles, setAvailableRoles] = useState<any[]>([]);
+    const [availableUsers, setAvailableUsers] = useState<any[]>([]);
+    const [selectedRoles, setSelectedRoles] = useState<number[]>([]);
+    const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
+    // track ids of attachments deleted by the user so server can remove them from storage/db
+    const [deletedAttachmentIds, setDeletedAttachmentIds] = useState<number[]>([]);
 
     function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
         if (!e.target.files) return;
         const files = Array.from(e.target.files);
-        setAttachments(files);
-    }
-
-    useEffect(() => {
-        setPreviews((prev) => {
-            prev.forEach((p) => URL.revokeObjectURL(p.url));
-            return [];
+        setServerErrors((s) => {
+            const copy = { ...s } as Record<string, string[]>;
+            delete copy.attachments;
+            return copy;
         });
-        if (!attachments || attachments.length === 0) return;
-        const next = attachments.map((f) => ({ url: URL.createObjectURL(f), file: f, isImage: f.type.startsWith('image/') }));
-        setPreviews(next);
-        return () => {
-            next.forEach((p) => URL.revokeObjectURL(p.url));
-        };
-    }, [attachments]);
-
-    const [serverErrors, setServerErrors] = useState<Record<string, string[]>>({});
-    const [audience, setAudience] = useState<'all' | 'restricted'>(initialPost?.audience || 'all');
-    const [availableRoles, setAvailableRoles] = useState<any[]>([]);
-    const [availableUsers, setAvailableUsers] = useState<any[]>([]);
-    const [selectedRoles, setSelectedRoles] = useState<number[]>((initialPost?.roles || []).map((r: any) => Number(r.id)) || []);
-    // support both camelCase and snake_case from API: allowedUsers or allowed_users
-    const initialAllowedUsers =
-        (initialPost &&
-            (Array.isArray(initialPost.allowedUsers)
-                ? initialPost.allowedUsers
-                : Array.isArray(initialPost.allowed_users)
-                  ? initialPost.allowed_users
-                  : [])) ||
-        [];
-    const [selectedUsers, setSelectedUsers] = useState<number[]>((initialAllowedUsers || []).map((u: any) => Number(u.id)) || []);
+        setAttachments((prev) => {
+            const existingNames = new Set(prev.map((f) => f.name));
+            const toAdd: File[] = [];
+            const dupNames: string[] = [];
+            files.forEach((f) => {
+                if (existingNames.has(f.name)) {
+                    dupNames.push(f.name);
+                } else {
+                    existingNames.add(f.name);
+                    toAdd.push(f);
+                }
+            });
+            if (dupNames.length > 0) {
+                setServerErrors((prev) => ({ ...prev, attachments: [`同名のファイルは既に選択されています: ${dupNames.join(', ')}`] }));
+            }
+            return [...prev, ...toAdd];
+        });
+    }
 
     useEffect(() => {
         // fetch roles and users for selection
         fetch('/api/roles', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
             .then((r) => r.json())
             .then((d) => {
-                // roles API response
                 const roles = (d || []) as Array<{ id: number; name: string }>;
                 try {
-                    type InertiaPage = { props?: { auth?: { user?: { id?: number; name?: string; roles?: Array<{ id: number; name: string }> } } } };
-                    declare const page: InertiaPage | undefined;
-                    const currentUser = page?.props?.auth?.user || null;
+                    const currentUser = (window as any).page?.props?.auth?.user || null;
                     const currentRoleNames = Array.isArray(currentUser?.roles)
                         ? currentUser.roles.map((rr: { id: number; name: string }) => rr.name)
                         : [];
                     // システム管理者はすべて見る
-                    let baseList: Array<{ id: number; name: string }> = [];
                     if (currentRoleNames.includes('システム管理者')) {
-                        baseList = roles;
+                        setAvailableRoles(roles);
                     } else {
                         // 一般ユーザーは自分が所属するロールのみ表示
                         const currentRoleIds = Array.isArray(currentUser?.roles)
                             ? currentUser.roles.map((rr: { id: number; name: string }) => rr.id)
                             : [];
-                        baseList = roles.filter((r) => currentRoleIds.includes(r.id));
+                        const filtered = roles.filter((r) => currentRoleIds.includes(r.id));
+                        setAvailableRoles(filtered);
                     }
-                    // ensure initialPost roles are present in the list so the MultiSelect shows selected items
-                    const initialRoles = (initialPost && Array.isArray(initialPost.roles) ? initialPost.roles : []) as any[];
-                    const merged = [...baseList];
-                    initialRoles.forEach((ir) => {
-                        if (!merged.find((m) => Number(m.id) === Number(ir.id))) merged.push({ id: Number(ir.id), name: ir.name });
-                    });
-                    const mapped = merged.map((m) => ({ id: Number(m.id), name: m.name }));
-                    setAvailableRoles(mapped);
-                    // availableRoles set
                 } catch {
-                    // fallback - include initialPost roles if any
-                    const merged = [...roles];
-                    const initialRoles = (initialPost && Array.isArray(initialPost.roles) ? initialPost.roles : []) as any[];
-                    initialRoles.forEach((ir) => {
-                        if (!merged.find((m) => Number(m.id) === Number(ir.id))) merged.push({ id: Number(ir.id), name: ir.name });
-                    });
-                    const mapped = merged.map((m) => ({ id: Number(m.id), name: m.name }));
-                    setAvailableRoles(mapped);
-                    // availableRoles fallback set (roles error)
+                    setAvailableRoles(roles);
                 }
             })
-            .catch(() => {
-                // fallback to initialPost roles
-                const initialRoles = (initialPost && Array.isArray(initialPost.roles) ? initialPost.roles : []) as any[];
-                const mapped = (initialRoles || []).map((r) => ({ id: Number(r.id), name: r.name }));
-                setAvailableRoles(mapped);
-                // availableRoles network error fallback
-            });
+            .catch(() => setAvailableRoles([]));
 
         fetch('/api/users', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
             .then((r) => r.json())
-            .then((d) => {
-                // users API response
-                const users = (d || []) as any[];
-                // merge initialPost.allowedUsers so selected users are visible
-                const initialUsers = (initialPost &&
-                    (Array.isArray(initialPost.allowedUsers)
-                        ? initialPost.allowedUsers
-                        : Array.isArray(initialPost.allowed_users)
-                          ? initialPost.allowed_users
-                          : [])) as any[];
-                const merged = [...users];
-                initialUsers.forEach((iu) => {
-                    if (!merged.find((m) => Number(m.id) === Number(iu.id))) merged.push({ id: Number(iu.id), name: iu.name });
-                });
-                const usersMapped = merged.map((m) => ({ id: Number(m.id), name: m.name }));
-                setAvailableUsers(usersMapped);
-                // availableUsers set
-            })
-            .catch(() => {
-                const initialUsers = (initialPost &&
-                    (Array.isArray(initialPost.allowedUsers)
-                        ? initialPost.allowedUsers
-                        : Array.isArray(initialPost.allowed_users)
-                          ? initialPost.allowed_users
-                          : [])) as any[];
-                const usersMapped = (initialUsers || []).map((u) => ({ id: Number(u.id), name: u.name }));
-                setAvailableUsers(usersMapped);
-                // availableUsers fallback set
-            });
+            .then((d) => setAvailableUsers(d || []))
+            .catch(() => setAvailableUsers([]));
     }, [initialPost]);
 
     // if initialPost is not provided via server props, fetch it from API using the id in the URL
@@ -193,9 +201,14 @@ export default function PostEdit() {
     // when initialPost becomes available, populate form state and related fields
     useEffect(() => {
         if (!initialPost) return;
+        // DEBUG: log when initialPost is observed by effect
+        // eslint-disable-next-line no-console
+        console.log('[posts.edit] initialPost effect run:', initialPost);
         try {
             setData('title', initialPost.title || '');
             setData('body', initialPost.body || '');
+            // Ensure the post type is applied to the form (fix: manual posts previously showed as board)
+            setData('type', initialPost.type || 'board');
         } catch (e) {
             // ignore
         }
@@ -210,7 +223,7 @@ export default function PostEdit() {
         setSelectedRoles(selectedRolesInit);
         setSelectedUsers(selectedUsersInit);
         setBodyHtml(initialPost.body || '');
-        // populate previews for existing attachments
+        // populate previews for existing attachments (post-level)
         const existing = Array.isArray(initialPost.attachments) ? initialPost.attachments : [];
         setPreviews(
             existing.map((a: any) => {
@@ -219,11 +232,47 @@ export default function PostEdit() {
                     url = '/storage/' + url;
                 }
                 const isImage = typeof url === 'string' && /\.(png|jpe?g|gif|svg|webp)(\?|$)/i.test(url);
-                return { url, file: undefined, isImage, existing: true };
+                return { id: a.id, url, file: undefined, isImage, existing: true };
             }),
         );
+
+        // populate manual items (if any) so edit form shows existing items for manual posts
+        const itemsSource = Array.isArray(initialPost.items)
+            ? initialPost.items
+            : Array.isArray(initialPost.post_items)
+              ? initialPost.post_items
+              : Array.isArray(initialPost.postItems)
+                ? initialPost.postItems
+                : [];
+        if (itemsSource && itemsSource.length > 0) {
+            const itemsInit = itemsSource.map((it: any) => {
+                const itemPreviews = Array.isArray(it.attachments)
+                    ? it.attachments.map((a: any) => {
+                          let url = a.file_path || a.url || a.path || '';
+                          if (url && typeof url === 'string' && !url.match(/^https?:\/\//) && !url.startsWith('/')) {
+                              url = '/storage/' + url;
+                          }
+                          const isImage = typeof url === 'string' && /\.(png|jpe?g|gif|svg|webp)(\?|$)/i.test(url);
+                          return { id: a.id, url, file: undefined, isImage, existing: true };
+                      })
+                    : [];
+                return { id: it.id, text: it.content || it.text || '', files: [], previews: itemPreviews };
+            });
+            setManualItems(itemsInit as any);
+        }
         // initialPost applied
     }, [initialPost]);
+
+    // compute whether we're editing a manual post - fall back to initialPost.type if form data isn't set yet
+    const isManual = data.type === 'manual' || (initialPost && initialPost.type === 'manual');
+
+    // DEBUG: watch data.type and manualItems to help diagnose rendering issue
+    useEffect(() => {
+        try {
+            // eslint-disable-next-line no-console
+            console.log('[posts.edit] data.type:', data.type, 'manualItems count:', manualItems.length, 'manualItems:', manualItems);
+        } catch (e) {}
+    }, [data.type, manualItems]);
 
     const submit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -279,7 +328,18 @@ export default function PostEdit() {
         };
 
         const transformedHtml = transformHtmlForSave(rawHtml);
-        form.append('body', transformedHtml);
+        // client-side validation: for board posts, body is required
+        if ((data.type || 'board') === 'board') {
+            if (!transformedHtml || transformedHtml.replace(/<[^>]*>/g, '').trim() === '') {
+                setServerErrors((prev) => {
+                    const copy = { ...prev } as Record<string, string[]>;
+                    copy.body = ['本文は必須です'];
+                    return copy;
+                });
+                return;
+            }
+        }
+        form.append('type', data.type || 'board');
         form.append('is_public', isPublic ? '1' : '0');
         form.append('audience', audience);
         // append selected roles/users only when restricted; when audience is 'all' we intentionally send none
@@ -288,6 +348,10 @@ export default function PostEdit() {
         }
         if (usersToSend.length > 0) {
             usersToSend.forEach((id) => form.append('users[]', String(id)));
+        }
+        // include any existing attachment ids the user deleted so server can remove them
+        if ((deletedAttachmentIds || []).length > 0) {
+            deletedAttachmentIds.forEach((id) => form.append('deleted_attachment_ids[]', String(id)));
         }
         try {
             const tmp = document.createElement('div');
@@ -309,9 +373,30 @@ export default function PostEdit() {
         } catch {
             // ignore
         }
-        attachments.forEach((f) => form.append('attachments[]', f));
+        // send attachments/body only for board posts; send manual items only for manual posts
+        if ((data.type || 'board') === 'board') {
+            form.append('body', transformedHtml);
+            attachments.forEach((f) => form.append('attachments[]', f));
+        }
+
+        if ((data.type || 'board') === 'manual') {
+            manualItems.forEach((it, i) => {
+                if (it.id) {
+                    form.append(`items[${i}][id]`, String(it.id));
+                }
+                form.append(`items[${i}][order]`, String(i + 1));
+                form.append(`items[${i}][content]`, it.text || '');
+                (it.files || []).forEach((f) => form.append(`item_attachments[${i}][]`, f));
+            });
+        }
 
         try {
+            // DEBUG: dump FormData entries to console to verify items ids are being sent
+            try {
+                // eslint-disable-next-line no-console
+                console.log('[posts.edit] FormData entries before submit:', Array.from((form as any).entries ? (form as any).entries() : []));
+            } catch (e) {}
+
             const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
             const postId = initialPost?.id;
             // Use POST with method override for updates to avoid client/server Inertia method/version edge cases
@@ -407,12 +492,39 @@ export default function PostEdit() {
             <div className="py-12">
                 <div className="mx-auto max-w-2xl sm:px-6 lg:px-8">
                     <form onSubmit={submit}>
+                        {Object.keys(serverErrors || {}).length > 0 && (
+                            <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                                <div className="font-medium">入力エラーがあります。以下を修正してください：</div>
+                                <ul className="mt-2 list-disc pl-5">
+                                    {Object.entries(serverErrors).map(([field, msgs]) =>
+                                        (msgs || []).map((m, i) => <li key={`${field}-${i}`}>{m}</li>),
+                                    )}
+                                </ul>
+                            </div>
+                        )}
                         <Card>
                             <CardHeader>
                                 <CardTitle>投稿を編集</CardTitle>
                             </CardHeader>
 
                             <CardContent className="space-y-6">
+                                <div>
+                                    <Label htmlFor="type">投稿タイプ</Label>
+                                    <div className="mt-2">
+                                        {/* 編集画面では投稿タイプを変更不可にする */}
+                                        <select
+                                            id="type"
+                                            className="rounded border bg-gray-100 p-2 text-sm"
+                                            value={data.type}
+                                            disabled
+                                            aria-disabled="true"
+                                        >
+                                            <option value="board">掲示板</option>
+                                            <option value="manual">マニュアル</option>
+                                        </select>
+                                    </div>
+                                </div>
+
                                 <div>
                                     <Label htmlFor="title">
                                         タイトル <span className="text-red-500">*</span>
@@ -421,67 +533,293 @@ export default function PostEdit() {
                                     <InputError message={errors.title} className="mt-2" />
                                 </div>
 
-                                <div>
-                                    <Label htmlFor="body">本文</Label>
-                                    <RichTextEditor
-                                        value={data.body}
-                                        onChange={(html) => setBodyHtml(html)}
-                                        title={data.title}
-                                        authorName={(() => {
-                                            try {
-                                                const page = (window as any).page;
-                                                return page?.props?.auth?.user?.name || '';
-                                            } catch {
-                                                return '';
-                                            }
-                                        })()}
-                                        availableUsers={availableUsers}
-                                    />
-                                    <InputError message={errors.body} className="mt-2" />
-                                </div>
+                                {isManual && (
+                                    <div className="space-y-4">
+                                        <Label>マニュアル項目</Label>
+                                        <div className="mt-2 flex items-start gap-2 rounded border border-yellow-200 bg-yellow-50 p-2 text-sm text-yellow-800">
+                                            <Info className="h-5 w-5 flex-shrink-0 text-yellow-700" />
+                                            <div>項目はドラッグで並び替えできます（モバイルでは上下ボタンで移動してください）</div>
+                                        </div>
+                                        {manualItems.map((it, idx) => (
+                                            <div
+                                                key={idx}
+                                                className="rounded border p-3"
+                                                draggable
+                                                onDragStart={(e) => onDragStartItem(e as any, idx)}
+                                                onDragOver={(e) => onDragOverItem(e as any, idx)}
+                                                onDrop={(e) => onDropItem(e as any, idx)}
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <div className="text-sm font-medium">項目 {idx + 1}</div>
+                                                    <div className="flex items-center gap-2">
+                                                        <button
+                                                            type="button"
+                                                            className="p-1 text-gray-600 hover:text-gray-800"
+                                                            onClick={() => moveItem(idx, Math.max(0, idx - 1))}
+                                                            title="上へ移動"
+                                                        >
+                                                            <ChevronUp className="h-4 w-4" />
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            className="p-1 text-gray-600 hover:text-gray-800"
+                                                            onClick={() => moveItem(idx, Math.min(manualItems.length - 1, idx + 1))}
+                                                            title="下へ移動"
+                                                        >
+                                                            <ChevronDown className="h-4 w-4" />
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            className="text-sm text-red-500"
+                                                            onClick={() => setManualItems((prev) => prev.filter((_, i) => i !== idx))}
+                                                        >
+                                                            <X className="h-4 w-4" />
+                                                        </button>
+                                                    </div>
+                                                </div>
 
-                                <div>
-                                    <Label htmlFor="attachments">添付</Label>
-                                    <div className="flex items-center gap-3">
-                                        <input ref={fileInputRef} id="attachments" className="hidden" type="file" multiple onChange={handleFile} />
-                                        <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}>
-                                            ファイル選択
-                                        </Button>
-                                        <div className="text-sm text-muted-foreground">{attachments.length} ファイル</div>
-                                    </div>
+                                                <div className="mt-2">
+                                                    <Label>画像 (任意、複数)</Label>
+                                                    <div className="flex items-center gap-3">
+                                                        <input
+                                                            ref={(el) => (manualFileInputsRef.current[idx] = el)}
+                                                            id={`item_attachments_${idx}`}
+                                                            className="hidden"
+                                                            type="file"
+                                                            multiple
+                                                            onChange={(e) => {
+                                                                const files = e.target.files ? Array.from(e.target.files) : [];
+                                                                setServerErrors((s) => {
+                                                                    const copy = { ...s } as Record<string, string[]>;
+                                                                    delete copy.attachments;
+                                                                    return copy;
+                                                                });
+                                                                setManualItems((prev) => {
+                                                                    const copy = [...prev];
+                                                                    const existingFiles = copy[idx].files || [];
+                                                                    const existingNames = new Set(existingFiles.map((f) => f.name));
+                                                                    const toAdd: File[] = [];
+                                                                    const dupNames: string[] = [];
+                                                                    files.forEach((f) => {
+                                                                        if (existingNames.has(f.name)) {
+                                                                            dupNames.push(f.name);
+                                                                        } else {
+                                                                            existingNames.add(f.name);
+                                                                            toAdd.push(f);
+                                                                        }
+                                                                    });
+                                                                    if (dupNames.length > 0) {
+                                                                        setServerErrors((prev) => ({
+                                                                            ...prev,
+                                                                            attachments: [
+                                                                                `同名のファイルは既に選択されています: ${dupNames.join(', ')}`,
+                                                                            ],
+                                                                        }));
+                                                                    }
+                                                                    const newFiles = [...existingFiles, ...toAdd];
+                                                                    const newPreviews = [
+                                                                        ...(copy[idx].previews || []),
+                                                                        ...toAdd.map((f) => ({
+                                                                            url: URL.createObjectURL(f),
+                                                                            file: f,
+                                                                            isImage: f.type.startsWith('image/'),
+                                                                        })),
+                                                                    ];
+                                                                    copy[idx] = { ...copy[idx], files: newFiles, previews: newPreviews };
+                                                                    return copy;
+                                                                });
+                                                            }}
+                                                        />
+                                                        <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            onClick={() => manualFileInputsRef.current[idx]?.click()}
+                                                        >
+                                                            ファイル選択
+                                                        </Button>
+                                                        <div className="text-sm text-muted-foreground">
+                                                            {(it.previews || []).filter((p: any) => p.existing).length + (it.files || []).length}{' '}
+                                                            ファイル
+                                                        </div>
+                                                    </div>
 
-                                    <div className="mt-3 flex items-start gap-3">
-                                        {previews.map((p, idx) => (
-                                            <div key={idx} className="relative h-20 w-20 overflow-hidden rounded bg-gray-50">
-                                                {p.isImage ? (
-                                                    <img
-                                                        src={p.url}
-                                                        alt={`attachment ${idx + 1}`}
-                                                        className="h-full w-full cursor-pointer object-cover"
-                                                        onClick={() => {
-                                                            setModalStartIndex(idx);
-                                                            setModalOpen(true);
-                                                        }}
+                                                    <div className="mt-3 flex items-start gap-3">
+                                                        {(it.previews || []).map((p, i) => (
+                                                            <div key={i} className="relative h-20 w-20 overflow-hidden rounded bg-gray-50">
+                                                                {p.isImage ? (
+                                                                    <img
+                                                                        src={p.url}
+                                                                        alt={`item ${idx} attachment ${i + 1}`}
+                                                                        className="h-full w-full cursor-pointer object-cover"
+                                                                        onClick={() => {
+                                                                            const imgs = (it.previews || [])
+                                                                                .filter((pp: any) => pp.isImage)
+                                                                                .map((pp: any) => pp.url);
+                                                                            setManualModalImages(imgs);
+                                                                            setManualModalStartIndex(
+                                                                                (imgs.findIndex((u: string) => u === p.url) + imgs.length) %
+                                                                                    imgs.length,
+                                                                            );
+                                                                            setManualModalOpen(true);
+                                                                        }}
+                                                                    />
+                                                                ) : (
+                                                                    <div className="flex h-full w-full items-center justify-center p-2 text-xs">
+                                                                        ファイル
+                                                                    </div>
+                                                                )}
+                                                                <button
+                                                                    type="button"
+                                                                    className="absolute top-1 right-1 rounded bg-white/80 px-1 text-gray-700 hover:bg-white"
+                                                                    onClick={() => {
+                                                                        setManualItems((prev) => {
+                                                                            const copy = [...prev];
+                                                                            const preview = copy[idx].previews && copy[idx].previews[i];
+                                                                            if (preview && preview.existing && preview.id) {
+                                                                                setDeletedAttachmentIds((dprev) => [...dprev, preview.id]);
+                                                                            }
+                                                                            copy[idx] = {
+                                                                                ...copy[idx],
+                                                                                files: (copy[idx].files || []).filter((_, j) => j !== i),
+                                                                                previews: (copy[idx].previews || []).filter((_, j) => j !== i),
+                                                                            };
+                                                                            return copy;
+                                                                        });
+                                                                    }}
+                                                                    title="削除"
+                                                                >
+                                                                    <X className="h-4 w-4" />
+                                                                </button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                <div className="mt-2">
+                                                    <Label>
+                                                        説明 <span className="text-red-500">*</span>
+                                                    </Label>
+                                                    <Textarea
+                                                        rows={3}
+                                                        value={it.text}
+                                                        required
+                                                        onChange={(e) =>
+                                                            setManualItems((prev) => {
+                                                                const copy = [...prev];
+                                                                copy[idx] = { ...copy[idx], text: e.target.value };
+                                                                return copy;
+                                                            })
+                                                        }
+                                                        className="mt-1"
                                                     />
-                                                ) : (
-                                                    <div className="flex h-full w-full items-center justify-center p-2 text-xs">{p.file.name}</div>
-                                                )}
-                                                <button
-                                                    type="button"
-                                                    className="absolute top-1 right-1 rounded bg-white/80 p-0.5 text-gray-700 hover:bg-white"
-                                                    onClick={() => {
-                                                        setAttachments((prev) => prev.filter((_, i) => i !== idx));
-                                                    }}
-                                                    title="削除"
-                                                >
-                                                    <X className="h-4 w-4" />
-                                                </button>
+                                                </div>
                                             </div>
                                         ))}
-                                    </div>
 
-                                    {serverErrors.attachments && <InputError message={serverErrors.attachments.join(', ')} className="mt-2" />}
-                                </div>
+                                        <div>
+                                            <button
+                                                type="button"
+                                                className="rounded bg-indigo-600 px-3 py-1 text-white"
+                                                onClick={() => setManualItems((prev) => [...prev, { text: '', files: [], previews: [] }])}
+                                            >
+                                                項目を追加
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {!isManual && (
+                                    <>
+                                        <div>
+                                            <Label htmlFor="body">本文</Label>
+                                            <RichTextEditor
+                                                value={data.body}
+                                                onChange={(html) => setBodyHtml(html)}
+                                                title={data.title}
+                                                authorName={(() => {
+                                                    try {
+                                                        const page = (window as any).page;
+                                                        return page?.props?.auth?.user?.name || '';
+                                                    } catch {
+                                                        return '';
+                                                    }
+                                                })()}
+                                                availableUsers={availableUsers}
+                                            />
+                                            <InputError
+                                                message={
+                                                    errors.body ||
+                                                    (serverErrors.body
+                                                        ? Array.isArray(serverErrors.body)
+                                                            ? serverErrors.body.join(', ')
+                                                            : serverErrors.body
+                                                        : undefined)
+                                                }
+                                                className="mt-2"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <Label htmlFor="attachments">添付</Label>
+                                            <div className="flex items-center gap-3">
+                                                <input
+                                                    ref={fileInputRef}
+                                                    id="attachments"
+                                                    className="hidden"
+                                                    type="file"
+                                                    multiple
+                                                    onChange={handleFile}
+                                                />
+                                                <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}>
+                                                    ファイル選択
+                                                </Button>
+                                                <div className="text-sm text-muted-foreground">
+                                                    {previews.filter((p) => p.existing).length + attachments.length} ファイル
+                                                </div>
+                                            </div>
+
+                                            <div className="mt-3 flex items-start gap-3">
+                                                {previews.map((p, idx) => (
+                                                    <div key={idx} className="relative h-20 w-20 overflow-hidden rounded bg-gray-50">
+                                                        {p.isImage ? (
+                                                            <img
+                                                                src={p.url}
+                                                                alt={`attachment ${idx + 1}`}
+                                                                className="h-full w-full cursor-pointer object-cover"
+                                                                onClick={() => {
+                                                                    setModalStartIndex(idx);
+                                                                    setModalOpen(true);
+                                                                }}
+                                                            />
+                                                        ) : (
+                                                            <div className="flex h-full w-full items-center justify-center p-2 text-xs">
+                                                                {p.file?.name || 'ファイル'}
+                                                            </div>
+                                                        )}
+                                                        <button
+                                                            type="button"
+                                                            className="absolute top-1 right-1 rounded bg-white/80 p-0.5 text-gray-700 hover:bg-white"
+                                                            onClick={() => {
+                                                                // If this preview corresponds to an existing attachment, remember its id for deletion
+                                                                if (p.existing && p.id) {
+                                                                    setDeletedAttachmentIds((prev) => [...prev, p.id]);
+                                                                }
+                                                                setPreviews((prev) => prev.filter((_, i) => i !== idx));
+                                                            }}
+                                                            title="削除"
+                                                        >
+                                                            <X className="h-4 w-4" />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+
+                                            {serverErrors.attachments && (
+                                                <InputError message={serverErrors.attachments.join(', ')} className="mt-2" />
+                                            )}
+                                        </div>
+                                    </>
+                                )}
 
                                 <div>
                                     <Label htmlFor="is_public">公開設定</Label>
@@ -580,6 +918,9 @@ export default function PostEdit() {
                     startIndex={modalStartIndex}
                     onClose={() => setModalOpen(false)}
                 />
+            )}
+            {manualModalOpen && (
+                <ImageModal images={manualModalImages} startIndex={manualModalStartIndex} onClose={() => setManualModalOpen(false)} />
             )}
         </AppSidebarLayout>
     );
