@@ -44,7 +44,7 @@ export default function PostShow() {
     const [reactions, setReactions] = useState<Reaction[]>(post?.reactions || []);
     // initialize viewers sorted by id (ascending)
     const [viewers, setViewers] = useState<{ id?: number; name?: string; email?: string }[]>(
-        (post?.viewers || []).slice().sort((a: any, b: any) => (Number(a?.id || 0) - Number(b?.id || 0))),
+        (post?.viewers || []).slice().sort((a: any, b: any) => Number(a?.id || 0) - Number(b?.id || 0)),
     );
     const [showViewersMobile, setShowViewersMobile] = useState(false);
     const viewersRef = useRef<HTMLDivElement | null>(null);

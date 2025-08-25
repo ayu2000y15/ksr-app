@@ -265,290 +265,293 @@ export default function PostsIndex() {
                             {/* Desktop/table view (hidden on small screens) */}
                             <div className="hidden md:block">
                                 <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>
-                                            <SortableHeader sort_key="title" queryParams={queryParams}>
-                                                タイトル
-                                            </SortableHeader>
-                                        </TableHead>
-                                        <TableHead>
-                                            <SortableHeader sort_key="audience" queryParams={queryParams}>
-                                                閲覧範囲
-                                            </SortableHeader>
-                                        </TableHead>
-                                        <TableHead>
-                                            <SortableHeader sort_key="type" queryParams={queryParams}>
-                                                投稿タイプ
-                                            </SortableHeader>
-                                        </TableHead>
-                                        <TableHead>
-                                            <SortableHeader sort_key="tags" queryParams={queryParams}>
-                                                タグ
-                                            </SortableHeader>
-                                        </TableHead>
-                                        <TableHead>
-                                            <SortableHeader sort_key="user" queryParams={queryParams}>
-                                                投稿者
-                                            </SortableHeader>
-                                        </TableHead>
-                                        <TableHead>
-                                            <SortableHeader sort_key="updated_at" queryParams={queryParams}>
-                                                最終更新日時
-                                            </SortableHeader>
-                                        </TableHead>
-                                        <TableHead className="text-right">操作</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {posts.map((post: any) => {
-                                        // ...existing code...
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>
+                                                <SortableHeader sort_key="title" queryParams={queryParams}>
+                                                    タイトル
+                                                </SortableHeader>
+                                            </TableHead>
+                                            <TableHead>
+                                                <SortableHeader sort_key="audience" queryParams={queryParams}>
+                                                    閲覧範囲
+                                                </SortableHeader>
+                                            </TableHead>
+                                            <TableHead>
+                                                <SortableHeader sort_key="type" queryParams={queryParams}>
+                                                    投稿タイプ
+                                                </SortableHeader>
+                                            </TableHead>
+                                            <TableHead>
+                                                <SortableHeader sort_key="tags" queryParams={queryParams}>
+                                                    タグ
+                                                </SortableHeader>
+                                            </TableHead>
+                                            <TableHead>
+                                                <SortableHeader sort_key="user" queryParams={queryParams}>
+                                                    投稿者
+                                                </SortableHeader>
+                                            </TableHead>
+                                            <TableHead>
+                                                <SortableHeader sort_key="updated_at" queryParams={queryParams}>
+                                                    最終更新日時
+                                                </SortableHeader>
+                                            </TableHead>
+                                            <TableHead className="text-right">操作</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {posts.map((post: any) => {
+                                            // ...existing code...
 
-                                        const formatDateTime = (iso: string | undefined) => {
-                                            if (!iso) return '—';
-                                            const d = new Date(iso);
-                                            if (Number.isNaN(d.getTime())) return '—';
-                                            const y = d.getFullYear();
-                                            const m = String(d.getMonth() + 1); // no leading zero
-                                            const dd = String(d.getDate()); // no leading zero
-                                            const hh = String(d.getHours()); // no leading zero
-                                            const mi = String(d.getMinutes()).padStart(2, '0'); // minutes two-digit
-                                            return `${y}/${m}/${dd} ${hh}:${mi}`;
-                                        };
+                                            const formatDateTime = (iso: string | undefined) => {
+                                                if (!iso) return '—';
+                                                const d = new Date(iso);
+                                                if (Number.isNaN(d.getTime())) return '—';
+                                                const y = d.getFullYear();
+                                                const m = String(d.getMonth() + 1); // no leading zero
+                                                const dd = String(d.getDate()); // no leading zero
+                                                const hh = String(d.getHours()); // no leading zero
+                                                const mi = String(d.getMinutes()).padStart(2, '0'); // minutes two-digit
+                                                return `${y}/${m}/${dd} ${hh}:${mi}`;
+                                            };
 
-                                        const onRowClick = () => {
-                                            window.location.href = route('posts.show', post.id) as unknown as string;
-                                        };
+                                            const onRowClick = () => {
+                                                window.location.href = route('posts.show', post.id) as unknown as string;
+                                            };
 
-                                        const onEdit = (e: MouseEvent) => {
-                                            e.stopPropagation();
-                                            window.location.href = route('posts.edit', post.id) as unknown as string;
-                                        };
+                                            const onEdit = (e: MouseEvent) => {
+                                                e.stopPropagation();
+                                                window.location.href = route('posts.edit', post.id) as unknown as string;
+                                            };
 
-                                        const onDelete = async (e: MouseEvent) => {
-                                            e.stopPropagation();
-                                            if (!confirm('投稿を削除します。よろしいですか？')) return;
-                                            try {
-                                                const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-                                                const res = await fetch(`/api/posts/${post.id}`, {
-                                                    method: 'DELETE',
-                                                    credentials: 'same-origin',
-                                                    headers: { 'X-CSRF-TOKEN': token, Accept: 'application/json' },
-                                                });
-                                                if (!res.ok) throw new Error('削除失敗');
-                                                setPosts((prev) => prev.filter((p) => p.id !== post.id));
-                                            } catch (err) {
-                                                console.error(err);
-                                                alert('削除に失敗しました');
-                                            }
-                                        };
+                                            const onDelete = async (e: MouseEvent) => {
+                                                e.stopPropagation();
+                                                if (!confirm('投稿を削除します。よろしいですか？')) return;
+                                                try {
+                                                    const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+                                                    const res = await fetch(`/api/posts/${post.id}`, {
+                                                        method: 'DELETE',
+                                                        credentials: 'same-origin',
+                                                        headers: { 'X-CSRF-TOKEN': token, Accept: 'application/json' },
+                                                    });
+                                                    if (!res.ok) throw new Error('削除失敗');
+                                                    setPosts((prev) => prev.filter((p) => p.id !== post.id));
+                                                } catch (err) {
+                                                    console.error(err);
+                                                    alert('削除に失敗しました');
+                                                }
+                                            };
 
-                                        const postOwnerId = post?.user?.id ?? post?.user_id ?? null;
-                                        const isDraft = post.is_public === false || Number(post.is_public) === 0 || post.is_public === '0';
-                                        const isOwnDraft = Boolean(isDraft && postOwnerId && currentUserId && Number(postOwnerId) === currentUserId);
-                                        const roles = post.roles || post.role || [];
-                                        const allowedUsers = post.allowedUsers || post.allowed_users || post.allowed_user || [];
+                                            const postOwnerId = post?.user?.id ?? post?.user_id ?? null;
+                                            const isDraft = post.is_public === false || Number(post.is_public) === 0 || post.is_public === '0';
+                                            const isOwnDraft = Boolean(
+                                                isDraft && postOwnerId && currentUserId && Number(postOwnerId) === currentUserId,
+                                            );
+                                            const roles = post.roles || post.role || [];
+                                            const allowedUsers = post.allowedUsers || post.allowed_users || post.allowed_user || [];
 
-                                        return (
-                                            <TableRow
-                                                key={post.id}
-                                                className={`cursor-pointer hover:bg-gray-50 ${isOwnDraft ? 'bg-gray-100' : ''}`}
-                                                onClick={onRowClick}
-                                            >
-                                                <TableCell className="font-medium">
-                                                    {/* Determine if current user has a view record for this post */}
-                                                    {(() => {
-                                                        const views = post.views || post.viewers || post.post_views || [];
-                                                        const isReadByMe =
-                                                            currentUserId && Array.isArray(views)
-                                                                ? views.some((v: any) => {
-                                                                      const uid = v?.user?.id ?? v?.user_id ?? v?.id ?? v;
-                                                                      return Number(uid) === Number(currentUserId);
-                                                                  })
-                                                                : false;
-                                                        return (
-                                                            <div className="flex flex-col">
-                                                                {isReadByMe ? (
-                                                                    <div className="mb-1">
-                                                                        <Badge className="bg-gray-100 text-gray-800">既読</Badge>
+                                            return (
+                                                <TableRow
+                                                    key={post.id}
+                                                    className={`cursor-pointer hover:bg-gray-50 ${isOwnDraft ? 'bg-gray-100' : ''}`}
+                                                    onClick={onRowClick}
+                                                >
+                                                    <TableCell className="font-medium">
+                                                        {/* Determine if current user has a view record for this post */}
+                                                        {(() => {
+                                                            const views = post.views || post.viewers || post.post_views || [];
+                                                            const isReadByMe =
+                                                                currentUserId && Array.isArray(views)
+                                                                    ? views.some((v: any) => {
+                                                                          const uid = v?.user?.id ?? v?.user_id ?? v?.id ?? v;
+                                                                          return Number(uid) === Number(currentUserId);
+                                                                      })
+                                                                    : false;
+                                                            return (
+                                                                <div className="flex flex-col">
+                                                                    {isReadByMe ? (
+                                                                        <div className="mb-1">
+                                                                            <Badge className="bg-gray-100 text-gray-800">既読</Badge>
+                                                                        </div>
+                                                                    ) : null}
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Link
+                                                                            href={route('posts.show', post.id)}
+                                                                            onClick={(e: MouseEvent) => e.stopPropagation()}
+                                                                            className="text-blue-600 hover:underline"
+                                                                        >
+                                                                            {post.title || '(無題)'}
+                                                                        </Link>
+                                                                        {/* show draft badge when post is not public and belongs to current user */}
+                                                                        {(() => {
+                                                                            const postOwnerId = post?.user?.id ?? post?.user_id ?? null;
+                                                                            const isDraft =
+                                                                                post.is_public === false ||
+                                                                                Number(post.is_public) === 0 ||
+                                                                                post.is_public === '0';
+                                                                            if (
+                                                                                isDraft &&
+                                                                                postOwnerId &&
+                                                                                currentUserId &&
+                                                                                Number(postOwnerId) === currentUserId
+                                                                            ) {
+                                                                                return (
+                                                                                    <span className="rounded bg-yellow-100 px-2 py-0.5 text-xs text-yellow-800">
+                                                                                        下書き
+                                                                                    </span>
+                                                                                );
+                                                                            }
+                                                                            return null;
+                                                                        })()}
                                                                     </div>
-                                                                ) : null}
-                                                                <div className="flex items-center gap-2">
-                                                                    <Link
-                                                                        href={route('posts.show', post.id)}
-                                                                        onClick={(e: MouseEvent) => e.stopPropagation()}
-                                                                        className="text-blue-600 hover:underline"
-                                                                    >
-                                                                        {post.title || '(無題)'}
-                                                                    </Link>
-                                                                    {/* show draft badge when post is not public and belongs to current user */}
-                                                                    {(() => {
-                                                                        const postOwnerId = post?.user?.id ?? post?.user_id ?? null;
-                                                                        const isDraft =
-                                                                            post.is_public === false ||
-                                                                            Number(post.is_public) === 0 ||
-                                                                            post.is_public === '0';
-                                                                        if (
-                                                                            isDraft &&
-                                                                            postOwnerId &&
-                                                                            currentUserId &&
-                                                                            Number(postOwnerId) === currentUserId
-                                                                        ) {
-                                                                            return (
-                                                                                <span className="rounded bg-yellow-100 px-2 py-0.5 text-xs text-yellow-800">
-                                                                                    下書き
-                                                                                </span>
-                                                                            );
-                                                                        }
-                                                                        return null;
-                                                                    })()}
                                                                 </div>
+                                                            );
+                                                        })()}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {post.audience === 'all' ? (
+                                                            <Link
+                                                                href={route('posts.index') + '?audience=all'}
+                                                                onClick={(e: MouseEvent) => e.stopPropagation()}
+                                                                className="inline-flex transform cursor-pointer items-center rounded transition duration-150 hover:bg-green-200 hover:opacity-95 hover:shadow-sm"
+                                                            >
+                                                                <Badge className="bg-green-100 text-green-800">全体公開</Badge>
+                                                            </Link>
+                                                        ) : post.audience === 'restricted' ? (
+                                                            <div className="flex flex-col">
+                                                                <span>
+                                                                    <Link
+                                                                        href={route('posts.index') + '?audience=restricted'}
+                                                                        onClick={(e: MouseEvent) => e.stopPropagation()}
+                                                                        className="inline-flex transform cursor-pointer items-center rounded transition duration-150 hover:bg-purple-200 hover:opacity-95 hover:shadow-sm"
+                                                                    >
+                                                                        <Badge className="bg-purple-100 text-purple-800">限定公開</Badge>
+                                                                    </Link>
+                                                                </span>
+                                                                <span className="mt-1 flex flex-wrap gap-1">
+                                                                    {/* If roles are specified, show role names; otherwise show allowed users */}
+                                                                    <>
+                                                                        {roles &&
+                                                                            roles.length > 0 &&
+                                                                            roles.map((r: { id?: number; name: string }) => (
+                                                                                <Link
+                                                                                    key={r.id || r.name}
+                                                                                    href={
+                                                                                        route('posts.index') +
+                                                                                        '?role=' +
+                                                                                        encodeURIComponent(r.id || r.name)
+                                                                                    }
+                                                                                    className="cursor-pointer rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-800 transition duration-150 hover:bg-gray-200"
+                                                                                    onClick={(e: MouseEvent) => {
+                                                                                        e.stopPropagation();
+                                                                                    }}
+                                                                                >
+                                                                                    {r.name}
+                                                                                </Link>
+                                                                            ))}
+                                                                        {allowedUsers && allowedUsers.length > 0 ? (
+                                                                            <Badge className="ml-1 bg-amber-100 text-xs text-amber-800">
+                                                                                ユーザー指定あり
+                                                                            </Badge>
+                                                                        ) : null}
+                                                                        {!(roles && roles.length > 0) &&
+                                                                        !(allowedUsers && allowedUsers.length > 0) ? (
+                                                                            <span className="text-sm text-gray-500">(対象未指定)</span>
+                                                                        ) : null}
+                                                                    </>
+                                                                </span>
                                                             </div>
-                                                        );
-                                                    })()}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {post.audience === 'all' ? (
-                                                        <Link
-                                                            href={route('posts.index') + '?audience=all'}
-                                                            onClick={(e: MouseEvent) => e.stopPropagation()}
-                                                            className="inline-flex transform cursor-pointer items-center rounded transition duration-150 hover:bg-green-200 hover:opacity-95 hover:shadow-sm"
-                                                        >
-                                                            <Badge className="bg-green-100 text-green-800">全体公開</Badge>
-                                                        </Link>
-                                                    ) : post.audience === 'restricted' ? (
-                                                        <div className="flex flex-col">
-                                                            <span>
-                                                                <Link
-                                                                    href={route('posts.index') + '?audience=restricted'}
-                                                                    onClick={(e: MouseEvent) => e.stopPropagation()}
-                                                                    className="inline-flex transform cursor-pointer items-center rounded transition duration-150 hover:bg-purple-200 hover:opacity-95 hover:shadow-sm"
-                                                                >
-                                                                    <Badge className="bg-purple-100 text-purple-800">限定公開</Badge>
-                                                                </Link>
-                                                            </span>
-                                                            <span className="mt-1 flex flex-wrap gap-1">
-                                                                {/* If roles are specified, show role names; otherwise show allowed users */}
-                                                                <>
-                                                                    {roles &&
-                                                                        roles.length > 0 &&
-                                                                        roles.map((r: { id?: number; name: string }) => (
-                                                                            <Link
-                                                                                key={r.id || r.name}
-                                                                                href={
-                                                                                    route('posts.index') +
-                                                                                    '?role=' +
-                                                                                    encodeURIComponent(r.id || r.name)
-                                                                                }
-                                                                                className="cursor-pointer rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-800 transition duration-150 hover:bg-gray-200"
-                                                                                onClick={(e: MouseEvent) => {
-                                                                                    e.stopPropagation();
-                                                                                }}
-                                                                            >
-                                                                                {r.name}
-                                                                            </Link>
-                                                                        ))}
-                                                                    {allowedUsers && allowedUsers.length > 0 ? (
-                                                                        <Badge className="ml-1 bg-amber-100 text-xs text-amber-800">
-                                                                            ユーザー指定あり
-                                                                        </Badge>
-                                                                    ) : null}
-                                                                    {!(roles && roles.length > 0) && !(allowedUsers && allowedUsers.length > 0) ? (
-                                                                        <span className="text-sm text-gray-500">(対象未指定)</span>
-                                                                    ) : null}
-                                                                </>
-                                                            </span>
-                                                        </div>
-                                                    ) : (
-                                                        <Badge variant="outline">—</Badge>
-                                                    )}
-                                                    {!post.is_public || post.is_public === false || post.is_public === '0' ? (
-                                                        <span className="ml-2 text-xs text-yellow-700">(非公開)</span>
-                                                    ) : null}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {post.type ? (
-                                                        post.type === 'board' ? (
-                                                            <Link
-                                                                href={route('posts.index') + '?type=board'}
-                                                                onClick={(e: MouseEvent) => e.stopPropagation()}
-                                                                className="inline-flex transform cursor-pointer items-center rounded transition duration-150 hover:bg-blue-200 hover:opacity-95 hover:shadow-sm"
-                                                            >
-                                                                <Badge className="bg-blue-100 text-blue-800">掲示板</Badge>
-                                                            </Link>
-                                                        ) : post.type === 'manual' ? (
-                                                            <Link
-                                                                href={route('posts.index') + '?type=manual'}
-                                                                onClick={(e: MouseEvent) => e.stopPropagation()}
-                                                                className="inline-flex transform cursor-pointer items-center rounded transition duration-150 hover:bg-sky-200 hover:opacity-95 hover:shadow-sm"
-                                                            >
-                                                                <Badge className="bg-sky-100 text-sky-800">マニュアル</Badge>
-                                                            </Link>
                                                         ) : (
-                                                            <Link
-                                                                href={route('posts.index') + '?type=' + encodeURIComponent(post.type)}
-                                                                onClick={(e: MouseEvent) => e.stopPropagation()}
-                                                                className="inline-flex transform cursor-pointer items-center rounded transition duration-150 hover:bg-gray-200 hover:opacity-95 hover:shadow-sm"
-                                                            >
-                                                                <Badge variant="outline">{post.type}</Badge>
-                                                            </Link>
-                                                        )
-                                                    ) : (
-                                                        <Badge variant="outline">—</Badge>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex flex-wrap gap-1">
-                                                        {(post.tags || []).map((t: { id?: number; name: string }) => (
-                                                            <Link
-                                                                key={t.id || t.name}
-                                                                href={route('posts.index') + '?tag=' + encodeURIComponent(t.name)}
-                                                                className="cursor-pointer rounded bg-orange-100 px-2 py-0.5 text-xs text-orange-800 transition duration-150 hover:bg-orange-200"
-                                                                onClick={(e: MouseEvent) => {
-                                                                    e.stopPropagation();
-                                                                }}
-                                                            >
-                                                                {t.name}
-                                                            </Link>
-                                                        ))}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>{post.user ? post.user.name : '—'}</TableCell>
-                                                <TableCell>{formatDateTime(post.updated_at)}</TableCell>
-                                                <TableCell className="text-right">
-                                                    {postOwnerId && currentUserId && Number(postOwnerId) === currentUserId ? (
-                                                        <div className="inline-flex justify-end gap-2">
-                                                            <Button
-                                                                variant="outline"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    onEdit(e);
-                                                                }}
-                                                            >
-                                                                <Edit className="mr-2 h-4 w-4" /> 編集
-                                                            </Button>
-                                                            <Button
-                                                                size="sm"
-                                                                variant="destructive"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    onDelete(e);
-                                                                }}
-                                                            >
-                                                                <Trash className="mr-2 h-4 w-4" /> 削除
-                                                            </Button>
+                                                            <Badge variant="outline">—</Badge>
+                                                        )}
+                                                        {!post.is_public || post.is_public === false || post.is_public === '0' ? (
+                                                            <span className="ml-2 text-xs text-yellow-700">(非公開)</span>
+                                                        ) : null}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {post.type ? (
+                                                            post.type === 'board' ? (
+                                                                <Link
+                                                                    href={route('posts.index') + '?type=board'}
+                                                                    onClick={(e: MouseEvent) => e.stopPropagation()}
+                                                                    className="inline-flex transform cursor-pointer items-center rounded transition duration-150 hover:bg-blue-200 hover:opacity-95 hover:shadow-sm"
+                                                                >
+                                                                    <Badge className="bg-blue-100 text-blue-800">掲示板</Badge>
+                                                                </Link>
+                                                            ) : post.type === 'manual' ? (
+                                                                <Link
+                                                                    href={route('posts.index') + '?type=manual'}
+                                                                    onClick={(e: MouseEvent) => e.stopPropagation()}
+                                                                    className="inline-flex transform cursor-pointer items-center rounded transition duration-150 hover:bg-sky-200 hover:opacity-95 hover:shadow-sm"
+                                                                >
+                                                                    <Badge className="bg-sky-100 text-sky-800">マニュアル</Badge>
+                                                                </Link>
+                                                            ) : (
+                                                                <Link
+                                                                    href={route('posts.index') + '?type=' + encodeURIComponent(post.type)}
+                                                                    onClick={(e: MouseEvent) => e.stopPropagation()}
+                                                                    className="inline-flex transform cursor-pointer items-center rounded transition duration-150 hover:bg-gray-200 hover:opacity-95 hover:shadow-sm"
+                                                                >
+                                                                    <Badge variant="outline">{post.type}</Badge>
+                                                                </Link>
+                                                            )
+                                                        ) : (
+                                                            <Badge variant="outline">—</Badge>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {(post.tags || []).map((t: { id?: number; name: string }) => (
+                                                                <Link
+                                                                    key={t.id || t.name}
+                                                                    href={route('posts.index') + '?tag=' + encodeURIComponent(t.name)}
+                                                                    className="cursor-pointer rounded bg-orange-100 px-2 py-0.5 text-xs text-orange-800 transition duration-150 hover:bg-orange-200"
+                                                                    onClick={(e: MouseEvent) => {
+                                                                        e.stopPropagation();
+                                                                    }}
+                                                                >
+                                                                    {t.name}
+                                                                </Link>
+                                                            ))}
                                                         </div>
-                                                    ) : null}
-                                                </TableCell>
-                                            </TableRow>
-                                        );
-                                    })}
-                                </TableBody>
+                                                    </TableCell>
+                                                    <TableCell>{post.user ? post.user.name : '—'}</TableCell>
+                                                    <TableCell>{formatDateTime(post.updated_at)}</TableCell>
+                                                    <TableCell className="text-right">
+                                                        {postOwnerId && currentUserId && Number(postOwnerId) === currentUserId ? (
+                                                            <div className="inline-flex justify-end gap-2">
+                                                                <Button
+                                                                    variant="outline"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        onEdit(e);
+                                                                    }}
+                                                                >
+                                                                    <Edit className="mr-2 h-4 w-4" /> 編集
+                                                                </Button>
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="destructive"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        onDelete(e);
+                                                                    }}
+                                                                >
+                                                                    <Trash className="mr-2 h-4 w-4" /> 削除
+                                                                </Button>
+                                                            </div>
+                                                        ) : null}
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })}
+                                    </TableBody>
                                 </Table>
                             </div>
 
                             {/* Mobile stacked card view (no horizontal scroll) */}
-                            <div className="md:hidden space-y-3">
+                            <div className="space-y-3 md:hidden">
                                 {posts.map((post: any) => {
                                     const postOwnerId = post?.user?.id ?? post?.user_id ?? null;
                                     const isDraft = post.is_public === false || Number(post.is_public) === 0 || post.is_public === '0';
@@ -567,7 +570,9 @@ export default function PostsIndex() {
                                                     <div className="flex items-center gap-2">
                                                         <h3 className="truncate text-sm font-medium">{post.title || '(無題)'}</h3>
                                                         {post.is_public === false || post.is_public === '0' ? (
-                                                            <span className="ml-1 rounded bg-yellow-100 px-2 py-0.5 text-xs text-yellow-800">下書き</span>
+                                                            <span className="ml-1 rounded bg-yellow-100 px-2 py-0.5 text-xs text-yellow-800">
+                                                                下書き
+                                                            </span>
                                                         ) : null}
                                                     </div>
                                                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -580,20 +585,42 @@ export default function PostsIndex() {
                                                     {/* Icon-only actions on mobile */}
                                                     {postOwnerId && currentUserId && Number(postOwnerId) === currentUserId ? (
                                                         <>
-                                                            <Link href={route('posts.edit', post.id)} onClick={(e: MouseEvent) => e.stopPropagation()}>
+                                                            <Link
+                                                                href={route('posts.edit', post.id)}
+                                                                onClick={(e: MouseEvent) => e.stopPropagation()}
+                                                            >
                                                                 <Button variant="outline" size="sm" className="p-2">
                                                                     <Edit className="h-4 w-4" />
                                                                 </Button>
                                                             </Link>
-                                                            <Button size="sm" variant="destructive" className="p-2" onClick={(e: MouseEvent) => { e.stopPropagation(); (async () => {
-                                                                    if (!confirm('投稿を削除します。よろしいですか？')) return;
-                                                                    try {
-                                                                        const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-                                                                        const res = await fetch(`/api/posts/${post.id}`, { method: 'DELETE', credentials: 'same-origin', headers: { 'X-CSRF-TOKEN': token, Accept: 'application/json' } });
-                                                                        if (res.ok) setPosts((prev: any[]) => prev.filter((p) => p.id !== post.id));
-                                                                        else alert('削除に失敗しました');
-                                                                    } catch (err) { console.error(err); alert('削除に失敗しました'); }
-                                                                })(); }}>
+                                                            <Button
+                                                                size="sm"
+                                                                variant="destructive"
+                                                                className="p-2"
+                                                                onClick={(e: MouseEvent) => {
+                                                                    e.stopPropagation();
+                                                                    (async () => {
+                                                                        if (!confirm('投稿を削除します。よろしいですか？')) return;
+                                                                        try {
+                                                                            const token =
+                                                                                document
+                                                                                    .querySelector('meta[name="csrf-token"]')
+                                                                                    ?.getAttribute('content') || '';
+                                                                            const res = await fetch(`/api/posts/${post.id}`, {
+                                                                                method: 'DELETE',
+                                                                                credentials: 'same-origin',
+                                                                                headers: { 'X-CSRF-TOKEN': token, Accept: 'application/json' },
+                                                                            });
+                                                                            if (res.ok)
+                                                                                setPosts((prev: any[]) => prev.filter((p) => p.id !== post.id));
+                                                                            else alert('削除に失敗しました');
+                                                                        } catch (err) {
+                                                                            console.error(err);
+                                                                            alert('削除に失敗しました');
+                                                                        }
+                                                                    })();
+                                                                }}
+                                                            >
                                                                 <Trash className="h-4 w-4" />
                                                             </Button>
                                                         </>
@@ -622,7 +649,12 @@ export default function PostsIndex() {
 
                                             <div className="flex flex-wrap items-center gap-2">
                                                 {(post.tags || []).slice(0, 5).map((t: any) => (
-                                                    <span key={t.id || t.name} className="inline-block rounded bg-orange-100 px-2 py-0.5 text-xs text-orange-800">{t.name}</span>
+                                                    <span
+                                                        key={t.id || t.name}
+                                                        className="inline-block rounded bg-orange-100 px-2 py-0.5 text-xs text-orange-800"
+                                                    >
+                                                        {t.name}
+                                                    </span>
                                                 ))}
                                             </div>
                                         </div>

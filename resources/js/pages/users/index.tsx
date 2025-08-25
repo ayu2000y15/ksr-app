@@ -152,7 +152,7 @@ export default function Index({ users: initialUsers, queryParams = {} }: PagePro
                                                     )}
                                                 </div>
                                             </div>
-                                            <div className="mt-1 text-xs text-muted-foreground truncate">LINE名：{user.line_name || '—'}</div>
+                                            <div className="mt-1 truncate text-xs text-muted-foreground">LINE名：{user.line_name || '—'}</div>
                                         </div>
 
                                         <div className="flex flex-col items-end space-y-2">
