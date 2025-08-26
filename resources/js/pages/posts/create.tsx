@@ -316,7 +316,7 @@ export default function PostCreate() {
         try {
             // DEBUG: dump FormData entries to console to verify body/manual_tag are being sent
             try {
-                // eslint-disable-next-line no-console
+                 
                 console.log('[posts.create] FormData entries before submit:', Array.from((form as any).entries ? (form as any).entries() : []));
             } catch (e) {}
 

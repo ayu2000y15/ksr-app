@@ -7,4 +7,5 @@ use Illuminate\Database\Eloquent\Model;
 class DamageCondition extends Model
 {
     protected $fillable = ['condition', 'order_column'];
+    public $timestamps = false;
 }

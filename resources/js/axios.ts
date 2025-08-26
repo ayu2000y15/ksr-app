@@ -26,7 +26,7 @@ try {
     if (xsrf) {
         axios.defaults.headers.common['X-XSRF-TOKEN'] = xsrf;
     }
-    /* eslint-disable-next-line no-unused-vars */
+     
 } catch (_e) {
     // document.cookie may be unavailable in some server-side contexts; ignore silently
 }

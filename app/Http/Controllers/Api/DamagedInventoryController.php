@@ -28,15 +28,22 @@ class DamagedInventoryController extends Controller
             ->get();
 
         // lookup lists for form selects
-        $inventoryItems = InventoryItem::with('category')->orderBy('name')->get()->map(function ($it) {
-            return [
-                'id' => $it->id,
-                'name' => $it->name,
-                'category' => $it->category ? ['id' => $it->category->id, 'name' => $it->category->name] : null,
-            ];
-        });
+        // include sort_order in response and prefer ordering by sort_order when present
+        $inventoryItems = InventoryItem::with('category')
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get()
+            ->map(function ($it) {
+                return [
+                    'id' => $it->id,
+                    'name' => $it->name,
+                    'category' => $it->category ? ['id' => $it->category->id, 'name' => $it->category->name] : null,
+                    'sort_order' => property_exists($it, 'sort_order') ? $it->sort_order : null,
+                ];
+            });
 
-        $users = User::orderBy('name')->get(['id', 'name']);
+        // return users ordered by id for predictable id-sorted lists
+        $users = User::orderBy('id')->get(['id', 'name']);
         $damageConditions = DamageCondition::orderBy('order_column')->get(['id', 'condition']);
 
         // ensure damaged_at is passed as the raw DB value (Y-m-d) to avoid timezone shifts on the client

@@ -17,7 +17,7 @@ import { AppLogo } from './app-logo';
 import { SidebarSettingsMenu } from './sidebar-settings-menu';
 
 // メインのナビゲーション項目を定義
-const mainNavItems: NavItem[] = [
+    const mainNavItems: NavItem[] = [
     { title: 'ユーザー管理', href: '/users', icon: Users, permission: 'user.view' },
     { title: '掲示板', href: '/posts', icon: MessageSquare, permission: '' },
     { title: 'シフト管理', href: '/shifts', icon: Calendar, permission: 'shift.view' },
@@ -76,12 +76,18 @@ export function AppSidebar() {
                         if (item.title === '在庫管理') {
                             if (!isSuperAdmin && !inventoryPerms.view) return null;
                         }
-                        const isActiveCandidate = currentPath === item.href || (item.href !== '/' && currentPath.startsWith(item.href));
+                        // special-case: when on damage-conditions pages, highlight "破損在庫管理"
+                        const isDamageConditionsPath = currentPath.startsWith('/inventory/damage-conditions') || currentPath.startsWith('/inventory/damaged');
+                        const isActiveCandidate =
+                            (item.href === '/inventory/damaged' && isDamageConditionsPath) ||
+                            currentPath === item.href ||
+                            (item.href !== '/' && currentPath.startsWith(item.href));
                         // If there's a deeper nav item that also matches the current path,
                         // prefer the deeper item and don't mark this parent as active.
-                        const hasDeeperMatch = mainNavItems.some(
-                            (other) => other.href !== item.href && other.href.startsWith(item.href) && currentPath.startsWith(other.href),
-                        );
+                        const hasDeeperMatch =
+                            mainNavItems.some((other) => other.href !== item.href && other.href.startsWith(item.href) && currentPath.startsWith(other.href)) ||
+                            // If on damage-conditions pages, consider the inventory parent as having a deeper match
+                            (isDamageConditionsPath && item.href === '/inventory');
                         const isActive = isActiveCandidate && !hasDeeperMatch;
                         if (item.title === '各種設定') return null;
                         return (

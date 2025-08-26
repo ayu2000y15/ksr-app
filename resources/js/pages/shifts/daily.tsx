@@ -18,10 +18,10 @@ export default function Daily() {
     const props = page.props as any;
     // DEBUG: log Inertia props obtained via usePage() to inspect available props at runtime
     try {
-        // eslint-disable-next-line no-console
+         
         console.log('usePage props:', props);
         // also log props.users explicitly for quick inspection
-        // eslint-disable-next-line no-console
+         
         console.log('props.users:', window.page && window.page.props && window.page.props.users);
     } catch {
         // ignore

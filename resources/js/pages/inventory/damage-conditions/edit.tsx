@@ -9,54 +9,42 @@ import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 
 export default function Edit() {
-    const page: any = usePage().props;
-    const category = page.inventory_category || page.category || page.categoryData || null;
+    const page = usePage();
+    const props = page.props as unknown as { damage_condition?: { id?: number; condition?: string; order_column?: number }; flash?: unknown };
+    const item = props.damage_condition || null;
 
-    // initialize with safe defaults; populate when `category` prop arrives
-    const { data, setData, patch, processing, errors } = useForm({ name: '', order_column: 0 });
+    const { data, setData, patch, processing, errors } = useForm({ condition: '', order_column: 0 });
 
-    // populate form when server prop becomes available (prevents empty fields on client navigation)
     useEffect(() => {
-        if (!category) return;
-        setData('name', category.name ?? '');
-        setData('order_column', typeof category.order_column !== 'undefined' && category.order_column !== null ? category.order_column : 0);
-    }, [category, setData]);
+        if (!item) return;
+        setData('condition', item.condition ?? '');
+        setData('order_column', typeof item.order_column !== 'undefined' && item.order_column !== null ? item.order_column : 0);
+    }, [item, setData]);
 
     const submit = (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        if (!category || !category.id) return;
-        patch(route('inventory.categories.update', category.id));
+        if (!item || !item.id) return;
+    patch(route('inventory.damage-conditions.update', item.id));
     };
 
     const breadcrumbs = [
         { title: '在庫管理', href: route('inventory.index') },
-        { title: '在庫カテゴリ', href: route('inventory.categories.index') },
+        { title: '破損状態', href: route('inventory.damage-conditions.index') },
         { title: '編集', href: '' },
     ];
 
     const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' | 'info' } | null>(null);
 
     useEffect(() => {
-        if ((page.flash && page.flash.success) || (page.flash && page.flash.error)) {
-            setToast(page.flash.success ? { message: page.flash.success, type: 'success' } : { message: page.flash.error, type: 'error' });
+        const flash = props.flash as unknown as { success?: string; error?: string } | undefined;
+        if (flash && (flash.success || flash.error)) {
+            setToast(flash.success ? { message: flash.success, type: 'success' } : { message: flash.error || '', type: 'error' });
         }
-    }, [page.flash]);
-
-    // debug: log page props to console so we can verify server-provided data
-    useEffect(() => {
-        try {
-            // `page` is the Inertia page props object (we log to find the key containing category)
-             
-            console.log('inertia page props (inventory category edit):', page);
-        } catch (e) {
-             
-            console.error('failed to log page props', e);
-        }
-    }, [page]);
+    }, [props.flash]);
 
     return (
         <AppSidebarLayout breadcrumbs={breadcrumbs}>
-            <Head title="カテゴリ編集" />
+            <Head title="破損状態 編集" />
 
             <div className="py-12">
                 <div className="mx-auto max-w-2xl sm:px-6 lg:px-8">
@@ -64,15 +52,15 @@ export default function Edit() {
                     <form onSubmit={submit}>
                         <Card>
                             <CardHeader>
-                                <CardTitle>カテゴリ情報を編集してください</CardTitle>
+                                <CardTitle>破損状態を編集してください</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-6">
                                 <div>
-                                    <Label htmlFor="name">
-                                        名称 <span className="text-red-500">*</span>
+                                    <Label htmlFor="condition">
+                                        状態 <span className="text-red-500">*</span>
                                     </Label>
-                                    <Input id="name" value={data.name} onChange={(e) => setData('name', e.target.value)} required />
-                                    <InputError message={errors.name} className="mt-2" />
+                                    <Input id="condition" value={data.condition} onChange={(e) => setData('condition', e.target.value)} required />
+                                    <InputError message={errors.condition} className="mt-2" />
                                 </div>
 
                                 <div>
@@ -92,7 +80,7 @@ export default function Edit() {
                                 </div>
                             </CardContent>
                             <CardFooter className="flex justify-end gap-4">
-                                <Link href={route('inventory.categories.index')}>
+                                <Link href={route('inventory.damage-conditions.index')}>
                                     <Button variant="outline" type="button">
                                         キャンセル
                                     </Button>

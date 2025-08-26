@@ -1,5 +1,5 @@
 import { BreadcrumbItem } from '@/types';
-import { Head, usePage } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { Edit, Plus } from 'lucide-react';
 import { Fragment, useEffect, useRef, useState } from 'react';
@@ -217,7 +217,7 @@ export default function DamagedIndexPage() {
                 } else {
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                 }
-            } catch (e) {
+            } catch {
                 // ignore scroll errors
             }
         }, 150);
@@ -228,8 +228,14 @@ export default function DamagedIndexPage() {
             const res = await axios.get('/api/damaged-inventories');
             const payload = res.data || {};
             setItems(payload.damaged || payload.data || []);
-            if (payload.inventory_items) setInventoryItems(payload.inventory_items);
-            if (payload.users) setUsers(payload.users);
+            if (payload.inventory_items) {
+                // サーバーが返す順序を尊重する（クライアント側で再ソートしない）
+                setInventoryItems(payload.inventory_items as InventoryItemOption[]);
+            }
+            if (payload.users) {
+                // サーバーが返す順序（id順）をそのまま使用
+                setUsers(payload.users as UserOption[]);
+            }
             if (payload.damage_conditions) setDamageConditions(payload.damage_conditions);
         } catch {
             // ignore
@@ -387,7 +393,12 @@ export default function DamagedIndexPage() {
                     <div>
                         <Heading title="破損在庫管理" description="破損した在庫の登録と一覧" />
                     </div>
-                    <div>
+                    <div className="flex items-center gap-2">
+                        <Link href={route('inventory.damage-conditions.index')}>
+                            <Button size="sm" variant="ghost" className="whitespace-nowrap">
+                                破損状態編集
+                            </Button>
+                        </Link>
                         <Button
                             className="flex items-center gap-2"
                             onClick={() => {
