@@ -56,6 +56,9 @@ class InventoryController extends Controller
                         continue; // skip empty row
                     }
 
+                    // prepare an empty collection for existing stocks so later logic can safely reference it
+                    $existingStocks = collect();
+
                     if (!empty($it['id'])) {
                         // update existing
                         $item = InventoryItem::find($it['id']);
