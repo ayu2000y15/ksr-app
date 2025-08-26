@@ -41,5 +41,13 @@ class AppServiceProvider extends ServiceProvider
 
             return $isSuper;
         });
+
+        // Push X-Robots-Tag middleware to the global middleware stack at runtime
+        try {
+            $kernel = $this->app->make(\Illuminate\Contracts\Http\Kernel::class);
+            $kernel->pushMiddleware(\App\Http\Middleware\XRobotsNoIndex::class);
+        } catch (\Throwable $e) {
+            // If pushing middleware fails (rare), silently ignore so app can still boot.
+        }
     }
 }

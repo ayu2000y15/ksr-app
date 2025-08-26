@@ -404,24 +404,27 @@ export default function Index({ items: initial }: any) {
                                                                 {Object.values(r.quantities).reduce((s: number, v: any) => s + (Number(v) || 0), 0)}
                                                             </div>
                                                         </div>
-                                                        <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                                                        <div className="grid grid-cols-1 gap-1 bg-gray-200 p-2 text-sm">
                                                             {locs.map((l) => {
                                                                 const qty = Number(r.quantities[l] ?? 0) || 0;
                                                                 const catKey = cat.id ? String(cat.id) : 'uncategorized';
                                                                 const editing = editingCategory === catKey;
                                                                 const editedBucket = editedData[catKey];
                                                                 const editedVal = editedBucket ? editedBucket.rows[ri].quantities[l] : qty;
-                                                                return (
-                                                                    <div key={`m-${r.id}-${l}`} className="flex justify-between">
+                                                                    return (
+                                                                    <div key={`m-${r.id}-${l}`} className="flex justify-between border-b border-gray-300 py-2">
                                                                         <span className="truncate text-gray-600">{l}</span>
                                                                         {editing ? (
                                                                             <input
                                                                                 type="number"
                                                                                 value={editedVal ?? ''}
                                                                                 onChange={(e) => updateQty(catKey, ri, l, e.target.value)}
+                                                                                onFocus={(e) => (e.target as HTMLInputElement).select()}
                                                                                 onBlur={() => handleCategoryInputBlur(cat)}
-                                                                                className="h-10 w-14 py-2 text-right text-sm"
+                                                                                className="h-12 w-20 md:h-10 md:w-14 py-2 text-right text-sm"
                                                                                 inputMode="numeric"
+                                                                                pattern="[0-9]*"
+                                                                                autoComplete="off"
                                                                                 min={0}
                                                                                 step={1}
                                                                                 onKeyDown={(e) => {
