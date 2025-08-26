@@ -56,6 +56,11 @@ class PermissionsSeeder extends Seeder
             'inventory.update',
             'inventory.delete',
             'inventory.log.view',
+            // damaged inventory (破損在庫)
+            'damaged_inventory.view',
+            'damaged_inventory.create',
+            'damaged_inventory.update',
+            'damaged_inventory.delete',
 
             // default shifts (管理者向け: デフォルトシフト設定)
             'default_shift.view',

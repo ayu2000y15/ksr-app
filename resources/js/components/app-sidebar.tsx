@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/sidebar';
 import type { NavItem, SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { Calendar, CalendarCheck, Home, MessageSquare, Package, Users, Wrench } from 'lucide-react';
+import { AlertTriangle, Calendar, CalendarCheck, Home, MessageSquare, Package, Users, Wrench } from 'lucide-react';
 import * as React from 'react';
 import { AppLogo } from './app-logo';
 import { SidebarSettingsMenu } from './sidebar-settings-menu';
@@ -23,6 +23,7 @@ const mainNavItems: NavItem[] = [
     { title: 'シフト管理', href: '/shifts', icon: Calendar, permission: 'shift.view' },
     { title: '休暇申請', href: '/shift-applications', icon: CalendarCheck, permission: 'shift_application.view' },
     { title: '在庫管理', href: '/inventory', icon: Package },
+    { title: '破損在庫管理', href: '/inventory/damaged', icon: AlertTriangle, permission: 'damaged_inventory.view' },
     { title: '物件管理', href: '#', icon: Home }, // TODO
 ];
 
@@ -75,7 +76,13 @@ export function AppSidebar() {
                         if (item.title === '在庫管理') {
                             if (!isSuperAdmin && !inventoryPerms.view) return null;
                         }
-                        const isActive = currentPath === item.href || (item.href !== '/' && currentPath.startsWith(item.href));
+                        const isActiveCandidate = currentPath === item.href || (item.href !== '/' && currentPath.startsWith(item.href));
+                        // If there's a deeper nav item that also matches the current path,
+                        // prefer the deeper item and don't mark this parent as active.
+                        const hasDeeperMatch = mainNavItems.some(
+                            (other) => other.href !== item.href && other.href.startsWith(item.href) && currentPath.startsWith(other.href),
+                        );
+                        const isActive = isActiveCandidate && !hasDeeperMatch;
                         if (item.title === '各種設定') return null;
                         return (
                             <SidebarMenuItem key={item.title}>

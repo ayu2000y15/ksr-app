@@ -22,6 +22,8 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 export default function PostCreate() {
+    const ALLOWED_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.pdf', '.txt', '.xlsx'];
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
     const { data, setData, processing, errors, reset } = useForm({
         type: 'board',
         title: '',
@@ -88,29 +90,52 @@ export default function PostCreate() {
     function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
         if (!e.target.files) return;
         const files = Array.from(e.target.files);
-        // append new files, but prevent duplicate file names
-        setServerErrors((s) => {
-            const copy = { ...s } as Record<string, string[]>;
-            delete copy.attachments;
-            return copy;
-        });
-        setAttachments((prev) => {
-            const existingNames = new Set(prev.map((f) => f.name));
-            const toAdd: File[] = [];
-            const dupNames: string[] = [];
-            files.forEach((f) => {
-                if (existingNames.has(f.name)) {
-                    dupNames.push(f.name);
-                } else {
-                    existingNames.add(f.name);
-                    toAdd.push(f);
-                }
-            });
-            if (dupNames.length > 0) {
-                setServerErrors((prev) => ({ ...prev, attachments: [`同名のファイルは既に選択されています: ${dupNames.join(', ')}`] }));
+        // validate extensions and prevent duplicate file names
+        const existingNames = new Set(attachments.map((f) => f.name));
+        const toAdd: File[] = [];
+        const dupNames: string[] = [];
+        const invalidNames: string[] = [];
+        const oversizeNames: string[] = [];
+        files.forEach((f) => {
+            const parts = f.name.split('.');
+            const ext = parts.length > 1 ? '.' + parts[parts.length - 1].toLowerCase() : '';
+            if (!ALLOWED_EXTENSIONS.includes(ext)) {
+                invalidNames.push(f.name);
+                return;
             }
-            return [...prev, ...toAdd];
+            if (f.size && f.size > MAX_FILE_SIZE) {
+                oversizeNames.push(f.name);
+                return;
+            }
+            if (existingNames.has(f.name)) {
+                dupNames.push(f.name);
+            } else {
+                existingNames.add(f.name);
+                toAdd.push(f);
+            }
         });
+        const msgs: string[] = [];
+        if (dupNames.length > 0) msgs.push(`同名のファイルは既に選択されています: ${dupNames.join(', ')}`);
+        if (invalidNames.length > 0) msgs.push(`使用できないファイル形式です: ${invalidNames.join(', ')}`);
+        if (msgs.length > 0) {
+            setServerErrors((prev) => ({ ...prev, attachments: msgs }));
+        } else {
+            setServerErrors((s) => {
+                const copy = { ...s } as Record<string, string[]>;
+                delete copy.attachments;
+                return copy;
+            });
+        }
+        if (toAdd.length > 0) setAttachments((prev) => [...prev, ...toAdd]);
+    }
+
+    function formatBytes(bytes?: number) {
+        if (bytes === undefined || bytes === null) return '';
+        if (bytes < 1024) return bytes + ' B';
+        const kb = bytes / 1024;
+        if (kb < 1024) return kb.toFixed(kb < 10 ? 2 : 1) + ' KB';
+        const mb = kb / 1024;
+        return mb.toFixed(2) + ' MB';
     }
 
     // build previews when attachments change
@@ -278,8 +303,6 @@ export default function PostCreate() {
                 parts.forEach((t) => form.append('tags[]', t));
             }
         }
-
-        attachments.forEach((f) => form.append('attachments[]', f));
 
         // if manual type, append items and their files; otherwise do not send manual items
         if ((data.type || 'board') === 'manual') {
@@ -645,9 +668,16 @@ export default function PostCreate() {
                                                 <div className="text-sm text-muted-foreground">{attachments.length} ファイル</div>
                                             </div>
 
+                                            <div className="mt-2 text-sm text-muted-foreground">
+                                                使用可能なファイル形式: .png .jpg .jpeg .gif .pdf .txt .xlsx
+                                            </div>
+                                            <div className="mt-1 text-sm text-muted-foreground">
+                                                ファイルサイズは1ファイルあたり最大10MBまでです。
+                                            </div>
+
                                             <div className="mt-3 flex items-start gap-3">
                                                 {previews.map((p, idx) => (
-                                                    <div key={idx} className="relative h-20 w-20 overflow-hidden rounded bg-gray-50">
+                                                    <div key={idx} className="relative h-20 w-36 overflow-hidden rounded bg-gray-50 p-2">
                                                         {p.isImage ? (
                                                             <img
                                                                 src={p.url}
@@ -659,8 +689,9 @@ export default function PostCreate() {
                                                                 }}
                                                             />
                                                         ) : (
-                                                            <div className="flex h-full w-full items-center justify-center p-2 text-xs">
-                                                                {p.file.name}
+                                                            <div className="flex h-full w-full flex-col items-start justify-center text-xs">
+                                                                <div className="break-words">{p.file.name}</div>
+                                                                <div className="mt-1 text-xs text-gray-500">{formatBytes(p.file.size)}</div>
                                                             </div>
                                                         )}
                                                         <button

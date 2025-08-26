@@ -141,6 +141,8 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
         Route::post('categories/reorder', [\App\Http\Controllers\InventoryCategoryController::class, 'reorder'])->name('categories.reorder');
         // inventory stock logs (change history)
         Route::get('stock-logs', [\App\Http\Controllers\InventoryStockLogController::class, 'index'])->name('stock_logs.index');
+        // damaged inventory page
+        Route::inertia('damaged', 'inventory/damaged/index')->name('inventory.damaged');
     });
 });
 

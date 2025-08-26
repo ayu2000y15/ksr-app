@@ -48,16 +48,29 @@ export default function PostShow() {
     const [manualModalStartIndex, setManualModalStartIndex] = useState(0);
     // printing will use a hidden iframe appended to the document
 
-    const postAttachments = useMemo((): { url: string; isImage: boolean; original_name?: string }[] => {
+    const postAttachments = useMemo((): { url: string; isImage: boolean; original_name?: string; size?: number }[] => {
         const attachments = post?.attachments || [];
-        return (attachments || []).map((a: { file_path?: string; url?: string; path?: string; src?: string; original_name?: string }) => {
-            let url = a.file_path || a.url || a.path || a.src || '';
-            if (url && typeof url === 'string' && !url.match(/^https?:\/\//) && !url.startsWith('/')) {
-                url = '/storage/' + url;
-            }
-            const isImage = typeof url === 'string' && /\.(png|jpe?g|gif|svg|webp)(\?|$)/i.test(url);
-            return { url, isImage, original_name: a.original_name };
-        });
+        return (attachments || []).map(
+            (a: {
+                file_path?: string;
+                url?: string;
+                path?: string;
+                src?: string;
+                original_name?: string;
+                size?: number;
+                file_size?: number;
+                byte_size?: number;
+                filesize?: number;
+            }) => {
+                let url = a.file_path || a.url || a.path || a.src || '';
+                if (url && typeof url === 'string' && !url.match(/^https?:\/\//) && !url.startsWith('/')) {
+                    url = '/storage/' + url;
+                }
+                const isImage = typeof url === 'string' && /\.(png|jpe?g|gif|svg|webp)(\?|$)/i.test(url);
+                const size = (a as any).size || (a as any).file_size || (a as any).byte_size || (a as any).filesize || undefined;
+                return { url, isImage, original_name: a.original_name, size };
+            },
+        );
     }, [post?.attachments]);
 
     const manualItems = useMemo(() => {
@@ -85,7 +98,8 @@ export default function PostShow() {
                     url = '/storage/' + url;
                 }
                 const isImage = typeof url === 'string' && /\.(png|jpe?g|gif|svg|webp)(\?|$)/i.test(url);
-                return { url, isImage, original_name: a.original_name };
+                const size = a?.size || a?.file_size || a?.byte_size || a?.filesize || undefined;
+                return { url, isImage, original_name: a.original_name, size };
             });
             const content = it.content || it.text || it.description || it.body || '';
             return {
@@ -346,6 +360,15 @@ export default function PostShow() {
         return paras
             .map((p) => `<p style="margin:0 0 12px; text-align:left; white-space:pre-wrap;">${escapeHtml(p).replace(/\n/g, '<br/>')}</p>`)
             .join('');
+    }
+
+    function formatBytes(bytes?: number) {
+        if (bytes === undefined || bytes === null) return '';
+        if (bytes < 1024) return bytes + ' B';
+        const kb = bytes / 1024;
+        if (kb < 1024) return kb.toFixed(kb < 10 ? 2 : 1) + ' KB';
+        const mb = kb / 1024;
+        return mb.toFixed(2) + ' MB';
     }
 
     function handlePrint() {
@@ -623,8 +646,23 @@ export default function PostShow() {
                                                                             }}
                                                                         />
                                                                     ) : (
-                                                                        <div className="flex h-full w-full items-center justify-center p-2 text-xs">
-                                                                            {a.original_name || (a.url ? a.url.split('/').pop() : '')}
+                                                                        <div className="flex h-full w-full flex-col items-start justify-center p-2 text-xs">
+                                                                            {a.url ? (
+                                                                                <a
+                                                                                    href={a.url}
+                                                                                    download={a.original_name || undefined}
+                                                                                    className="text-xs break-words text-blue-600 underline hover:text-blue-800"
+                                                                                >
+                                                                                    {a.original_name || (a.url ? a.url.split('/').pop() : '')}
+                                                                                </a>
+                                                                            ) : (
+                                                                                <span className="break-words">{a.original_name || ''}</span>
+                                                                            )}
+                                                                            {a.size ? (
+                                                                                <div className="mt-1 text-xs text-gray-500">
+                                                                                    {formatBytes(a.size)}
+                                                                                </div>
+                                                                            ) : null}
                                                                         </div>
                                                                     )}
                                                                 </div>
@@ -653,8 +691,19 @@ export default function PostShow() {
                                                             }}
                                                         />
                                                     ) : (
-                                                        <div className="flex h-full w-full items-center justify-center p-2 text-xs">
-                                                            {p.original_name || p.url.split('/').pop()}
+                                                        <div className="flex h-full w-full flex-col items-start justify-center p-2 text-xs">
+                                                            {p.url ? (
+                                                                <a
+                                                                    href={p.url}
+                                                                    download={p.original_name || undefined}
+                                                                    className="text-xs break-words text-blue-600 underline hover:text-blue-800"
+                                                                >
+                                                                    {p.original_name || p.url.split('/').pop()}
+                                                                </a>
+                                                            ) : (
+                                                                <span className="break-words">{p.original_name || ''}</span>
+                                                            )}
+                                                            {p.size ? <div className="mt-1 text-xs text-gray-500">{formatBytes(p.size)}</div> : null}
                                                         </div>
                                                     )}
                                                 </div>

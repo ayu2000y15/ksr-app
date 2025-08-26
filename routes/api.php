@@ -71,6 +71,8 @@ Route::middleware(['web', 'auth'])->group(function () {
     // 在庫管理 API
     Route::apiResource('inventory', \App\Http\Controllers\Api\InventoryController::class);
     Route::post('inventory/{inventory}/adjust', [\App\Http\Controllers\Api\InventoryController::class, 'adjustStock']);
+    // 破損在庫管理 API
+    Route::apiResource('damaged-inventories', \App\Http\Controllers\Api\DamagedInventoryController::class);
     // 投稿へのリアクションと既読
     Route::get('posts/{post}/reactions', [\App\Http\Controllers\Api\PostInteractionController::class, 'reactions']);
     Route::post('posts/{post}/reactions', [\App\Http\Controllers\Api\PostInteractionController::class, 'toggleReaction']);

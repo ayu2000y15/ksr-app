@@ -21,6 +21,8 @@ const breadcrumbs = [
 ];
 
 export default function PostEdit() {
+    const ALLOWED_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.pdf', '.txt', '.xlsx'];
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
     // We'll read initial post data from window.page.props (Inertia provides it)
     const [initialPost, setInitialPost] = useState<any>((window as any).page?.props?.post || null);
 
@@ -49,21 +51,54 @@ export default function PostEdit() {
                 url = '/storage/' + url;
             }
             const isImage = typeof url === 'string' && /\.(png|jpe?g|gif|svg|webp)(\?|$)/i.test(url);
-            return { id: a.id, url, file: undefined, isImage, existing: true };
+            const size = a.size || a.file_size || a.byte_size || a.filesize || null;
+            const original_name = a.original_name || a.name || null;
+            return { id: a.id, url, file: undefined, isImage, existing: true, original_name, size };
         });
     });
+    // keep previews in sync with newly selected attachments (created blob URLs)
+    useEffect(() => {
+        // build previews: keep any existing previews (existing === true) and recreate previews for current attachments
+        setPreviews((prev) => {
+            // revoke previous non-existing blob URLs
+            prev.forEach((p) => {
+                try {
+                    if (!p.existing && p.url) {
+                        URL.revokeObjectURL(p.url);
+                    }
+                } catch (e) {
+                    // ignore
+                }
+            });
+            const existingPreviews = prev.filter((p) => p.existing);
+            const newCreated = (attachments || []).map((f) => ({
+                url: URL.createObjectURL(f),
+                file: f,
+                isImage: f.type.startsWith('image/'),
+                existing: false,
+            }));
+            return [...existingPreviews, ...newCreated];
+        });
+
+        return () => {
+            // cleanup created URLs on unmount
+            try {
+                (attachments || []).forEach((f) => {
+                    // we don't have direct url here; best-effort: nothing to do
+                });
+            } catch (e) {}
+        };
+    }, [attachments]);
     const [modalOpen, setModalOpen] = useState(false);
     const [modalStartIndex, setModalStartIndex] = useState(0);
     const [manualModalOpen, setManualModalOpen] = useState(false);
     const [manualModalImages, setManualModalImages] = useState<string[]>([]);
     const [manualModalStartIndex, setManualModalStartIndex] = useState(0);
     const [bodyHtml, setBodyHtml] = useState<string>(initialPost?.body || '');
-    const [manualItems, setManualItems] = useState<
-        Array<{ id?: number; text: string; files: File[]; previews: { url: string; file?: File; isImage: boolean }[] }>
-    >(
-        (initialPost && Array.isArray(initialPost.items)
+    const [manualItems, setManualItems] = useState<any[]>(
+        initialPost && Array.isArray(initialPost.items)
             ? initialPost.items.map((it: any) => ({ id: it.id, text: it.content || '', files: [], previews: [] }))
-            : [{ text: '', files: [], previews: [] }]) as any,
+            : [{ text: '', files: [], previews: [] }],
     );
     const dragSrcIndex = React.useRef<number | null>(null);
     // Initialize manualTag from existing post tags (if any) so they show in the edit input
@@ -127,28 +162,52 @@ export default function PostEdit() {
     function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
         if (!e.target.files) return;
         const files = Array.from(e.target.files);
-        setServerErrors((s) => {
-            const copy = { ...s } as Record<string, string[]>;
-            delete copy.attachments;
-            return copy;
-        });
-        setAttachments((prev) => {
-            const existingNames = new Set(prev.map((f) => f.name));
-            const toAdd: File[] = [];
-            const dupNames: string[] = [];
-            files.forEach((f) => {
-                if (existingNames.has(f.name)) {
-                    dupNames.push(f.name);
-                } else {
-                    existingNames.add(f.name);
-                    toAdd.push(f);
-                }
-            });
-            if (dupNames.length > 0) {
-                setServerErrors((prev) => ({ ...prev, attachments: [`同名のファイルは既に選択されています: ${dupNames.join(', ')}`] }));
+        // validate extensions and prevent duplicate file names
+        const existingNames = new Set(attachments.map((f) => f.name));
+        const toAdd: File[] = [];
+        const dupNames: string[] = [];
+        const invalidNames: string[] = [];
+        const oversizeNames: string[] = [];
+        files.forEach((f) => {
+            const parts = f.name.split('.');
+            const ext = parts.length > 1 ? '.' + parts[parts.length - 1].toLowerCase() : '';
+            if (!ALLOWED_EXTENSIONS.includes(ext)) {
+                invalidNames.push(f.name);
+                return;
             }
-            return [...prev, ...toAdd];
+            if (f.size && f.size > MAX_FILE_SIZE) {
+                oversizeNames.push(f.name);
+                return;
+            }
+            if (existingNames.has(f.name)) {
+                dupNames.push(f.name);
+            } else {
+                existingNames.add(f.name);
+                toAdd.push(f);
+            }
         });
+        const msgs: string[] = [];
+        if (dupNames.length > 0) msgs.push(`同名のファイルは既に選択されています: ${dupNames.join(', ')}`);
+        if (invalidNames.length > 0) msgs.push(`使用できないファイル形式です: ${invalidNames.join(', ')}`);
+        if (msgs.length > 0) {
+            setServerErrors((prev) => ({ ...prev, attachments: msgs }));
+        } else {
+            setServerErrors((s) => {
+                const copy = { ...s } as Record<string, string[]>;
+                delete copy.attachments;
+                return copy;
+            });
+        }
+        if (toAdd.length > 0) setAttachments((prev) => [...prev, ...toAdd]);
+    }
+
+    function formatBytes(bytes?: number) {
+        if (bytes === undefined || bytes === null) return '';
+        if (bytes < 1024) return bytes + ' B';
+        const kb = bytes / 1024;
+        if (kb < 1024) return kb.toFixed(kb < 10 ? 2 : 1) + ' KB';
+        const mb = kb / 1024;
+        return mb.toFixed(2) + ' MB';
     }
 
     useEffect(() => {
@@ -232,7 +291,9 @@ export default function PostEdit() {
                     url = '/storage/' + url;
                 }
                 const isImage = typeof url === 'string' && /\.(png|jpe?g|gif|svg|webp)(\?|$)/i.test(url);
-                return { id: a.id, url, file: undefined, isImage, existing: true };
+                const size = a.size || a.file_size || a.byte_size || a.filesize || null;
+                const original_name = a.original_name || a.name || null;
+                return { id: a.id, url, file: undefined, isImage, existing: true, original_name, size };
             }),
         );
 
@@ -253,7 +314,9 @@ export default function PostEdit() {
                               url = '/storage/' + url;
                           }
                           const isImage = typeof url === 'string' && /\.(png|jpe?g|gif|svg|webp)(\?|$)/i.test(url);
-                          return { id: a.id, url, file: undefined, isImage, existing: true };
+                          const size = a.size || a.file_size || a.byte_size || a.filesize || null;
+                          const original_name = a.original_name || a.name || null;
+                          return { id: a.id, url, file: undefined, isImage, existing: true, original_name, size };
                       })
                     : [];
                 return { id: it.id, text: it.content || it.text || '', files: [], previews: itemPreviews };
@@ -633,12 +696,15 @@ export default function PostEdit() {
 
                                                     <div className="mt-3 flex items-start gap-3">
                                                         {(it.previews || []).map((p, i) => (
-                                                            <div key={i} className="relative h-20 w-20 overflow-hidden rounded bg-gray-50">
+                                                            <div
+                                                                key={i}
+                                                                className="relative flex w-28 flex-col items-center overflow-hidden rounded bg-gray-50"
+                                                            >
                                                                 {p.isImage ? (
                                                                     <img
                                                                         src={p.url}
                                                                         alt={`item ${idx} attachment ${i + 1}`}
-                                                                        className="h-full w-full cursor-pointer object-cover"
+                                                                        className="h-20 w-20 cursor-pointer object-cover"
                                                                         onClick={() => {
                                                                             const imgs = (it.previews || [])
                                                                                 .filter((pp: any) => pp.isImage)
@@ -652,10 +718,19 @@ export default function PostEdit() {
                                                                         }}
                                                                     />
                                                                 ) : (
-                                                                    <div className="flex h-full w-full items-center justify-center p-2 text-xs">
-                                                                        ファイル
+                                                                    <div className="flex h-20 w-20 items-center justify-center p-2 text-xs">
+                                                                        <div className="text-center">
+                                                                            {p.original_name || p.file?.name || 'ファイル'}
+                                                                        </div>
                                                                     </div>
                                                                 )}
+                                                                <div className="text-xs text-gray-500">
+                                                                    {typeof p.size === 'number'
+                                                                        ? formatBytes(p.size)
+                                                                        : p.file
+                                                                          ? formatBytes(p.file.size)
+                                                                          : ''}
+                                                                </div>
                                                                 <button
                                                                     type="button"
                                                                     className="absolute top-1 right-1 rounded bg-white/80 px-1 text-gray-700 hover:bg-white"
@@ -766,24 +841,42 @@ export default function PostEdit() {
                                                 </div>
                                             </div>
 
+                                            <div className="mt-2 text-sm text-muted-foreground">
+                                                使用可能なファイル形式: .png .jpg .jpeg .gif .pdf .txt .xlsx
+                                            </div>
+                                            <div className="mt-1 text-sm text-muted-foreground">
+                                                ファイルサイズは1ファイルあたり最大10MBまでです。
+                                            </div>
+
                                             <div className="mt-3 flex items-start gap-3">
                                                 {previews.map((p, idx) => (
-                                                    <div key={idx} className="relative h-20 w-20 overflow-hidden rounded bg-gray-50">
+                                                    <div
+                                                        key={idx}
+                                                        className="relative flex w-28 flex-col items-center overflow-hidden rounded bg-gray-50"
+                                                    >
                                                         {p.isImage ? (
                                                             <img
                                                                 src={p.url}
                                                                 alt={`attachment ${idx + 1}`}
-                                                                className="h-full w-full cursor-pointer object-cover"
+                                                                className="h-20 w-20 cursor-pointer object-cover"
                                                                 onClick={() => {
                                                                     setModalStartIndex(idx);
                                                                     setModalOpen(true);
                                                                 }}
                                                             />
                                                         ) : (
-                                                            <div className="flex h-full w-full items-center justify-center p-2 text-xs">
-                                                                {p.file?.name || 'ファイル'}
+                                                            <div className="flex h-20 w-20 items-center justify-center p-2 text-xs">
+                                                                <div className="text-center">{p.original_name || p.file?.name || 'ファイル'}</div>
                                                             </div>
                                                         )}
+
+                                                        <div className="text-xs text-gray-500">
+                                                            {typeof p.size === 'number'
+                                                                ? formatBytes(p.size)
+                                                                : p.file
+                                                                  ? formatBytes(p.file.size)
+                                                                  : ''}
+                                                        </div>
                                                         <button
                                                             type="button"
                                                             className="absolute top-1 right-1 rounded bg-white/80 p-0.5 text-gray-700 hover:bg-white"
@@ -791,6 +884,22 @@ export default function PostEdit() {
                                                                 // If this preview corresponds to an existing attachment, remember its id for deletion
                                                                 if (p.existing && p.id) {
                                                                     setDeletedAttachmentIds((prev) => [...prev, p.id]);
+                                                                }
+                                                                // If this preview was created from a newly selected File, revoke its blob URL and remove the File from attachments
+                                                                if (!p.existing && p.file) {
+                                                                    try {
+                                                                        if (p.url) URL.revokeObjectURL(p.url);
+                                                                    } catch (e) {}
+                                                                    setAttachments((prev) =>
+                                                                        prev.filter(
+                                                                            (f) =>
+                                                                                !(
+                                                                                    f.name === p.file.name &&
+                                                                                    f.size === p.file.size &&
+                                                                                    f.lastModified === p.file.lastModified
+                                                                                ),
+                                                                        ),
+                                                                    );
                                                                 }
                                                                 setPreviews((prev) => prev.filter((_, i) => i !== idx));
                                                             }}
