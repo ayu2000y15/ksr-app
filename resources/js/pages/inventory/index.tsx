@@ -411,8 +411,11 @@ export default function Index({ items: initial }: any) {
                                                                 const editing = editingCategory === catKey;
                                                                 const editedBucket = editedData[catKey];
                                                                 const editedVal = editedBucket ? editedBucket.rows[ri].quantities[l] : qty;
-                                                                    return (
-                                                                    <div key={`m-${r.id}-${l}`} className="flex justify-between border-b border-gray-300 py-2">
+                                                                return (
+                                                                    <div
+                                                                        key={`m-${r.id}-${l}`}
+                                                                        className="flex justify-between border-b border-gray-300 py-2"
+                                                                    >
                                                                         <span className="truncate text-gray-600">{l}</span>
                                                                         {editing ? (
                                                                             <input
@@ -421,7 +424,7 @@ export default function Index({ items: initial }: any) {
                                                                                 onChange={(e) => updateQty(catKey, ri, l, e.target.value)}
                                                                                 onFocus={(e) => (e.target as HTMLInputElement).select()}
                                                                                 onBlur={() => handleCategoryInputBlur(cat)}
-                                                                                className="h-12 w-20 md:h-10 md:w-14 py-2 text-right text-sm"
+                                                                                className="h-12 w-20 py-2 text-right text-sm md:h-10 md:w-14"
                                                                                 inputMode="numeric"
                                                                                 pattern="[0-9]*"
                                                                                 autoComplete="off"
