@@ -22,10 +22,45 @@ class DamagedInventoryController extends Controller
     }
     public function index()
     {
-        $damaged = DamagedInventory::with(['inventoryItem.category', 'handlerUser', 'damageCondition', 'attachments'])
-            ->orderBy('damaged_at', 'desc')
-            ->orderBy('id', 'desc')
-            ->get();
+        $sort = request()->query('sort');
+        $direction = strtolower(request()->query('direction', 'desc')) === 'asc' ? 'asc' : 'desc';
+
+        // whitelist allowed sort keys and map to actual columns (optionally requiring a join)
+        $sortMap = [
+            'damaged_at' => ['type' => 'column', 'value' => 'damaged_inventories.damaged_at'],
+            'id' => ['type' => 'column', 'value' => 'damaged_inventories.id'],
+            'management_number' => ['type' => 'column', 'value' => 'damaged_inventories.management_number'],
+            // related columns (require left join)
+            'inventory_item.name' => ['type' => 'join', 'table' => 'inventory_items', 'local_key' => 'inventory_item_id', 'foreign_col' => 'name'],
+            'handler_user.name' => ['type' => 'join', 'table' => 'users', 'local_key' => 'handler_user_id', 'foreign_col' => 'name'],
+        ];
+
+        $query = DamagedInventory::query();
+        // eager load relations for response
+        $query->with(['inventoryItem.category', 'handlerUser', 'damageCondition', 'attachments']);
+
+        if ($sort && isset($sortMap[$sort])) {
+            $m = $sortMap[$sort];
+            if ($m['type'] === 'column') {
+                $query->orderBy($m['value'], $direction);
+            } else {
+                // perform left join to allow ordering by related table column
+                if ($m['table'] === 'inventory_items') {
+                    $query->select('damaged_inventories.*')
+                        ->leftJoin('inventory_items', 'damaged_inventories.inventory_item_id', '=', 'inventory_items.id')
+                        ->orderBy('inventory_items.' . $m['foreign_col'], $direction);
+                } elseif ($m['table'] === 'users') {
+                    $query->select('damaged_inventories.*')
+                        ->leftJoin('users', 'damaged_inventories.handler_user_id', '=', 'users.id')
+                        ->orderBy('users.' . $m['foreign_col'], $direction);
+                }
+            }
+        } else {
+            // default ordering
+            $query->orderBy('damaged_inventories.damaged_at', 'desc')->orderBy('damaged_inventories.id', 'desc');
+        }
+
+        $damaged = $query->get();
 
         // lookup lists for form selects
         // include sort_order in response and prefer ordering by sort_order when present
@@ -258,5 +293,58 @@ class DamagedInventoryController extends Controller
     {
         $damagedInventory->delete();
         return response()->noContent();
+    }
+
+    // Server-side aggregated stats: month -> category -> name -> { condition: count }
+    public function stats(Request $request)
+    {
+        // fetch necessary fields and join relations to avoid N+1
+        $rows = DamagedInventory::with(['inventoryItem.category', 'damageCondition'])
+            ->orderBy('damaged_at', 'desc')
+            ->get()
+            ->map(function ($d) {
+                return [
+                    'damaged_at' => $d->getRawOriginal('damaged_at'),
+                    'category' => $d->inventoryItem && $d->inventoryItem->category ? $d->inventoryItem->category->name : null,
+                    'name' => $d->inventoryItem ? $d->inventoryItem->name : null,
+                    'management_number' => $d->management_number,
+                    'condition' => $d->damageCondition ? $d->damageCondition->condition : null,
+                ];
+            });
+
+        $map = [];
+        foreach ($rows as $r) {
+            $month = $r['damaged_at'] ? substr($r['damaged_at'], 0, 7) : '未知';
+            $cat = $r['category'] ?? '未設定';
+            $name = $r['name'] ?? ($r['management_number'] ? '管理番号:' . $r['management_number'] : '未設定');
+            $cond = $r['condition'] ?? '未設定';
+
+            if (!isset($map[$month])) $map[$month] = [];
+            if (!isset($map[$month][$cat])) $map[$month][$cat] = [];
+            if (!isset($map[$month][$cat][$name])) $map[$month][$cat][$name] = [];
+            if (!isset($map[$month][$cat][$name][$cond])) $map[$month][$cat][$name][$cond] = 0;
+            $map[$month][$cat][$name][$cond]++;
+        }
+
+        // Optionally, compute totals for convenience on client
+        $out = [];
+        foreach ($map as $month => $cats) {
+            $monthTotal = 0;
+            $catList = [];
+            foreach ($cats as $catName => $names) {
+                $catTotal = 0;
+                $nameList = [];
+                foreach ($names as $nm => $conds) {
+                    $nt = array_sum(array_values($conds));
+                    $nameList[$nm] = ['total' => $nt, 'conds' => $conds];
+                    $catTotal += $nt;
+                }
+                $catList[$catName] = ['total' => $catTotal, 'names' => $nameList];
+                $monthTotal += $catTotal;
+            }
+            $out[$month] = ['total' => $monthTotal, 'categories' => $catList];
+        }
+
+        return response()->json(['stats' => $out]);
     }
 }

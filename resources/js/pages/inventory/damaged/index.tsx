@@ -2,7 +2,7 @@ import { BreadcrumbItem } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { Edit, Plus } from 'lucide-react';
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
 import Heading from '@/components/heading';
 import ImageModal from '@/components/posts/image-modal';
@@ -61,6 +61,70 @@ type FormState = {
     memo: string;
 };
 
+type StatsType = {
+    [month: string]: {
+        total: number;
+        categories: {
+            [category: string]: {
+                total: number;
+                names: {
+                    [name: string]: {
+                        total: number;
+                        conds: { [cond: string]: number };
+                    };
+                };
+            };
+        };
+    };
+};
+
+// Reusable sortable header used on users page — copied/adapted for damaged page
+const SortableHeader = ({
+    children,
+    sort_key,
+    queryParams,
+}: {
+    children: ReactNode;
+    sort_key: string;
+    queryParams?: Record<string, string> | null;
+}) => {
+    const currentSort = (queryParams && queryParams.sort) || new URLSearchParams(window.location.search).get('sort') || '';
+    const currentDirection = (queryParams && queryParams.direction) || new URLSearchParams(window.location.search).get('direction') || 'asc';
+
+    const isCurrentSort = currentSort === sort_key;
+    const newDirection = isCurrentSort && currentDirection === 'asc' ? 'desc' : 'asc';
+
+    const href = (() => {
+        try {
+            const u = new URL(window.location.href);
+            u.searchParams.set('sort', sort_key);
+            u.searchParams.set('direction', newDirection);
+            return u.pathname + u.search;
+        } catch {
+            return `?sort=${encodeURIComponent(sort_key)}&direction=${encodeURIComponent(newDirection)}`;
+        }
+    })();
+
+    return (
+        <Link href={href} preserveState preserveScroll>
+            <div className={`flex items-center gap-2 ${isCurrentSort ? 'text-indigo-600' : 'text-muted-foreground'}`}>
+                <span>{children}</span>
+                <svg className="h-3 w-3" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    {isCurrentSort ? (
+                        currentDirection === 'asc' ? (
+                            <path d="M5 12l5-5 5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        ) : (
+                            <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        )
+                    ) : (
+                        <path d="M5 12l5-5 5 5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" opacity="0.4" />
+                    )}
+                </svg>
+            </div>
+        </Link>
+    );
+};
+
 export default function DamagedIndexPage() {
     const breadcrumbs: BreadcrumbItem[] = [
         { title: '在庫管理', href: route('inventory.index') },
@@ -97,16 +161,15 @@ export default function DamagedIndexPage() {
 
     const [damagedAttachments, setDamagedAttachments] = useState<File[]>([]);
     const [damagedPreviews, setDamagedPreviews] = useState<{ url: string; file: File; isImage: boolean }[]>([]);
+    const prevDamagedPreviewsRef = useRef<{ url: string }[]>([]);
     const damagedFileInputRef = useRef<HTMLInputElement | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
-    const prevDamagedPreviewsRef = useRef<{ url: string }[]>([]);
     const formContainerRef = useRef<HTMLDivElement | null>(null);
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [customerIdPreviewUrl, setCustomerIdPreviewUrl] = useState<string | null>(null);
     const customerIdFileRef = useRef<HTMLInputElement | null>(null);
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
     const [isCustomerIdPreviewOpen, setIsCustomerIdPreviewOpen] = useState(false);
-    // damaged modal state removed; using listModalImages/listModalStartIndex instead
     const [listModalOpen, setListModalOpen] = useState(false);
     const [listModalImages, setListModalImages] = useState<string[]>([]);
     const [listModalStartIndex, setListModalStartIndex] = useState(0);
@@ -119,20 +182,13 @@ export default function DamagedIndexPage() {
     const [deletedAttachmentIds, setDeletedAttachmentIds] = useState<number[]>([]);
     const [removeExistingReceipt, setRemoveExistingReceipt] = useState(false);
     const [removeExistingCustomerId, setRemoveExistingCustomerId] = useState(false);
+    const [serverStats, setServerStats] = useState<StatsType | null>(null);
+    // derive query params from Inertia page props if present, otherwise fallback to URLSearchParams
+    const queryParams: Record<string, string> =
+        (page.props as unknown as { queryParams?: Record<string, string> }).queryParams ||
+        Object.fromEntries(new URLSearchParams(window.location.search).entries());
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!e.target.files || e.target.files.length === 0) return;
-        const f = e.target.files[0];
-        setForm({ ...form, receipt_image: f });
-        // if user selects a new receipt file, cancel any previous "remove existing" flag
-        setRemoveExistingReceipt(false);
-        if (previewUrl) URL.revokeObjectURL(previewUrl);
-        setPreviewUrl(URL.createObjectURL(f));
-        e.currentTarget.value = '';
-    };
-
-    // Format DB date (use raw YYYY-MM-DD from DB to avoid timezone shifts).
-    // Output: yyyy/m/d (曜) with no leading zero on month/day.
+    // helper: Format DB date (use raw YYYY-MM-DD to avoid timezone shifts).
     const formatDbDate = (raw?: string | null) => {
         if (!raw) return '';
         const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -141,7 +197,6 @@ export default function DamagedIndexPage() {
         const mo = Number(m[2]);
         const d = Number(m[3]);
         const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
-        // Sakamoto's algorithm for day of week (0 = Sunday) to avoid any timezone/date parsing
         const t = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
         let yy = y;
         const mm = mo;
@@ -209,7 +264,6 @@ export default function DamagedIndexPage() {
                 .filter((a) => a && a.file_path)
                 .map((a) => ({ id: a.id, file_path: a.file_path, url: `/storage/${a.file_path}`, original_name: a.original_name })),
         );
-        // after preparing the form, scroll the form into view (smooth)
         setTimeout(() => {
             try {
                 if (formContainerRef.current) {
@@ -218,14 +272,160 @@ export default function DamagedIndexPage() {
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                 }
             } catch {
-                // ignore scroll errors
+                // ignore
             }
         }, 150);
     };
 
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files || e.target.files.length === 0) return;
+        const f = e.target.files[0];
+        setForm({ ...form, receipt_image: f });
+        setRemoveExistingReceipt(false);
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+        setPreviewUrl(URL.createObjectURL(f));
+        e.currentTarget.value = '';
+    };
+    // Server-driven stats panel: expects shape { [month]: { total, categories: { [cat]: { total, names: { [name]: { total, conds } } } } } }
+    function StatsPanelServer({ stats }: { stats: StatsType | null }) {
+        const months = useMemo(() => (stats ? Object.keys(stats).sort().reverse() : []), [stats]);
+
+        const [monthsOpen, setMonthsOpen] = useState<Record<string, boolean>>(() => {
+            const map: Record<string, boolean> = {};
+            months.forEach((m) => (map[m] = true));
+            return map;
+        });
+
+        const [catsOpen, setCatsOpen] = useState<Record<string, Record<string, boolean>>>(() => {
+            const map: Record<string, Record<string, boolean>> = {};
+            months.forEach((m) => {
+                map[m] = {};
+                const ckeys = stats && stats[m] ? Object.keys(stats[m].categories || {}) : [];
+                ckeys.forEach((c) => (map[m][c] = true));
+            });
+            return map;
+        });
+
+        useEffect(() => {
+            if (!stats) return;
+            const statsJson = JSON.stringify(stats);
+            // re-init when stats changes
+            const mo: Record<string, boolean> = {};
+            const co: Record<string, Record<string, boolean>> = {};
+            months.forEach((m) => {
+                mo[m] = true;
+                co[m] = {};
+                const ckeys = Object.keys(stats[m].categories || {});
+                ckeys.forEach((c) => (co[m][c] = true));
+            });
+            setMonthsOpen(mo);
+            setCatsOpen(co);
+            // include statsJson and months so effect re-runs when stats/months change
+        }, [months, stats]);
+
+        const toggleMonth = (m: string) => setMonthsOpen((prev) => ({ ...prev, [m]: !prev[m] }));
+        const toggleCat = (m: string, c: string) => setCatsOpen((prev) => ({ ...prev, [m]: { ...(prev[m] || {}), [c]: !(prev[m] || {})[c] } }));
+
+        if (!stats || Object.keys(stats).length === 0) return <div className="text-sm text-gray-500">データがありません</div>;
+
+        return (
+            <div className="space-y-3 text-sm">
+                {months.map((month) => {
+                    const m = stats[month];
+                    const cats = m.categories || {};
+                    const isMonthOpen = monthsOpen[month] ?? true;
+                    return (
+                        <div key={month} className="rounded border-b pb-2">
+                            <div className="flex items-center justify-between">
+                                <button type="button" className="flex items-center gap-3" onClick={() => toggleMonth(month)}>
+                                    <span
+                                        className="inline-block transition-transform"
+                                        style={{ transform: isMonthOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}
+                                    >
+                                        ›
+                                    </span>
+                                    <div>
+                                        {(() => {
+                                            const parts = (month || '').split('-');
+                                            const y = parts[0] || month;
+                                            const mo = parts[1] ? parts[1].padStart(2, '0') : '';
+                                            return (
+                                                <div className="font-medium">
+                                                    {y}/{mo} <span className="text-xs text-gray-600">({m.total})</span>
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+                                </button>
+                            </div>
+
+                            {isMonthOpen && (
+                                <div className="mt-2 space-y-2 pl-2">
+                                    {Object.keys(cats).map((catName) => {
+                                        const cat = cats[catName];
+                                        const isCatOpen = (catsOpen[month] && catsOpen[month][catName]) ?? true;
+                                        return (
+                                            <div key={catName} className="rounded border p-2">
+                                                <div className="flex items-center justify-between">
+                                                    <button
+                                                        type="button"
+                                                        className="flex items-center gap-3"
+                                                        onClick={() => toggleCat(month, catName)}
+                                                    >
+                                                        <span
+                                                            className="inline-block transition-transform"
+                                                            style={{ transform: isCatOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}
+                                                        >
+                                                            ›
+                                                        </span>
+                                                        <div className="font-semibold">{catName}</div>
+                                                    </button>
+                                                    <div className="text-xs text-gray-600">合計 {cat.total}</div>
+                                                </div>
+
+                                                {isCatOpen && (
+                                                    <div className="mt-2 space-y-2 pl-3">
+                                                        {Object.keys(cat.names || {}).map((nm) => {
+                                                            const n = cat.names[nm];
+                                                            return (
+                                                                <div key={nm}>
+                                                                    <div className="font-medium">
+                                                                        {nm} <span className="text-xs text-gray-600">({n.total})</span>
+                                                                    </div>
+                                                                    <ul className="list-disc pl-6 text-sm">
+                                                                        {Object.keys(n.conds || {}).map((cond) => (
+                                                                            <li key={cond}>
+                                                                                {cond}：{n.conds[cond]}
+                                                                            </li>
+                                                                        ))}
+                                                                    </ul>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    }
+
     const fetchList = async () => {
         try {
-            const res = await axios.get('/api/damaged-inventories');
+            // include sort/direction if present in URL query string
+            const sp = new URLSearchParams(window.location.search);
+            const sort = sp.get('sort');
+            const direction = sp.get('direction');
+            const params: Record<string, string> = {};
+            if (sort) params.sort = sort;
+            if (direction) params.direction = direction;
+            const res = await axios.get('/api/damaged-inventories', { params });
             const payload = res.data || {};
             setItems(payload.damaged || payload.data || []);
             if (payload.inventory_items) {
@@ -237,14 +437,21 @@ export default function DamagedIndexPage() {
                 setUsers(payload.users as UserOption[]);
             }
             if (payload.damage_conditions) setDamageConditions(payload.damage_conditions);
+            // fetch server-side aggregated stats
+            try {
+                const sres = await axios.get('/api/damaged-inventories/stats');
+                setServerStats(sres.data?.stats || null);
+            } catch {
+                setServerStats(null);
+            }
         } catch {
             // ignore
         }
     };
-    // load list on mount
+    // load list on mount and when the Inertia page URL changes (so query params like sort/direction trigger reload)
     useEffect(() => {
         fetchList();
-    }, []);
+    }, [page.url]);
     useEffect(() => {
         // revoke previously created object URLs
         prevDamagedPreviewsRef.current.forEach((p) => URL.revokeObjectURL(p.url));
@@ -926,239 +1133,44 @@ export default function DamagedIndexPage() {
                     </div>
                 )}
 
-                <div>
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>一覧</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div>
-                                {/* Mobile: card list */}
-                                <div className="space-y-3 md:hidden">
-                                    {items.map((it: DamagedItem) => {
-                                        const thumb = (it.attachments || []).find((a: Att) => a && a.file_path);
-                                        return (
-                                            <div key={`m-${it.id}`} className="rounded border p-3">
-                                                <div className="flex items-start justify-between gap-3">
-                                                    <div className="flex-1">
-                                                        <div className="text-sm text-gray-600">
-                                                            {formatDbDate(it.damaged_at ? it.damaged_at.slice(0, 10) : it.damaged_at)}
-                                                        </div>
-                                                        <div className="mt-1 font-medium">
-                                                            {it.inventory_item
-                                                                ? `${it.inventory_item.name || ''} ${it.management_number ? `[${it.management_number}]` : ''}`
-                                                                : '—'}
-                                                        </div>
-                                                        <div className="mt-1 text-sm text-gray-500">{it.handler_user?.name || ''}</div>
-                                                    </div>
-                                                    <div className="flex shrink-0 flex-col items-end gap-2">
-                                                        {thumb ? (
-                                                            <img
-                                                                src={`/storage/${thumb.file_path}`}
-                                                                alt="thumb"
-                                                                className="h-14 w-14 rounded object-cover"
-                                                            />
-                                                        ) : (
-                                                            <div className="flex h-14 w-14 items-center justify-center rounded bg-gray-50 text-xs">
-                                                                画像なし
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                    <div className="col-span-2">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>一覧</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div>
+                                    {/* Mobile: card list */}
+                                    <div className="space-y-3 md:hidden">
+                                        {items.map((it: DamagedItem) => {
+                                            const thumb = (it.attachments || []).find((a: Att) => a && a.file_path);
+                                            return (
+                                                <div key={`m-${it.id}`} className="rounded border p-3">
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="flex-1">
+                                                            <div className="text-sm text-gray-600">
+                                                                {formatDbDate(it.damaged_at ? it.damaged_at.slice(0, 10) : it.damaged_at)}
                                                             </div>
-                                                        )}
-                                                        <Button
-                                                            variant="outline"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                startEdit(it);
-                                                            }}
-                                                        >
-                                                            <Edit className="mr-2 h-4 w-4" />
-                                                            編集
-                                                        </Button>
-                                                    </div>
-                                                </div>
-
-                                                <div className="mt-3">
-                                                    <button
-                                                        type="button"
-                                                        className="text-sm text-blue-600"
-                                                        onClick={() => setExpandedId(expandedId === it.id ? null : it.id)}
-                                                    >
-                                                        {expandedId === it.id ? '詳細を閉じる' : '詳細を表示'}
-                                                    </button>
-                                                </div>
-
-                                                {expandedId === it.id && (
-                                                    <div className="mt-3 text-sm text-gray-700">
-                                                        <div className="mb-2">
-                                                            <span className="text-gray-600">破損状態: </span>
-                                                            {it.damage_condition?.condition || '—'}
-                                                        </div>
-                                                        <div className="mb-2">
-                                                            <span className="text-gray-600">破損個所: </span>
-                                                            {it.damaged_area || '—'}
-                                                        </div>
-
-                                                        <div className="mb-2">
-                                                            <span className="text-gray-600">顧客名: </span>
-                                                            {it.customer_name || '—'}
-                                                        </div>
-
-                                                        <div className="mb-2">
-                                                            <span className="text-gray-600">顧客電話番号: </span>
-                                                            {it.customer_phone || '—'}
-                                                        </div>
-
-                                                        <div className="mb-2">
-                                                            <span className="text-gray-600">弁済金額: </span>
-                                                            {it.compensation_amount || it.compensation_amount === 0
-                                                                ? `¥${new Intl.NumberFormat('ja-JP').format(Number(it.compensation_amount))}`
-                                                                : '—'}
-                                                        </div>
-
-                                                        <div className="mb-2">
-                                                            <span className="text-gray-600">支払い方法: </span>
-                                                            {it.payment_method === 'cash'
-                                                                ? '現金'
-                                                                : it.payment_method === 'card'
-                                                                  ? 'クレジットカード'
-                                                                  : it.payment_method === 'paypay'
-                                                                    ? 'PayPay'
+                                                            <div className="mt-1 font-medium">
+                                                                {it.inventory_item
+                                                                    ? `${it.inventory_item.name || ''} ${it.management_number ? `[${it.management_number}]` : ''}`
                                                                     : '—'}
-                                                        </div>
-
-                                                        <div className="mb-2">
-                                                            <span className="text-gray-600">レシート番号: </span>
-                                                            {it.receipt_number || '—'}
-                                                        </div>
-
-                                                        <div className="mb-2">
-                                                            <span className="text-gray-600">メモ: </span>
-                                                            <div className="whitespace-pre-wrap">{it.memo || '—'}</div>
-                                                        </div>
-
-                                                        <div className="mt-3">
-                                                            <div className="text-sm text-gray-600">顧客身分証</div>
-                                                            {it.customer_id_image_path ? (
-                                                                <div className="mt-2 flex items-center gap-3">
-                                                                    <img
-                                                                        src={`/storage/${it.customer_id_image_path}`}
-                                                                        alt="customer-id"
-                                                                        className="h-24 w-24 cursor-pointer rounded object-cover"
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            const imgs = [`/storage/${it.customer_id_image_path}`];
-                                                                            setListModalImages(imgs);
-                                                                            setListModalStartIndex(0);
-                                                                            setListModalOpen(true);
-                                                                        }}
-                                                                    />
-                                                                </div>
-                                                            ) : (
-                                                                <div className="text-sm">—</div>
-                                                            )}
-                                                        </div>
-
-                                                        <div className="mt-3">
-                                                            <div className="text-sm text-gray-600">レシート</div>
-                                                            {it.receipt_image_path ? (
-                                                                <div className="mt-2 flex items-center gap-3">
-                                                                    <img
-                                                                        src={`/storage/${it.receipt_image_path}`}
-                                                                        alt="receipt"
-                                                                        className="h-24 w-24 cursor-pointer rounded object-cover"
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            const imgs = [
-                                                                                ...(it.customer_id_image_path
-                                                                                    ? [`/storage/${it.customer_id_image_path}`]
-                                                                                    : []),
-                                                                                `/storage/${it.receipt_image_path}`,
-                                                                                ...(it.attachments || [])
-                                                                                    .filter((a: Att) => a && a.file_path)
-                                                                                    .map((a: Att) => `/storage/${a.file_path}`),
-                                                                            ];
-                                                                            setListModalImages(imgs);
-                                                                            setListModalStartIndex(it.customer_id_image_path ? 0 : 0);
-                                                                            setListModalOpen(true);
-                                                                        }}
-                                                                    />
-                                                                </div>
-                                                            ) : (
-                                                                <div className="text-sm">—</div>
-                                                            )}
-                                                        </div>
-
-                                                        <div className="mt-3">
-                                                            <div className="text-sm text-gray-600">破損個所（写真）</div>
-                                                            <div className="mt-2 flex flex-wrap items-start gap-3">
-                                                                {(() => {
-                                                                    const valid = (it.attachments || []).filter((a: Att) => a && a.file_path);
-                                                                    if (valid.length === 0) return <div className="text-sm">—</div>;
-                                                                    return valid.map((a: Att, idx: number) => {
-                                                                        const url = `/storage/${a.file_path}`;
-                                                                        return (
-                                                                            <div
-                                                                                key={`m-att-${it.id}-${idx}`}
-                                                                                className="relative h-20 w-20 overflow-hidden rounded bg-gray-50"
-                                                                            >
-                                                                                <img
-                                                                                    src={url}
-                                                                                    alt={`att-${idx}`}
-                                                                                    className="h-full w-full cursor-pointer object-cover"
-                                                                                    onClick={(e) => {
-                                                                                        e.stopPropagation();
-                                                                                        const imgs = valid.map((x: Att) => `/storage/${x.file_path}`);
-                                                                                        const allImgs = (
-                                                                                            it.customer_id_image_path
-                                                                                                ? [`/storage/${it.customer_id_image_path}`]
-                                                                                                : []
-                                                                                        ).concat(imgs);
-                                                                                        const start = allImgs.indexOf(url);
-                                                                                        setListModalImages(allImgs);
-                                                                                        setListModalStartIndex(start >= 0 ? start : 0);
-                                                                                        setListModalOpen(true);
-                                                                                    }}
-                                                                                />
-                                                                            </div>
-                                                                        );
-                                                                    });
-                                                                })()}
                                                             </div>
+                                                            <div className="mt-1 text-sm text-gray-500">{it.handler_user?.name || ''}</div>
                                                         </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-
-                                {/* Desktop/table for md and up */}
-                                <div className="hidden w-full overflow-x-auto md:block">
-                                    <table className="w-full table-auto">
-                                        <thead>
-                                            <tr className="text-left text-sm text-muted-foreground">
-                                                <th className="p-2">破損日</th>
-                                                <th className="p-2">名称 [管理番号]</th>
-                                                <th className="p-2">担当者</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {items.map((it) => (
-                                                <Fragment key={it.id}>
-                                                    <tr
-                                                        key={`row-${it.id}`}
-                                                        className="cursor-pointer border-b hover:bg-gray-50"
-                                                        onClick={() => setExpandedId(expandedId === it.id ? null : it.id)}
-                                                    >
-                                                        <td className="p-2 align-top text-sm">
-                                                            {formatDbDate(it.damaged_at ? it.damaged_at.slice(0, 10) : it.damaged_at)}
-                                                        </td>
-                                                        <td className="p-2 align-top text-sm">
-                                                            {it.inventory_item
-                                                                ? `${it.inventory_item.name || ''} ${it.management_number ? `[${it.management_number}]` : ''}`
-                                                                : '—'}
-                                                        </td>
-                                                        <td className="p-2 align-top text-sm">{it.handler_user?.name || ''}</td>
-                                                        <td className="p-2 align-top text-sm">
+                                                        <div className="flex shrink-0 flex-col items-end gap-2">
+                                                            {thumb ? (
+                                                                <img
+                                                                    src={`/storage/${thumb.file_path}`}
+                                                                    alt="thumb"
+                                                                    className="h-14 w-14 rounded object-cover"
+                                                                />
+                                                            ) : (
+                                                                <div className="flex h-14 w-14 items-center justify-center rounded bg-gray-50 text-xs">
+                                                                    画像なし
+                                                                </div>
+                                                            )}
                                                             <Button
                                                                 variant="outline"
                                                                 onClick={(e) => {
@@ -1169,198 +1181,424 @@ export default function DamagedIndexPage() {
                                                                 <Edit className="mr-2 h-4 w-4" />
                                                                 編集
                                                             </Button>
-                                                        </td>
-                                                    </tr>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="mt-3">
+                                                        <button
+                                                            type="button"
+                                                            className="text-sm text-blue-600"
+                                                            onClick={() => setExpandedId(expandedId === it.id ? null : it.id)}
+                                                        >
+                                                            {expandedId === it.id ? '詳細を閉じる' : '詳細を表示'}
+                                                        </button>
+                                                    </div>
+
                                                     {expandedId === it.id && (
-                                                        <tr key={`exp-${it.id}`}>
-                                                            <td colSpan={3} className="bg-gray-50 p-4">
-                                                                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                                                                    <div>
-                                                                        <dl className="grid grid-cols-1 gap-y-2 text-sm">
-                                                                            <div className="flex items-start justify-between">
-                                                                                <dt className="w-1/3 text-gray-600">在庫</dt>
-                                                                                <dd className="w-2/3">
-                                                                                    {it.inventory_item?.category?.name
-                                                                                        ? `${it.inventory_item.category.name}：${it.inventory_item?.name}`
-                                                                                        : it.inventory_item?.name || '—'}
-                                                                                </dd>
-                                                                            </div>
+                                                        <div className="mt-3 text-sm text-gray-700">
+                                                            <div className="mb-2">
+                                                                <span className="text-gray-600">破損状態: </span>
+                                                                {it.damage_condition?.condition || '—'}
+                                                            </div>
+                                                            <div className="mb-2">
+                                                                <span className="text-gray-600">破損個所: </span>
+                                                                {it.damaged_area || '—'}
+                                                            </div>
 
-                                                                            <div className="flex items-start justify-between">
-                                                                                <dt className="w-1/3 text-gray-600">管理番号</dt>
-                                                                                <dd className="w-2/3">{it.management_number || '—'}</dd>
-                                                                            </div>
+                                                            <div className="mb-2">
+                                                                <span className="text-gray-600">顧客名: </span>
+                                                                {it.customer_name || '—'}
+                                                            </div>
 
-                                                                            <div className="flex items-start justify-between">
-                                                                                <dt className="w-1/3 text-gray-600">破損日</dt>
-                                                                                <dd className="w-2/3">
-                                                                                    {it.damaged_at ? formatDbDate(it.damaged_at.slice(0, 10)) : '—'}
-                                                                                </dd>
-                                                                            </div>
+                                                            <div className="mb-2">
+                                                                <span className="text-gray-600">顧客電話番号: </span>
+                                                                {it.customer_phone || '—'}
+                                                            </div>
 
-                                                                            <div className="flex items-start justify-between">
-                                                                                <dt className="w-1/3 text-gray-600">対応者</dt>
-                                                                                <dd className="w-2/3">{it.handler_user?.name || '—'}</dd>
-                                                                            </div>
+                                                            <div className="mb-2">
+                                                                <span className="text-gray-600">弁済金額: </span>
+                                                                {it.compensation_amount || it.compensation_amount === 0
+                                                                    ? `¥${new Intl.NumberFormat('ja-JP').format(Number(it.compensation_amount))}`
+                                                                    : '—'}
+                                                            </div>
 
-                                                                            <div className="flex items-start justify-between">
-                                                                                <dt className="w-1/3 text-gray-600">破損状態</dt>
-                                                                                <dd className="w-2/3">{it.damage_condition?.condition || '—'}</dd>
-                                                                            </div>
+                                                            <div className="mb-2">
+                                                                <span className="text-gray-600">支払い方法: </span>
+                                                                {it.payment_method === 'cash'
+                                                                    ? '現金'
+                                                                    : it.payment_method === 'card'
+                                                                      ? 'クレジットカード'
+                                                                      : it.payment_method === 'paypay'
+                                                                        ? 'PayPay'
+                                                                        : '—'}
+                                                            </div>
 
-                                                                            <div className="flex items-start justify-between">
-                                                                                <dt className="w-1/3 text-gray-600">破損個所</dt>
-                                                                                <dd className="w-2/3">{it.damaged_area || '—'}</dd>
-                                                                            </div>
+                                                            <div className="mb-2">
+                                                                <span className="text-gray-600">レシート番号: </span>
+                                                                {it.receipt_number || '—'}
+                                                            </div>
 
-                                                                            {/* Customer & payment details shown under damaged area */}
-                                                                            <div className="flex items-start justify-between">
-                                                                                <dt className="w-1/3 text-gray-600">顧客名</dt>
-                                                                                <dd className="w-2/3">{it.customer_name || '—'}</dd>
-                                                                            </div>
+                                                            <div className="mb-2">
+                                                                <span className="text-gray-600">メモ: </span>
+                                                                <div className="whitespace-pre-wrap">{it.memo || '—'}</div>
+                                                            </div>
 
-                                                                            <div className="flex items-start justify-between">
-                                                                                <dt className="w-1/3 text-gray-600">顧客電話番号</dt>
-                                                                                <dd className="w-2/3">{it.customer_phone || '—'}</dd>
-                                                                            </div>
-
-                                                                            <div className="flex items-start justify-between">
-                                                                                <dt className="w-1/3 text-gray-600">弁済金額</dt>
-                                                                                <dd className="w-2/3">
-                                                                                    {it.compensation_amount || it.compensation_amount === 0
-                                                                                        ? `¥${new Intl.NumberFormat('ja-JP').format(Number(it.compensation_amount))}`
-                                                                                        : '—'}
-                                                                                </dd>
-                                                                            </div>
-
-                                                                            <div className="flex items-start justify-between">
-                                                                                <dt className="w-1/3 text-gray-600">支払い方法</dt>
-                                                                                <dd className="w-2/3">
-                                                                                    {it.payment_method === 'cash'
-                                                                                        ? '現金'
-                                                                                        : it.payment_method === 'card'
-                                                                                          ? 'クレジットカード'
-                                                                                          : it.payment_method === 'paypay'
-                                                                                            ? 'PayPay'
-                                                                                            : '—'}
-                                                                                </dd>
-                                                                            </div>
-
-                                                                            <div className="flex items-start justify-between">
-                                                                                <dt className="w-1/3 text-gray-600">レシート番号</dt>
-                                                                                <dd className="w-2/3">{it.receipt_number || '—'}</dd>
-                                                                            </div>
-
-                                                                            <div className="flex items-start justify-between">
-                                                                                <dt className="w-1/3 text-gray-600">メモ</dt>
-                                                                                <dd className="w-2/3 whitespace-pre-wrap">{it.memo || '—'}</dd>
-                                                                            </div>
-                                                                        </dl>
+                                                            <div className="mt-3">
+                                                                <div className="text-sm text-gray-600">顧客身分証</div>
+                                                                {it.customer_id_image_path ? (
+                                                                    <div className="mt-2 flex items-center gap-3">
+                                                                        <img
+                                                                            src={`/storage/${it.customer_id_image_path}`}
+                                                                            alt="customer-id"
+                                                                            className="h-24 w-24 cursor-pointer rounded object-cover"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                const imgs = [`/storage/${it.customer_id_image_path}`];
+                                                                                setListModalImages(imgs);
+                                                                                setListModalStartIndex(0);
+                                                                                setListModalOpen(true);
+                                                                            }}
+                                                                        />
                                                                     </div>
-                                                                    <div>
-                                                                        <div className="text-sm text-gray-600">顧客身分証</div>
-                                                                        {it.customer_id_image_path ? (
-                                                                            <div className="mt-2 flex items-center gap-3">
-                                                                                <img
-                                                                                    src={`/storage/${it.customer_id_image_path}`}
-                                                                                    alt="customer-id"
-                                                                                    className="h-28 w-28 cursor-pointer rounded object-cover"
-                                                                                    onClick={() => {
-                                                                                        const imgs = [
-                                                                                            `/storage/${it.customer_id_image_path}`,
-                                                                                            ...(it.receipt_image_path
-                                                                                                ? [`/storage/${it.receipt_image_path}`]
-                                                                                                : []),
-                                                                                            ...(it.attachments || [])
-                                                                                                .filter((a: Att) => a && a.file_path)
-                                                                                                .map((a: Att) => `/storage/${a.file_path}`),
-                                                                                        ];
-                                                                                        setListModalImages(imgs);
-                                                                                        setListModalStartIndex(0);
-                                                                                        setListModalOpen(true);
-                                                                                    }}
-                                                                                />
-                                                                            </div>
-                                                                        ) : (
-                                                                            <div className="text-sm">—</div>
-                                                                        )}
+                                                                ) : (
+                                                                    <div className="text-sm">—</div>
+                                                                )}
+                                                            </div>
 
-                                                                        <div className="mt-3 text-sm text-gray-600">レシート</div>
-                                                                        {it.receipt_image_path ? (
-                                                                            <div className="mt-2 flex items-center gap-3">
-                                                                                <img
-                                                                                    src={`/storage/${it.receipt_image_path}`}
-                                                                                    alt="receipt"
-                                                                                    className="h-28 w-28 cursor-pointer rounded object-cover"
-                                                                                    onClick={() => {
-                                                                                        const imgs = [
-                                                                                            ...(it.customer_id_image_path
-                                                                                                ? [`/storage/${it.customer_id_image_path}`]
-                                                                                                : []),
-                                                                                            `/storage/${it.receipt_image_path}`,
-                                                                                            ...(it.attachments || [])
-                                                                                                .filter((a: Att) => a && a.file_path)
-                                                                                                .map((a: Att) => `/storage/${a.file_path}`),
-                                                                                        ];
-                                                                                        const start = it.customer_id_image_path ? 1 : 0;
-                                                                                        setListModalImages(imgs);
-                                                                                        setListModalStartIndex(start);
-                                                                                        setListModalOpen(true);
-                                                                                    }}
-                                                                                />
-                                                                            </div>
-                                                                        ) : (
-                                                                            <div className="text-sm">—</div>
-                                                                        )}
-
-                                                                        <div className="mt-3 text-sm text-gray-600">破損個所（写真）</div>
-                                                                        <div className="mt-2 flex flex-wrap items-start gap-3">
-                                                                            {(() => {
-                                                                                type Att = { file_path?: string };
-                                                                                const valid = ((it.attachments || []) as Att[]).filter(
-                                                                                    (a) => a && a.file_path,
-                                                                                );
-                                                                                if (valid.length === 0) return <div className="text-sm">—</div>;
-                                                                                return valid.map((a: Att, idx: number) => {
-                                                                                    const url = `/storage/${a.file_path}`;
-                                                                                    return (
-                                                                                        <div
-                                                                                            key={`att-${it.id}-${idx}`}
-                                                                                            className="relative h-20 w-20 overflow-hidden rounded bg-gray-50"
-                                                                                        >
-                                                                                            <img
-                                                                                                src={url}
-                                                                                                alt={`att-${idx}`}
-                                                                                                className="h-full w-full cursor-pointer object-cover"
-                                                                                                onClick={(e) => {
-                                                                                                    e.stopPropagation();
-                                                                                                    const imgs = valid.map(
-                                                                                                        (x: Att) => `/storage/${x.file_path}`,
-                                                                                                    );
-                                                                                                    const start = imgs.indexOf(url);
-                                                                                                    setListModalImages(imgs);
-                                                                                                    setListModalStartIndex(start >= 0 ? start : 0);
-                                                                                                    setListModalOpen(true);
-                                                                                                }}
-                                                                                            />
-                                                                                        </div>
-                                                                                    );
-                                                                                });
-                                                                            })()}
-                                                                        </div>
+                                                            <div className="mt-3">
+                                                                <div className="text-sm text-gray-600">レシート</div>
+                                                                {it.receipt_image_path ? (
+                                                                    <div className="mt-2 flex items-center gap-3">
+                                                                        <img
+                                                                            src={`/storage/${it.receipt_image_path}`}
+                                                                            alt="receipt"
+                                                                            className="h-24 w-24 cursor-pointer rounded object-cover"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                const imgs = [
+                                                                                    ...(it.customer_id_image_path
+                                                                                        ? [`/storage/${it.customer_id_image_path}`]
+                                                                                        : []),
+                                                                                    `/storage/${it.receipt_image_path}`,
+                                                                                    ...(it.attachments || [])
+                                                                                        .filter((a: Att) => a && a.file_path)
+                                                                                        .map((a: Att) => `/storage/${a.file_path}`),
+                                                                                ];
+                                                                                setListModalImages(imgs);
+                                                                                setListModalStartIndex(it.customer_id_image_path ? 0 : 0);
+                                                                                setListModalOpen(true);
+                                                                            }}
+                                                                        />
                                                                     </div>
+                                                                ) : (
+                                                                    <div className="text-sm">—</div>
+                                                                )}
+                                                            </div>
+
+                                                            <div className="mt-3">
+                                                                <div className="text-sm text-gray-600">破損個所（写真）</div>
+                                                                <div className="mt-2 flex flex-wrap items-start gap-3">
+                                                                    {(() => {
+                                                                        const valid = (it.attachments || []).filter((a: Att) => a && a.file_path);
+                                                                        if (valid.length === 0) return <div className="text-sm">—</div>;
+                                                                        return valid.map((a: Att, idx: number) => {
+                                                                            const url = `/storage/${a.file_path}`;
+                                                                            return (
+                                                                                <div
+                                                                                    key={`m-att-${it.id}-${idx}`}
+                                                                                    className="relative h-20 w-20 overflow-hidden rounded bg-gray-50"
+                                                                                >
+                                                                                    <img
+                                                                                        src={url}
+                                                                                        alt={`att-${idx}`}
+                                                                                        className="h-full w-full cursor-pointer object-cover"
+                                                                                        onClick={(e) => {
+                                                                                            e.stopPropagation();
+                                                                                            const imgs = valid.map(
+                                                                                                (x: Att) => `/storage/${x.file_path}`,
+                                                                                            );
+                                                                                            const allImgs = (
+                                                                                                it.customer_id_image_path
+                                                                                                    ? [`/storage/${it.customer_id_image_path}`]
+                                                                                                    : []
+                                                                                            ).concat(imgs);
+                                                                                            const start = allImgs.indexOf(url);
+                                                                                            setListModalImages(allImgs);
+                                                                                            setListModalStartIndex(start >= 0 ? start : 0);
+                                                                                            setListModalOpen(true);
+                                                                                        }}
+                                                                                    />
+                                                                                </div>
+                                                                            );
+                                                                        });
+                                                                    })()}
                                                                 </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {/* Desktop/table for md and up */}
+                                    <div className="hidden w-full overflow-x-auto md:block">
+                                        <table className="w-full table-auto">
+                                            <thead>
+                                                    <tr className="text-left text-sm text-muted-foreground border-b border-gray-200">
+                                                    <th className="p-2">
+                                                        <SortableHeader sort_key="damaged_at" queryParams={queryParams}>
+                                                            破損日
+                                                        </SortableHeader>
+                                                    </th>
+                                                    <th className="p-2">
+                                                        <SortableHeader sort_key="inventory_item.name" queryParams={queryParams}>
+                                                            名称 [管理番号]
+                                                        </SortableHeader>
+                                                    </th>
+                                                    <th className="p-2">
+                                                        <SortableHeader sort_key="handler_user.name" queryParams={queryParams}>
+                                                            担当者
+                                                        </SortableHeader>
+                                                    </th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {items.map((it) => (
+                                                    <Fragment key={it.id}>
+                                                        <tr
+                                                            key={`row-${it.id}`}
+                                                            className="cursor-pointer border-b hover:bg-gray-50"
+                                                            onClick={() => setExpandedId(expandedId === it.id ? null : it.id)}
+                                                        >
+                                                            <td className="p-2 align-middle text-sm">
+                                                                {formatDbDate(it.damaged_at ? it.damaged_at.slice(0, 10) : it.damaged_at)}
+                                                            </td>
+                                                            <td className="p-2 align-middle text-sm">
+                                                                {it.inventory_item
+                                                                    ? `${it.inventory_item.name || ''} ${it.management_number ? `[${it.management_number}]` : ''}`
+                                                                    : '—'}
+                                                            </td>
+                                                            <td className="p-2 align-middle text-sm">{it.handler_user?.name || ''}</td>
+                                                            <td className="p-2 align-middle text-sm">
+                                                                <Button
+                                                                    variant="outline"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        startEdit(it);
+                                                                    }}
+                                                                >
+                                                                    <Edit className="mr-2 h-4 w-4" />
+                                                                    編集
+                                                                </Button>
                                                             </td>
                                                         </tr>
-                                                    )}
-                                                </Fragment>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                                        {expandedId === it.id && (
+                                                            <tr key={`exp-${it.id}`}>
+                                                                <td colSpan={3} className="bg-gray-50 p-4">
+                                                                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                                                        <div>
+                                                                            <dl className="grid grid-cols-1 gap-y-2 text-sm">
+                                                                                <div className="flex items-start justify-between">
+                                                                                    <dt className="w-1/3 text-gray-600">在庫</dt>
+                                                                                    <dd className="w-2/3">
+                                                                                        {it.inventory_item?.category?.name
+                                                                                            ? `${it.inventory_item.category.name}：${it.inventory_item?.name}`
+                                                                                            : it.inventory_item?.name || '—'}
+                                                                                    </dd>
+                                                                                </div>
+
+                                                                                <div className="flex items-start justify-between">
+                                                                                    <dt className="w-1/3 text-gray-600">管理番号</dt>
+                                                                                    <dd className="w-2/3">{it.management_number || '—'}</dd>
+                                                                                </div>
+
+                                                                                <div className="flex items-start justify-between">
+                                                                                    <dt className="w-1/3 text-gray-600">破損日</dt>
+                                                                                    <dd className="w-2/3">
+                                                                                        {it.damaged_at
+                                                                                            ? formatDbDate(it.damaged_at.slice(0, 10))
+                                                                                            : '—'}
+                                                                                    </dd>
+                                                                                </div>
+
+                                                                                <div className="flex items-start justify-between">
+                                                                                    <dt className="w-1/3 text-gray-600">対応者</dt>
+                                                                                    <dd className="w-2/3">{it.handler_user?.name || '—'}</dd>
+                                                                                </div>
+
+                                                                                <div className="flex items-start justify-between">
+                                                                                    <dt className="w-1/3 text-gray-600">破損状態</dt>
+                                                                                    <dd className="w-2/3">{it.damage_condition?.condition || '—'}</dd>
+                                                                                </div>
+
+                                                                                <div className="flex items-start justify-between">
+                                                                                    <dt className="w-1/3 text-gray-600">破損個所</dt>
+                                                                                    <dd className="w-2/3">{it.damaged_area || '—'}</dd>
+                                                                                </div>
+
+                                                                                {/* Customer & payment details shown under damaged area */}
+                                                                                <div className="flex items-start justify-between">
+                                                                                    <dt className="w-1/3 text-gray-600">顧客名</dt>
+                                                                                    <dd className="w-2/3">{it.customer_name || '—'}</dd>
+                                                                                </div>
+
+                                                                                <div className="flex items-start justify-between">
+                                                                                    <dt className="w-1/3 text-gray-600">顧客電話番号</dt>
+                                                                                    <dd className="w-2/3">{it.customer_phone || '—'}</dd>
+                                                                                </div>
+
+                                                                                <div className="flex items-start justify-between">
+                                                                                    <dt className="w-1/3 text-gray-600">弁済金額</dt>
+                                                                                    <dd className="w-2/3">
+                                                                                        {it.compensation_amount || it.compensation_amount === 0
+                                                                                            ? `¥${new Intl.NumberFormat('ja-JP').format(Number(it.compensation_amount))}`
+                                                                                            : '—'}
+                                                                                    </dd>
+                                                                                </div>
+
+                                                                                <div className="flex items-start justify-between">
+                                                                                    <dt className="w-1/3 text-gray-600">支払い方法</dt>
+                                                                                    <dd className="w-2/3">
+                                                                                        {it.payment_method === 'cash'
+                                                                                            ? '現金'
+                                                                                            : it.payment_method === 'card'
+                                                                                              ? 'クレジットカード'
+                                                                                              : it.payment_method === 'paypay'
+                                                                                                ? 'PayPay'
+                                                                                                : '—'}
+                                                                                    </dd>
+                                                                                </div>
+
+                                                                                <div className="flex items-start justify-between">
+                                                                                    <dt className="w-1/3 text-gray-600">レシート番号</dt>
+                                                                                    <dd className="w-2/3">{it.receipt_number || '—'}</dd>
+                                                                                </div>
+
+                                                                                <div className="flex items-start justify-between">
+                                                                                    <dt className="w-1/3 text-gray-600">メモ</dt>
+                                                                                    <dd className="w-2/3 whitespace-pre-wrap">{it.memo || '—'}</dd>
+                                                                                </div>
+                                                                            </dl>
+                                                                        </div>
+                                                                        <div>
+                                                                            <div className="text-sm text-gray-600">顧客身分証</div>
+                                                                            {it.customer_id_image_path ? (
+                                                                                <div className="mt-2 flex items-center gap-3">
+                                                                                    <img
+                                                                                        src={`/storage/${it.customer_id_image_path}`}
+                                                                                        alt="customer-id"
+                                                                                        className="h-28 w-28 cursor-pointer rounded object-cover"
+                                                                                        onClick={() => {
+                                                                                            const imgs = [
+                                                                                                `/storage/${it.customer_id_image_path}`,
+                                                                                                ...(it.receipt_image_path
+                                                                                                    ? [`/storage/${it.receipt_image_path}`]
+                                                                                                    : []),
+                                                                                                ...(it.attachments || [])
+                                                                                                    .filter((a: Att) => a && a.file_path)
+                                                                                                    .map((a: Att) => `/storage/${a.file_path}`),
+                                                                                            ];
+                                                                                            setListModalImages(imgs);
+                                                                                            setListModalStartIndex(0);
+                                                                                            setListModalOpen(true);
+                                                                                        }}
+                                                                                    />
+                                                                                </div>
+                                                                            ) : (
+                                                                                <div className="text-sm">—</div>
+                                                                            )}
+
+                                                                            <div className="mt-3 text-sm text-gray-600">レシート</div>
+                                                                            {it.receipt_image_path ? (
+                                                                                <div className="mt-2 flex items-center gap-3">
+                                                                                    <img
+                                                                                        src={`/storage/${it.receipt_image_path}`}
+                                                                                        alt="receipt"
+                                                                                        className="h-28 w-28 cursor-pointer rounded object-cover"
+                                                                                        onClick={() => {
+                                                                                            const imgs = [
+                                                                                                ...(it.customer_id_image_path
+                                                                                                    ? [`/storage/${it.customer_id_image_path}`]
+                                                                                                    : []),
+                                                                                                `/storage/${it.receipt_image_path}`,
+                                                                                                ...(it.attachments || [])
+                                                                                                    .filter((a: Att) => a && a.file_path)
+                                                                                                    .map((a: Att) => `/storage/${a.file_path}`),
+                                                                                            ];
+                                                                                            const start = it.customer_id_image_path ? 1 : 0;
+                                                                                            setListModalImages(imgs);
+                                                                                            setListModalStartIndex(start);
+                                                                                            setListModalOpen(true);
+                                                                                        }}
+                                                                                    />
+                                                                                </div>
+                                                                            ) : (
+                                                                                <div className="text-sm">—</div>
+                                                                            )}
+
+                                                                            <div className="mt-3 text-sm text-gray-600">破損個所（写真）</div>
+                                                                            <div className="mt-2 flex flex-wrap items-start gap-3">
+                                                                                {(() => {
+                                                                                    type Att = { file_path?: string };
+                                                                                    const valid = ((it.attachments || []) as Att[]).filter(
+                                                                                        (a) => a && a.file_path,
+                                                                                    );
+                                                                                    if (valid.length === 0) return <div className="text-sm">—</div>;
+                                                                                    return valid.map((a: Att, idx: number) => {
+                                                                                        const url = `/storage/${a.file_path}`;
+                                                                                        return (
+                                                                                            <div
+                                                                                                key={`att-${it.id}-${idx}`}
+                                                                                                className="relative h-20 w-20 overflow-hidden rounded bg-gray-50"
+                                                                                            >
+                                                                                                <img
+                                                                                                    src={url}
+                                                                                                    alt={`att-${idx}`}
+                                                                                                    className="h-full w-full cursor-pointer object-cover"
+                                                                                                    onClick={(e) => {
+                                                                                                        e.stopPropagation();
+                                                                                                        const imgs = valid.map(
+                                                                                                            (x: Att) => `/storage/${x.file_path}`,
+                                                                                                        );
+                                                                                                        const start = imgs.indexOf(url);
+                                                                                                        setListModalImages(imgs);
+                                                                                                        setListModalStartIndex(
+                                                                                                            start >= 0 ? start : 0,
+                                                                                                        );
+                                                                                                        setListModalOpen(true);
+                                                                                                    }}
+                                                                                                />
+                                                                                            </div>
+                                                                                        );
+                                                                                    });
+                                                                                })()}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        )}
+                                                    </Fragment>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
-                            </div>
-                        </CardContent>
-                    </Card>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    <div className="col-span-1">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>月別統計</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <StatsPanelServer stats={serverStats} />
+                            </CardContent>
+                        </Card>
+                    </div>
                 </div>
 
                 {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}

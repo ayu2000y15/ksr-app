@@ -222,10 +222,34 @@ export default function Index({ items: initialItems = [] }: { items?: DamageCond
                                                     <span className="w-4" />
                                                 )}
 
-                                                <div>{c.id}</div>
+                                                <div
+                                                    className={canUpdate ? 'cursor-pointer' : ''}
+                                                    onClick={() =>
+                                                        canUpdate &&
+                                                        router.get(route('inventory.damage-conditions.edit', c.id), {}, { preserveScroll: true })
+                                                    }
+                                                >
+                                                    {c.id}
+                                                </div>
                                             </TableCell>
-                                            <TableCell>{c.condition}</TableCell>
-                                            <TableCell>{c.order_column ?? '-'}</TableCell>
+                                            <TableCell
+                                                className={canUpdate ? 'cursor-pointer' : ''}
+                                                onClick={() =>
+                                                    canUpdate &&
+                                                    router.get(route('inventory.damage-conditions.edit', c.id), {}, { preserveScroll: true })
+                                                }
+                                            >
+                                                {c.condition}
+                                            </TableCell>
+                                            <TableCell
+                                                className={canUpdate ? 'cursor-pointer' : ''}
+                                                onClick={() =>
+                                                    canUpdate &&
+                                                    router.get(route('inventory.damage-conditions.edit', c.id), {}, { preserveScroll: true })
+                                                }
+                                            >
+                                                {c.order_column ?? '-'}
+                                            </TableCell>
                                             <TableCell className="text-right">
                                                 {canDelete && (
                                                     <Button variant="destructive" size="sm" onClick={() => confirmAndDelete(c)}>

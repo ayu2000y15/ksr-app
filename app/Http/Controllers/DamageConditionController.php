@@ -32,7 +32,7 @@ class DamageConditionController extends Controller
             'order_column' => 'required|integer',
         ]);
         DamageCondition::create($data);
-    return redirect()->route('inventory.damage-conditions.index');
+        return redirect()->route('inventory.damage-conditions.index');
     }
 
     public function edit(DamageCondition $damage_condition)
@@ -50,7 +50,7 @@ class DamageConditionController extends Controller
             'order_column' => 'required|integer',
         ]);
         $damage_condition->update($data);
-    return redirect()->route('inventory.damage-conditions.index');
+        return redirect()->route('inventory.damage-conditions.index');
     }
 
     public function destroy(Request $request, DamageCondition $damage_condition)

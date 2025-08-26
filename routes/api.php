@@ -71,6 +71,9 @@ Route::middleware(['web', 'auth'])->group(function () {
     // 在庫管理 API
     Route::apiResource('inventory', \App\Http\Controllers\Api\InventoryController::class);
     Route::post('inventory/{inventory}/adjust', [\App\Http\Controllers\Api\InventoryController::class, 'adjustStock']);
+    // サーバー側集計 API（月別カテゴリ・名称ごとの破損集計）
+    Route::get('damaged-inventories/stats', [\App\Http\Controllers\Api\DamagedInventoryController::class, 'stats']);
+
     // 破損在庫管理 API
     Route::apiResource('damaged-inventories', \App\Http\Controllers\Api\DamagedInventoryController::class);
     // 投稿へのリアクションと既読
