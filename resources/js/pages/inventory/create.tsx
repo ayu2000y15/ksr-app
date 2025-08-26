@@ -103,42 +103,85 @@ export default function InventoryCreate({ categories = [], items: initialItems =
         e.preventDefault();
         if (dragIndex === null) return;
         if (dragIndex === index) return;
-        setItems((prev) => {
+            setItems((prev) => {
             const copy = [...prev];
             const [moved] = copy.splice(dragIndex, 1);
             copy.splice(index, 0, moved);
             // persist new order to server shortly after reordering
-            setTimeout(() => {
-                saveOrder(copy);
-            }, 150);
+                setTimeout(() => {
+                    // save order only for currently visible rows (respecting filters)
+                    saveOrder(copy, { visibleOnly: true });
+                }, 150);
             return copy;
         });
         setDragIndex(null);
     };
 
     // persist the current items order (and full data) to server so sort_order is saved
-    const saveOrder = async (itemsToSave: Item[]) => {
+    // opts.visibleOnly: when true, only save ordering for rows currently visible under active filters
+    const saveOrder = async (itemsToSave: Item[], opts?: { visibleOnly?: boolean }) => {
         if (!itemsToSave || itemsToSave.length === 0) return;
         const form = new FormData();
-        itemsToSave.forEach((it, i) => {
-            if ((it as Item).id) form.append(`items[${i}][id]`, String((it as Item).id));
-            // include full fields to satisfy validation on server
-            form.append(`items[${i}][sort_order]`, String(i));
-            form.append(`items[${i}][name]`, it.name || '');
-            form.append(`items[${i}][category_id]`, it.category_id || '');
-            form.append(`items[${i}][catalog_name]`, it.catalog_name || '');
-            form.append(`items[${i}][size]`, it.size || '');
-            form.append(`items[${i}][unit]`, it.unit || '');
-            form.append(`items[${i}][supplier_text]`, it.supplier_text || '');
-            form.append(`items[${i}][memo]`, it.memo || '');
-            if (it.stocks && Array.isArray(it.stocks)) {
-                it.stocks.forEach((s, j) => {
-                    form.append(`items[${i}][stocks][${j}][storage_location]`, s.storage_location || '');
-                    form.append(`items[${i}][stocks][${j}][quantity]`, s.quantity || '');
-                    form.append(`items[${i}][stocks][${j}][memo]`, s.memo || '');
+
+        // compute which indexes are visible according to current filters
+        const computeVisibleIndexes = (arr: Item[]) => {
+            return arr
+                .map((it, i) => i)
+                .filter((i) => {
+                    const itv = arr[i];
+                    if (!itv) return false;
+                    if (filterCategory && String(itv.category_id) !== String(filterCategory)) return false;
+                    if (filterName && !itv.name.toLowerCase().includes(filterName.toLowerCase())) return false;
+                    if (filterCatalog && !itv.catalog_name.toLowerCase().includes(filterCatalog.toLowerCase())) return false;
+                    if (filterSupplier && !itv.supplier_text.toLowerCase().includes(filterSupplier.toLowerCase())) return false;
+                    return true;
                 });
-            }
-        });
+        };
+
+        if (opts?.visibleOnly) {
+            const visible = computeVisibleIndexes(itemsToSave);
+            // only append visible items and assign sort_order sequentially based on visible order
+            visible.forEach((origIdx, pos) => {
+                const it = itemsToSave[origIdx];
+                if (!it) return;
+                if ((it as Item).id) form.append(`items[${pos}][id]`, String((it as Item).id));
+                form.append(`items[${pos}][sort_order]`, String(pos));
+                form.append(`items[${pos}][name]`, it.name || '');
+                form.append(`items[${pos}][category_id]`, it.category_id || '');
+                form.append(`items[${pos}][catalog_name]`, it.catalog_name || '');
+                form.append(`items[${pos}][size]`, it.size || '');
+                form.append(`items[${pos}][unit]`, it.unit || '');
+                form.append(`items[${pos}][supplier_text]`, it.supplier_text || '');
+                form.append(`items[${pos}][memo]`, it.memo || '');
+                if (it.stocks && Array.isArray(it.stocks)) {
+                    it.stocks.forEach((s, j) => {
+                        form.append(`items[${pos}][stocks][${j}][storage_location]`, s.storage_location || '');
+                        form.append(`items[${pos}][stocks][${j}][quantity]`, s.quantity || '');
+                        form.append(`items[${pos}][stocks][${j}][memo]`, s.memo || '');
+                    });
+                }
+            });
+        } else {
+            itemsToSave.forEach((it, i) => {
+                if ((it as Item).id) form.append(`items[${i}][id]`, String((it as Item).id));
+                // include full fields to satisfy validation on server
+                form.append(`items[${i}][sort_order]`, String(i));
+                form.append(`items[${i}][name]`, it.name || '');
+                form.append(`items[${i}][category_id]`, it.category_id || '');
+                form.append(`items[${i}][catalog_name]`, it.catalog_name || '');
+                form.append(`items[${i}][size]`, it.size || '');
+                form.append(`items[${i}][unit]`, it.unit || '');
+                form.append(`items[${i}][supplier_text]`, it.supplier_text || '');
+                form.append(`items[${i}][memo]`, it.memo || '');
+                if (it.stocks && Array.isArray(it.stocks)) {
+                    it.stocks.forEach((s, j) => {
+                        form.append(`items[${i}][stocks][${j}][storage_location]`, s.storage_location || '');
+                        form.append(`items[${i}][stocks][${j}][quantity]`, s.quantity || '');
+                        form.append(`items[${i}][stocks][${j}][memo]`, s.memo || '');
+                    });
+                }
+            });
+        }
 
         try {
             const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
@@ -188,7 +231,9 @@ export default function InventoryCreate({ categories = [], items: initialItems =
         setRowStatuses((prev) => ({ ...prev, [realIdx]: 'saving' }));
         // prepare FormData using items[0] pattern for bulk store API
         const form = new FormData();
-        const i = 0;
+    const i = 0;
+    // ensure sort_order is sent for autosave to avoid empty sort_order on server
+    form.append(`items[${i}][sort_order]`, String(realIdx));
         if ((it as Item).id) form.append(`items[${i}][id]`, String((it as Item).id));
         form.append(`items[${i}][name]`, it.name || '');
         form.append(`items[${i}][category_id]`, it.category_id || '');
@@ -345,11 +390,16 @@ export default function InventoryCreate({ categories = [], items: initialItems =
 
         const form = new FormData();
         // append items[] each with fields and optional stock
-        (items || []).forEach((it, i) => {
+        // if filters are active, preserve ordering as shown on screen (displayIndexes)
+        const indexesToSend = displayIndexes && displayIndexes.length > 0 ? displayIndexes : items.map((_, i) => i);
+        indexesToSend.forEach((realIdx, pos) => {
+            const it = items[realIdx];
+            const i = pos;
+            if (!it) return;
             if ((it as Item).id) {
                 form.append(`items[${i}][id]`, String((it as Item).id));
             }
-            // include sort order (use current index)
+            // include sort order (use visible position)
             form.append(`items[${i}][sort_order]`, String(i));
             form.append(`items[${i}][name]`, it.name || '');
             form.append(`items[${i}][category_id]`, it.category_id || '');
