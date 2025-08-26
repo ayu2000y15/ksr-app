@@ -143,9 +143,21 @@ export default function Index({ items: initial }: any) {
         setEditingCategory(null);
     };
 
-    const updateQty = (catKey: string, rowIdx: number, loc: string, value: number) => {
-        // ensure non-negative integer
-        const val = Number.isNaN(Number(value)) ? 0 : Math.max(0, Math.floor(Number(value)));
+    // value may be string (raw input) or number; allow empty string so user can clear input
+    const updateQty = (catKey: string, rowIdx: number, loc: string, value: string | number) => {
+        let val: string | number = value;
+        if (typeof value === 'string') {
+            // allow empty string; otherwise parse to non-negative integer
+            if (value === '') {
+                val = '';
+            } else {
+                const n = Number(value);
+                val = Number.isNaN(n) ? 0 : Math.max(0, Math.floor(n));
+            }
+        } else {
+            const n = Number(value);
+            val = Number.isNaN(n) ? 0 : Math.max(0, Math.floor(n));
+        }
         setEditedData((prev) => {
             const next = { ...prev };
             const bucket = next[catKey];
@@ -405,10 +417,8 @@ export default function Index({ items: initial }: any) {
                                                                         {editing ? (
                                                                             <input
                                                                                 type="number"
-                                                                                value={editedVal ?? 0}
-                                                                                onChange={(e) =>
-                                                                                    updateQty(catKey, ri, l, Number(e.target.value || 0))
-                                                                                }
+                                                                                value={editedVal ?? ''}
+                                                                                onChange={(e) => updateQty(catKey, ri, l, e.target.value)}
                                                                                 onBlur={() => handleCategoryInputBlur(cat)}
                                                                                 className="h-10 w-14 py-2 text-right text-sm"
                                                                                 inputMode="numeric"
@@ -476,10 +486,8 @@ export default function Index({ items: initial }: any) {
                                                                             {editing ? (
                                                                                 <input
                                                                                     type="number"
-                                                                                    value={editedVal ?? 0}
-                                                                                    onChange={(e) =>
-                                                                                        updateQty(catKey, ri, l, Number(e.target.value || 0))
-                                                                                    }
+                                                                                    value={editedVal ?? ''}
+                                                                                    onChange={(e) => updateQty(catKey, ri, l, e.target.value)}
                                                                                     onBlur={() => handleCategoryInputBlur(cat)}
                                                                                     className="h-10 w-20 py-2 text-left text-sm"
                                                                                     inputMode="numeric"

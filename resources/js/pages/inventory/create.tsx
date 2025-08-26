@@ -51,7 +51,7 @@ export default function InventoryCreate({ categories = [], items: initialItems =
         unit: '',
         supplier_text: '',
         memo: '',
-        stocks: [{ storage_location: '', quantity: '0', memo: '' }],
+        stocks: [{ storage_location: '', quantity: '', memo: '' }],
     });
 
     // initialize from server-provided items if available
@@ -65,9 +65,9 @@ export default function InventoryCreate({ categories = [], items: initialItems =
         memo: srv.memo || '',
         stocks: (srv.stocks || []).map((s: any) => ({
             storage_location: s.storage_location || '',
-            quantity: s.quantity !== undefined && s.quantity !== null ? String(s.quantity) : '0',
+            quantity: s.quantity !== undefined && s.quantity !== null ? String(s.quantity) : '',
             memo: s.memo || '',
-        })) || [{ storage_location: '', quantity: '0', memo: '' }],
+        })) || [{ storage_location: '', quantity: '', memo: '' }],
         id: srv.id,
         // maintain server sort if present
         sort_order: typeof srv.sort_order !== 'undefined' ? srv.sort_order : null,
@@ -687,8 +687,8 @@ export default function InventoryCreate({ categories = [], items: initialItems =
                                                                                         return copy;
                                                                                     })
                                                                                 }
-                                                                                required
                                                                                 onBlur={() => handleInputBlur(realIdx)}
+                                                                                min={0}
                                                                             />
                                                                         </div>
                                                                     ))}
@@ -701,7 +701,7 @@ export default function InventoryCreate({ categories = [], items: initialItems =
                                                                                 setItems((prev) => {
                                                                                     const copy = [...prev];
                                                                                     const stocks = copy[realIdx].stocks.slice();
-                                                                                    stocks.push({ storage_location: '', quantity: '0', memo: '' });
+                                                                                    stocks.push({ storage_location: '', quantity: '', memo: '' });
                                                                                     copy[realIdx] = { ...copy[realIdx], stocks };
                                                                                     setTimeout(() => {
                                                                                         const nameEl = nameRefs.current[realIdx];
@@ -971,7 +971,7 @@ export default function InventoryCreate({ categories = [], items: initialItems =
                                                                                         const stocks = copy[realIdx].stocks.slice();
                                                                                         stocks.push({
                                                                                             storage_location: '',
-                                                                                            quantity: '0',
+                                                                                            quantity: '',
                                                                                             memo: '',
                                                                                         });
                                                                                         copy[realIdx] = { ...copy[realIdx], stocks };

@@ -25,6 +25,36 @@ class InventoryItemRequest extends FormRequest
         ];
     }
 
+    /**
+     * Normalize empty-string quantities to null so nullable|integer rules accept them.
+     */
+    protected function prepareForValidation()
+    {
+        $input = $this->all();
+
+        if (isset($input['stocks']) && is_array($input['stocks'])) {
+            foreach ($input['stocks'] as $k => $s) {
+                if (is_array($s) && array_key_exists('quantity', $s) && $s['quantity'] === '') {
+                    $input['stocks'][$k]['quantity'] = null;
+                }
+            }
+        }
+
+        if (isset($input['items']) && is_array($input['items'])) {
+            foreach ($input['items'] as $i => $it) {
+                if (isset($it['stocks']) && is_array($it['stocks'])) {
+                    foreach ($it['stocks'] as $k => $s) {
+                        if (is_array($s) && array_key_exists('quantity', $s) && $s['quantity'] === '') {
+                            $input['items'][$i]['stocks'][$k]['quantity'] = null;
+                        }
+                    }
+                }
+            }
+        }
+
+        $this->replace($input);
+    }
+
     public function rules()
     {
         return [
@@ -39,7 +69,7 @@ class InventoryItemRequest extends FormRequest
             // stocks array: each entry may have storage_location, quantity (integer), memo
             'stocks' => 'nullable|array',
             'stocks.*.storage_location' => 'required_without:items|string|max:255',
-            'stocks.*.quantity' => 'required_without:items|integer',
+            'stocks.*.quantity' => 'nullable|integer',
             'stocks.*.memo' => 'nullable|string',
             // bulk items payload
             'items' => 'nullable|array',
@@ -55,7 +85,7 @@ class InventoryItemRequest extends FormRequest
             // per-item multiple stocks support
             'items.*.stocks' => 'required|array|min:1',
             'items.*.stocks.*.storage_location' => 'required|string|max:255',
-            'items.*.stocks.*.quantity' => 'required|integer',
+            'items.*.stocks.*.quantity' => 'nullable|integer',
             'items.*.stocks.*.memo' => 'nullable|string',
         ];
     }

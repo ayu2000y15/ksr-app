@@ -109,11 +109,17 @@ class InventoryController extends Controller
                         foreach ($it['stocks'] as $s) {
                             $hasAny = false;
                             if (!empty($s['storage_location'])) $hasAny = true;
-                            if (isset($s['quantity']) && ($s['quantity'] !== '')) $hasAny = true;
+                            // treat the presence of the 'quantity' key as an explicit intent from the client.
+                            // if the user cleared the number input (empty string), we want to apply 0 on server side.
+                            if (array_key_exists('quantity', $s)) $hasAny = true;
                             if (!$hasAny) continue;
 
                             $loc = $s['storage_location'] ?? '未設定';
-                            $qty = intval($s['quantity'] ?? 0);
+                            // if quantity explicitly provided as empty string or null, set 0; otherwise parse int
+                            $qty = 0;
+                            if (array_key_exists('quantity', $s) && $s['quantity'] !== null && $s['quantity'] !== '') {
+                                $qty = intval($s['quantity']);
+                            }
                             $submittedLocations[] = $loc;
 
                             $stock = null;

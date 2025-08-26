@@ -1345,7 +1345,7 @@ export default function DamagedIndexPage() {
                                     <div className="hidden w-full overflow-x-auto md:block">
                                         <table className="w-full table-auto">
                                             <thead>
-                                                    <tr className="text-left text-sm text-muted-foreground border-b border-gray-200">
+                                                <tr className="border-b border-gray-200 text-left text-sm text-muted-foreground">
                                                     <th className="p-2">
                                                         <SortableHeader sort_key="damaged_at" queryParams={queryParams}>
                                                             破損日
