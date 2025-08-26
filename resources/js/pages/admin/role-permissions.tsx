@@ -82,7 +82,7 @@ export default function RolePermissionsPage() {
         shift_detail: 'シフト詳細',
         user_shift_setting: 'ユーザー別休暇上限',
         inventory: '在庫管理',
-    damaged_inventory: '破損在庫管理',
+        damaged_inventory: '破損在庫管理',
         その他: 'その他',
         // 必要に応じてここに追加
     };

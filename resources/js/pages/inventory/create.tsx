@@ -103,15 +103,15 @@ export default function InventoryCreate({ categories = [], items: initialItems =
         e.preventDefault();
         if (dragIndex === null) return;
         if (dragIndex === index) return;
-            setItems((prev) => {
+        setItems((prev) => {
             const copy = [...prev];
             const [moved] = copy.splice(dragIndex, 1);
             copy.splice(index, 0, moved);
             // persist new order to server shortly after reordering
-                setTimeout(() => {
-                    // save order only for currently visible rows (respecting filters)
-                    saveOrder(copy, { visibleOnly: true });
-                }, 150);
+            setTimeout(() => {
+                // save order only for currently visible rows (respecting filters)
+                saveOrder(copy, { visibleOnly: true });
+            }, 150);
             return copy;
         });
         setDragIndex(null);
@@ -231,9 +231,9 @@ export default function InventoryCreate({ categories = [], items: initialItems =
         setRowStatuses((prev) => ({ ...prev, [realIdx]: 'saving' }));
         // prepare FormData using items[0] pattern for bulk store API
         const form = new FormData();
-    const i = 0;
-    // ensure sort_order is sent for autosave to avoid empty sort_order on server
-    form.append(`items[${i}][sort_order]`, String(realIdx));
+        const i = 0;
+        // ensure sort_order is sent for autosave to avoid empty sort_order on server
+        form.append(`items[${i}][sort_order]`, String(realIdx));
         if ((it as Item).id) form.append(`items[${i}][id]`, String((it as Item).id));
         form.append(`items[${i}][name]`, it.name || '');
         form.append(`items[${i}][category_id]`, it.category_id || '');
