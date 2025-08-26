@@ -82,6 +82,7 @@ export default function RolePermissionsPage() {
         shift_detail: 'シフト詳細',
         user_shift_setting: 'ユーザー別休暇上限',
         inventory: '在庫管理',
+    damaged_inventory: '破損在庫管理',
         その他: 'その他',
         // 必要に応じてここに追加
     };
@@ -137,6 +138,12 @@ export default function RolePermissionsPage() {
         'inventory.update': '在庫編集',
         'inventory.delete': '在庫削除',
         'inventory.log.view': '在庫ログ閲覧',
+        // damaged inventory
+        'damaged_inventory.view': '破損在庫閲覧',
+        'damaged_inventory.create': '破損在庫作成',
+        'damaged_inventory.update': '破損在庫編集',
+        'damaged_inventory.delete': '破損在庫削除',
+        'damaged_inventory.log.view': '破損在庫ログ閲覧',
     };
 
     const allSelected = permissions.length > 0 && permissions.every((p) => !!checked[p.id]);

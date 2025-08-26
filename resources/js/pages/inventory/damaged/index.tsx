@@ -64,7 +64,7 @@ type FormState = {
 export default function DamagedIndexPage() {
     const breadcrumbs: BreadcrumbItem[] = [
         { title: '在庫管理', href: route('inventory.index') },
-        { title: '破損在庫管理', href: route('inventory.damaged.index') },
+        { title: '破損在庫管理', href: 'inventory/damaged' },
     ];
     const page = usePage();
     // typed access to page props (minimal) to avoid `any`
