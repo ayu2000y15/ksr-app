@@ -3,11 +3,19 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Toast from '@/components/ui/toast';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import { Plus } from 'lucide-react';
 import { useEffect, useState, type MouseEvent } from 'react';
 
 export default function Index({ items: initial }: any) {
+    const page = usePage();
+    const inventoryPerms = ((page.props as any)?.permissions || {}).inventory || {
+        view: false,
+        create: false,
+        update: false,
+        delete: false,
+        logs: false,
+    };
     const [items, setItems] = useState(initial?.data || []);
     useEffect(() => setItems(initial?.data || []), [initial]);
 
@@ -262,25 +270,35 @@ export default function Index({ items: initial }: any) {
         <AppSidebarLayout breadcrumbs={[{ title: '在庫管理', href: route('inventory.index') }]}>
             <Head title="在庫管理" />
             <div className="p-4 sm:p-6 lg:p-8">
-                <div className="mb-6 flex items-start justify-between">
-                    <HeadingSmall title="在庫管理" description="カテゴリごとに在庫を表示。" />
-                    <div className="flex items-center gap-2">
-                        {/* カテゴリ編集ボタン（named route を使用） */}
-                        <Link href={route('inventory.categories.index')}>
-                            <Button size="sm" variant="ghost">
-                                カテゴリ編集
-                            </Button>
-                        </Link>
-                        <Link href={route('inventory.stock_logs.index')}>
-                            <Button size="sm" variant="ghost">
-                                在庫ログ
-                            </Button>
-                        </Link>
-                        <Link href={route('inventory.create')}>
-                            <Button>
-                                <Plus className="mr-2 h-4 w-4" /> 一括編集
-                            </Button>
-                        </Link>
+                <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                        <HeadingSmall title="在庫管理" description="カテゴリごとに在庫を表示。" />
+                    </div>
+                    <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end">
+                        {/* カテゴリ編集: show if user can update inventory categories (use inventory.update as proxy) */}
+                        {inventoryPerms.update && (
+                            <Link href={route('inventory.categories.index')}>
+                                <Button size="sm" variant="ghost" className="whitespace-nowrap">
+                                    カテゴリ編集
+                                </Button>
+                            </Link>
+                        )}
+                        {/* 在庫ログ: show if user can view logs */}
+                        {inventoryPerms.logs && (
+                            <Link href={route('inventory.stock_logs.index')}>
+                                <Button size="sm" variant="ghost" className="whitespace-nowrap">
+                                    在庫ログ
+                                </Button>
+                            </Link>
+                        )}
+                        {/* 一括編集: show if user can create/update inventory */}
+                        {(inventoryPerms.create || inventoryPerms.update) && (
+                            <Link href={route('inventory.create')}>
+                                <Button className="whitespace-nowrap">
+                                    <Plus className="mr-2 h-4 w-4" /> 一括編集
+                                </Button>
+                            </Link>
+                        )}
                     </div>
                 </div>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

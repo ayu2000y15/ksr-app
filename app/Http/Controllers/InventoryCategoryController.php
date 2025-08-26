@@ -11,17 +11,23 @@ class InventoryCategoryController extends Controller
 {
     public function index()
     {
+        $this->authorize('viewAny', \App\Models\InventoryItem::class);
+
         $categories = InventoryCategory::orderBy('order_column')->get();
         return Inertia::render('inventory/categories/index', ['categories' => $categories]);
     }
 
     public function create()
     {
+        $this->authorize('create', \App\Models\InventoryItem::class);
+
         return Inertia::render('inventory/categories/create');
     }
 
     public function store(Request $request)
     {
+        $this->authorize('create', \App\Models\InventoryItem::class);
+
         $data = $request->validate([
             'name' => 'required|string|max:255',
             'order_column' => 'required|integer',
@@ -32,11 +38,15 @@ class InventoryCategoryController extends Controller
 
     public function edit(InventoryCategory $category)
     {
+        $this->authorize('create', \App\Models\InventoryItem::class);
+
         return Inertia::render('inventory/categories/edit', ['category' => $category]);
     }
 
     public function update(Request $request, InventoryCategory $category)
     {
+        $this->authorize('create', \App\Models\InventoryItem::class);
+
         $data = $request->validate([
             'name' => 'required|string|max:255',
             'order_column' => 'required|integer',
@@ -47,6 +57,8 @@ class InventoryCategoryController extends Controller
 
     public function destroy(InventoryCategory $category)
     {
+        $this->authorize('create', \App\Models\InventoryItem::class);
+
         $category->delete();
         return redirect()->route('inventory.categories.index');
     }
@@ -54,6 +66,8 @@ class InventoryCategoryController extends Controller
     // reorder categories via POST { order: [id1, id2, ...] }
     public function reorder(Request $request)
     {
+        $this->authorize('create', \App\Models\InventoryItem::class);
+
         $data = $request->validate([
             'order' => 'required|array',
             'order.*' => 'integer|distinct|exists:inventory_categories,id',

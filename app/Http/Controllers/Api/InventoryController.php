@@ -14,6 +14,8 @@ class InventoryController extends Controller
 {
     public function index(Request $request)
     {
+        // authorization: view inventory list
+        $this->authorize('viewAny', \App\Models\InventoryItem::class);
         // include stocks so index responses contain per-item stock rows
         $query = InventoryItem::with(['category', 'stocks']);
 
@@ -28,6 +30,7 @@ class InventoryController extends Controller
 
     public function show(InventoryItem $inventory)
     {
+        $this->authorize('view', $inventory);
         $inventory->load(['category']);
         // include stocks and latest logs
         $inventory->stocks = InventoryStock::where('inventory_item_id', $inventory->id)->get();
@@ -36,6 +39,7 @@ class InventoryController extends Controller
 
     public function store(InventoryItemRequest $request)
     {
+        $this->authorize('create', \App\Models\InventoryItem::class);
         $data = $request->validated();
 
         // support bulk items[] creation: items[].* fields and optional items[].stock
@@ -187,6 +191,7 @@ class InventoryController extends Controller
 
     public function update(InventoryItemRequest $request, InventoryItem $inventory)
     {
+        $this->authorize('update', $inventory);
         $data = $request->validated();
         $inventory->update($data);
         return response()->json($inventory);
@@ -194,6 +199,7 @@ class InventoryController extends Controller
 
     public function destroy(InventoryItem $inventory)
     {
+        $this->authorize('delete', $inventory);
         $inventory->delete();
         return response()->json(['message' => 'deleted']);
     }
@@ -201,6 +207,7 @@ class InventoryController extends Controller
     // inventory stock adjustment endpoint
     public function adjustStock(Request $request, InventoryItem $inventory)
     {
+        $this->authorize('update', $inventory);
         $request->validate([
             'inventory_stock_id' => 'nullable|integer',
             'storage_location' => 'nullable|string|max:255',

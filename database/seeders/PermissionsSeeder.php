@@ -50,6 +50,13 @@ class PermissionsSeeder extends Seeder
             'shift_application.update',
             'shift_application.delete',
 
+            // inventory management
+            'inventory.view',
+            'inventory.create',
+            'inventory.update',
+            'inventory.delete',
+            'inventory.log.view',
+
             // default shifts (管理者向け: デフォルトシフト設定)
             'default_shift.view',
             'default_shift.create',

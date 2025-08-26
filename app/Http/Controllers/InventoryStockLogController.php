@@ -13,6 +13,8 @@ class InventoryStockLogController extends Controller
      */
     public function index(Request $request)
     {
+        // ensure user can view logs
+        $this->authorize('viewLogs', \App\Models\InventoryItem::class);
         // Allow sorting via query params but restrict to safe columns
         $allowed = ['change_date', 'quantity_before', 'quantity_after', 'inventory_item', 'storage_location', 'user'];
         $sort = $request->query('sort', 'change_date');

@@ -34,6 +34,9 @@ export function AppSidebar() {
     const permissions: string[] = page.props?.auth?.permissions ?? [];
     // support both nested auth.isSuperAdmin and top-level 'auth.isSuperAdmin' share
     const isSuperAdmin: boolean = page.props?.auth?.isSuperAdmin ?? (page.props as any)['auth.isSuperAdmin'] ?? false;
+    // nested permissions from SharePermissions middleware (Inertia shared props)
+    const nestedPermissions = (page.props as unknown as { permissions?: Record<string, any> } | undefined)?.permissions;
+    const inventoryPerms = nestedPermissions?.inventory ?? { view: false, create: false, update: false, delete: false, logs: false };
     React.useEffect(() => {
         // debug: log permissions received from server
         // auth.permissions is a flat array; page.props.permissions may be nested
@@ -67,6 +70,10 @@ export function AppSidebar() {
                         // システム管理者は全て表示
                         if (!isSuperAdmin && item.permission && !permissions.includes(item.permission)) {
                             return null;
+                        }
+                        // 在庫管理は Inventory ポリシー(viewAny) に基づいて表示
+                        if (item.title === '在庫管理') {
+                            if (!isSuperAdmin && !inventoryPerms.view) return null;
                         }
                         const isActive = currentPath === item.href || (item.href !== '/' && currentPath.startsWith(item.href));
                         if (item.title === '各種設定') return null;

@@ -79,8 +79,64 @@ export default function RolePermissionsPage() {
         shift: 'シフト管理',
         shift_application: '休暇申請',
         default_shift: 'デフォルトシフト',
+        shift_detail: 'シフト詳細',
         user_shift_setting: 'ユーザー別休暇上限',
+        inventory: '在庫管理',
+        その他: 'その他',
         // 必要に応じてここに追加
+    };
+
+    // 個別の permission.name -> 日本語ラベル
+    const PERMISSION_LABELS: Record<string, string> = {
+        // user
+        'user.view': 'ユーザー閲覧',
+        'user.create': 'ユーザー作成',
+        'user.update': 'ユーザー編集',
+        'user.delete': 'ユーザー削除',
+        // role & permission
+        'role.viewAny': 'ロール一覧閲覧',
+        'role.view': 'ロール閲覧',
+        'role.create': 'ロール作成',
+        'role.update': 'ロール編集',
+        'role.delete': 'ロール削除',
+        'role.assign': 'ロール割当',
+        'permission.view': '権限閲覧',
+        'permission.create': '権限作成',
+        'permission.update': '権限編集',
+        'permission.delete': '権限削除',
+        // shift
+        'shift.view': 'シフト閲覧',
+        'shift.create': 'シフト作成',
+        'shift.update': 'シフト編集',
+        'shift.delete': 'シフト削除',
+        'shift.viewAny': 'シフト一覧閲覧',
+        'shift.manage': 'シフト管理',
+        // shift details
+        'shift_detail.view': 'シフト詳細閲覧',
+        'shift_detail.create': 'シフト詳細作成',
+        'shift_detail.update': 'シフト詳細編集',
+        'shift_detail.delete': 'シフト詳細削除',
+        // shift application
+        'shift_application.view': '休暇申請閲覧',
+        'shift_application.create': '休暇申請作成',
+        'shift_application.update': '休暇申請編集',
+        'shift_application.delete': '休暇申請削除',
+        // default shifts
+        'default_shift.view': 'デフォルトシフト閲覧',
+        'default_shift.create': 'デフォルトシフト作成',
+        'default_shift.update': 'デフォルトシフト編集',
+        'default_shift.delete': 'デフォルトシフト削除',
+        // user shift setting
+        'user_shift_setting.view': 'ユーザー休暇上限閲覧',
+        'user_shift_setting.create': 'ユーザー休暇上限作成',
+        'user_shift_setting.update': 'ユーザー休暇上限編集',
+        'user_shift_setting.delete': 'ユーザー休暇上限削除',
+        // inventory
+        'inventory.view': '在庫閲覧',
+        'inventory.create': '在庫作成',
+        'inventory.update': '在庫編集',
+        'inventory.delete': '在庫削除',
+        'inventory.log.view': '在庫ログ閲覧',
     };
 
     const allSelected = permissions.length > 0 && permissions.every((p) => !!checked[p.id]);
@@ -163,7 +219,7 @@ export default function RolePermissionsPage() {
 
                                                 return (
                                                     <div key={groupKey} className="rounded border p-3">
-                                                        <div className="mb-2 flex items-center justify-between">
+                                                        <div className="mb-2 flex items-center justify-between rounded bg-gray-100 p-2">
                                                             <div className="flex items-center space-x-2">
                                                                 <Checkbox
                                                                     id={`group-${groupKey}`}
@@ -171,7 +227,7 @@ export default function RolePermissionsPage() {
                                                                     onCheckedChange={(v) => toggleGroup(groupKey, !!v)}
                                                                 />
                                                                 <div className="flex items-center space-x-2">
-                                                                    <Label htmlFor={`group-${groupKey}`} className="font-medium">
+                                                                    <Label htmlFor={`group-${groupKey}`} className="font-medium text-gray-800">
                                                                         {GROUP_LABELS[groupKey] || groupKey}
                                                                     </Label>
                                                                     {groupSome && !groupChecked && (
@@ -193,7 +249,7 @@ export default function RolePermissionsPage() {
                                                                         }
                                                                     />
                                                                     <Label htmlFor={`perm-${perm.id}`} className="font-normal">
-                                                                        {perm.name}
+                                                                        {PERMISSION_LABELS[perm.name] || perm.name}
                                                                     </Label>
                                                                 </div>
                                                             ))}

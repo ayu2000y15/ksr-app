@@ -100,6 +100,13 @@ class SharePermissions
                         'update' => $safeHas('user_shift_setting.update'),
                         'delete' => $safeHas('user_shift_setting.delete'),
                     ],
+                    'inventory' => [
+                        'view' => $safeHas('inventory.view'),
+                        'create' => $safeHas('inventory.create'),
+                        'update' => $safeHas('inventory.update'),
+                        'delete' => $safeHas('inventory.delete'),
+                        'logs' => $safeHas('inventory.log.view'),
+                    ],
                     'is_system_admin' => $isSystemAdmin,
                 ],
             ]);

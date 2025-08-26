@@ -34,6 +34,7 @@ class AuthServiceProvider extends ServiceProvider
         \App\Models\UserShiftSetting::class => UserShiftSettingPolicy::class,
         DefaultShift::class => DefaultShiftPolicy::class,
         \App\Models\ShiftDetail::class => \App\Policies\ShiftDetailPolicy::class,
+        \App\Models\InventoryItem::class => \App\Policies\InventoryPolicy::class,
     ];
 
     /**

@@ -3,37 +3,45 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import Toast from '@/components/ui/toast';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { BreadcrumbItem } from '@/types';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import { GripVertical, X } from 'lucide-react';
-
-import Toast from '@/components/ui/toast';
 import React, { useRef, useState } from 'react';
 
+// Remove stray closing brace
+// This closing brace is causing issues with module parsing
+// It should not be here
 type Category = { id: number; name: string };
+
+type ItemStock = { id?: number; storage_location?: string; quantity?: string; memo?: string };
+type Item = {
+    category_id: string;
+    name: string;
+    catalog_name: string;
+    size: string;
+    unit: string;
+    supplier_text: string;
+    memo: string;
+    stocks: ItemStock[];
+    id?: number;
+    sort_order?: number | null;
+};
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: '在庫管理', href: route('inventory.index') },
     { title: '一括登録', href: route('inventory.create') },
 ];
 
-export default function InventoryCreate({ categories = [], items: initialItems = [] }: { categories?: Category[]; items?: any[] }) {
-    // items: bulk rows where each row corresponds to a new inventory item + optional initial stocks[]
-    const [processing, setProcessing] = useState<boolean>(false);
-
-    type ItemStock = { storage_location?: string; quantity?: string; memo?: string };
-    type Item = {
-        category_id: string;
-        name: string;
-        catalog_name: string;
-        size: string;
-        unit: string;
-        supplier_text: string;
-        memo: string;
-        stocks: ItemStock[];
-        id?: number;
+export default function InventoryCreate({ categories = [], items: initialItems = [] }: { categories?: Category[]; items?: Item[] }) {
+    const page = usePage();
+    const pageProps = page.props as unknown as {
+        permissions?: { inventory?: { view?: boolean; create?: boolean; update?: boolean; delete?: boolean; logs?: boolean } };
     };
+    const inventoryPerms = pageProps.permissions?.inventory ?? { view: false, create: false, update: false, delete: false, logs: false };
+    // items: bulk rows where each row corresponds to a new inventory item + optional initial stocks[]
+    const [, setProcessing] = useState<boolean>(false);
 
     const emptyItem = (): Item => ({
         category_id: '',
@@ -47,24 +55,23 @@ export default function InventoryCreate({ categories = [], items: initialItems =
     });
 
     // initialize from server-provided items if available
-    const mapServerItem = (srv: any): Item =>
-        ({
-            category_id: srv.category_id ? String(srv.category_id) : '',
-            name: srv.name || '',
-            catalog_name: srv.catalog_name || '',
-            size: srv.size || '',
-            unit: srv.unit || '',
-            supplier_text: srv.supplier_text || '',
-            memo: srv.memo || '',
-            stocks: (srv.stocks || []).map((s: any) => ({
-                storage_location: s.storage_location || '',
-                quantity: s.quantity !== undefined && s.quantity !== null ? String(s.quantity) : '0',
-                memo: s.memo || '',
-            })) || [{ storage_location: '', quantity: '0', memo: '' }],
-            id: srv.id,
-            // maintain server sort if present
-            sort_order: typeof srv.sort_order !== 'undefined' ? srv.sort_order : null,
-        }) as unknown as Item;
+    const mapServerItem = (srv: any): Item => ({
+        category_id: srv.category_id ? String(srv.category_id) : '',
+        name: srv.name || '',
+        catalog_name: srv.catalog_name || '',
+        size: srv.size || '',
+        unit: srv.unit || '',
+        supplier_text: srv.supplier_text || '',
+        memo: srv.memo || '',
+        stocks: (srv.stocks || []).map((s: any) => ({
+            storage_location: s.storage_location || '',
+            quantity: s.quantity !== undefined && s.quantity !== null ? String(s.quantity) : '0',
+            memo: s.memo || '',
+        })) || [{ storage_location: '', quantity: '0', memo: '' }],
+        id: srv.id,
+        // maintain server sort if present
+        sort_order: typeof srv.sort_order !== 'undefined' ? srv.sort_order : null,
+    });
 
     const initialState: Item[] = initialItems && initialItems.length > 0 ? initialItems.map(mapServerItem) : [emptyItem()];
     const [items, setItems] = useState<Item[]>(initialState);
@@ -81,10 +88,10 @@ export default function InventoryCreate({ categories = [], items: initialItems =
         // set ghost image fallback
         try {
             e.dataTransfer!.setData('text/plain', String(index));
-        } catch (err) {}
+        } catch (_) {}
     };
 
-    const onDragEnd = (e: React.DragEvent<HTMLElement>) => {
+    const onDragEnd = () => {
         setDragIndex(null);
     };
 
@@ -114,7 +121,7 @@ export default function InventoryCreate({ categories = [], items: initialItems =
         if (!itemsToSave || itemsToSave.length === 0) return;
         const form = new FormData();
         itemsToSave.forEach((it, i) => {
-            if ((it as any).id) form.append(`items[${i}][id]`, String((it as any).id));
+            if ((it as Item).id) form.append(`items[${i}][id]`, String((it as Item).id));
             // include full fields to satisfy validation on server
             form.append(`items[${i}][sort_order]`, String(i));
             form.append(`items[${i}][name]`, it.name || '');
@@ -182,7 +189,7 @@ export default function InventoryCreate({ categories = [], items: initialItems =
         // prepare FormData using items[0] pattern for bulk store API
         const form = new FormData();
         const i = 0;
-        if ((it as any).id) form.append(`items[${i}][id]`, String((it as any).id));
+        if ((it as Item).id) form.append(`items[${i}][id]`, String((it as Item).id));
         form.append(`items[${i}][name]`, it.name || '');
         form.append(`items[${i}][category_id]`, it.category_id || '');
         form.append(`items[${i}][catalog_name]`, it.catalog_name || '');
@@ -339,8 +346,8 @@ export default function InventoryCreate({ categories = [], items: initialItems =
         const form = new FormData();
         // append items[] each with fields and optional stock
         (items || []).forEach((it, i) => {
-            if ((it as any).id) {
-                form.append(`items[${i}][id]`, String((it as any).id));
+            if ((it as Item).id) {
+                form.append(`items[${i}][id]`, String((it as Item).id));
             }
             // include sort order (use current index)
             form.append(`items[${i}][sort_order]`, String(i));
@@ -479,22 +486,24 @@ export default function InventoryCreate({ categories = [], items: initialItems =
                                     <div className="my-2 flex items-center justify-between">
                                         <div className="hidden text-sm text-gray-500 md:block">ドラッグで行を並べ替えできます</div>
 
-                                        <button
-                                            type="button"
-                                            className="rounded bg-indigo-600 px-3 py-1 text-white"
-                                            onClick={() => {
-                                                setItems((prev) => {
-                                                    const copy = [emptyItem(), ...prev];
-                                                    // focus will be applied after DOM updates
-                                                    setTimeout(() => {
-                                                        nameRefs.current[0]?.focus();
-                                                    }, 50);
-                                                    return copy;
-                                                });
-                                            }}
-                                        >
-                                            行を追加
-                                        </button>
+                                        {inventoryPerms.create || inventoryPerms.update ? (
+                                            <button
+                                                type="button"
+                                                className="rounded bg-indigo-600 px-3 py-1 text-white"
+                                                onClick={() => {
+                                                    setItems((prev) => {
+                                                        const copy = [emptyItem(), ...prev];
+                                                        // focus will be applied after DOM updates
+                                                        setTimeout(() => {
+                                                            nameRefs.current[0]?.focus();
+                                                        }, 50);
+                                                        return copy;
+                                                    });
+                                                }}
+                                            >
+                                                行を追加
+                                            </button>
+                                        ) : null}
                                     </div>
 
                                     <div className="mt-2 overflow-x-auto">
@@ -510,39 +519,43 @@ export default function InventoryCreate({ categories = [], items: initialItems =
                                                                 <div className="text-xs text-gray-500">並び順: {realIdx}</div>
                                                             </div>
                                                             <div className="flex gap-2">
-                                                                <button
-                                                                    type="button"
-                                                                    className="text-sm text-red-500"
-                                                                    onClick={() => deleteRow(realIdx)}
-                                                                >
-                                                                    削除
-                                                                </button>
-                                                                <button
-                                                                    type="button"
-                                                                    className="text-sm text-gray-700"
-                                                                    onClick={() =>
-                                                                        setItems((prev) => {
-                                                                            const copy = [...prev];
-                                                                            const clone = JSON.parse(JSON.stringify(copy[realIdx]));
-                                                                            if ((clone as any).id) delete (clone as any).id;
-                                                                            if (clone.stocks && Array.isArray(clone.stocks)) {
-                                                                                clone.stocks = clone.stocks.map((s: any) => {
-                                                                                    const ns = { ...s } as any;
-                                                                                    if (ns.id) delete ns.id;
-                                                                                    return ns;
-                                                                                });
-                                                                            }
-                                                                            copy.splice(realIdx + 1, 0, clone);
-                                                                            setTimeout(() => {
-                                                                                const focusIdx = realIdx + 1;
-                                                                                nameRefs.current[focusIdx]?.focus();
-                                                                            }, 50);
-                                                                            return copy;
-                                                                        })
-                                                                    }
-                                                                >
-                                                                    コピー
-                                                                </button>
+                                                                {inventoryPerms.delete && (
+                                                                    <button
+                                                                        type="button"
+                                                                        className="text-sm text-red-500"
+                                                                        onClick={() => deleteRow(realIdx)}
+                                                                    >
+                                                                        削除
+                                                                    </button>
+                                                                )}
+                                                                {(inventoryPerms.create || inventoryPerms.update) && (
+                                                                    <button
+                                                                        type="button"
+                                                                        className="text-sm text-gray-700"
+                                                                        onClick={() =>
+                                                                            setItems((prev) => {
+                                                                                const copy = [...prev];
+                                                                                const clone = JSON.parse(JSON.stringify(copy[realIdx]));
+                                                                                if ((clone as any).id) delete (clone as any).id;
+                                                                                if (clone.stocks && Array.isArray(clone.stocks)) {
+                                                                                    clone.stocks = clone.stocks.map((s: any) => {
+                                                                                        const ns = { ...s };
+                                                                                        if (ns.id) delete ns.id;
+                                                                                        return ns;
+                                                                                    });
+                                                                                }
+                                                                                copy.splice(realIdx + 1, 0, clone);
+                                                                                setTimeout(() => {
+                                                                                    const focusIdx = realIdx + 1;
+                                                                                    nameRefs.current[focusIdx]?.focus();
+                                                                                }, 50);
+                                                                                return copy;
+                                                                            })
+                                                                        }
+                                                                    >
+                                                                        コピー
+                                                                    </button>
+                                                                )}
                                                             </div>
                                                         </div>
 
