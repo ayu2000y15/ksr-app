@@ -272,14 +272,23 @@ export default function Index({ items: initial }: any) {
     });
 
     const categories = Object.values(categoriesMap);
-    // initialize collapsed map to closed for all categories when items change
+    // initialize collapsed map when items change.
+    // Preserve any existing user toggles; only add new categories as collapsed by default.
     useEffect(() => {
-        const map: Record<string, boolean> = {};
-        categories.forEach((c) => {
-            const k = c.id ? String(c.id) : 'uncategorized';
-            map[k] = true; // true = collapsed/closed
+        setCollapsedCats((prev) => {
+            const next: Record<string, boolean> = { ...prev };
+            categories.forEach((c) => {
+                const k = c.id ? String(c.id) : 'uncategorized';
+                if (!(k in next)) next[k] = true; // default collapsed for new categories
+            });
+            // Optionally remove keys that no longer exist to keep state small
+            Object.keys(next).forEach((key) => {
+                if (!categories.some((c) => (c.id ? String(c.id) : 'uncategorized') === key)) {
+                    delete next[key];
+                }
+            });
+            return next;
         });
-        setCollapsedCats(map);
     }, [items]);
     // ensure items within each category are sorted by sort_order then name
     categories.forEach((cat) => {

@@ -77,8 +77,9 @@ class DamagedInventoryController extends Controller
                 ];
             });
 
-        // return users ordered by id for predictable id-sorted lists
-        $users = User::orderBy('id')->get(['id', 'name']);
+        // return only active users ordered by id for predictable id-sorted lists
+        // Users table has an enum `status` with values like 'active', 'retired', 'shared'
+        $users = User::where('status', 'active')->orderBy('id')->get(['id', 'name']);
         $damageConditions = DamageCondition::orderBy('order_column')->get(['id', 'condition']);
 
         // ensure damaged_at is passed as the raw DB value (Y-m-d) to avoid timezone shifts on the client

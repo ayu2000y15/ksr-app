@@ -90,8 +90,15 @@ function GanttBar({
     const tooltipElRef = useRef<HTMLElement | null>(null);
     const touchPersistent = useRef(false);
     const outsideHandlerRef = useRef<((ev: Event) => void) | null>(null);
+    const [isTouchDevice, setIsTouchDevice] = useState(false);
 
     useEffect(() => {
+        try {
+            const hasTouch = typeof window !== 'undefined' && ('ontouchstart' in window || (navigator && (navigator as any).maxTouchPoints > 0));
+            setIsTouchDevice(Boolean(hasTouch));
+        } catch {
+            setIsTouchDevice(false);
+        }
         return () => {
             if (hideTimer.current) window.clearTimeout(hideTimer.current);
             if (touchTimer.current) window.clearTimeout(touchTimer.current);
@@ -150,34 +157,37 @@ function GanttBar({
                                 }, 300);
                             }}
                             onClick={(e) => {
-                                setActiveBreak((cur) => (cur === idx ? null : idx));
-                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                setTooltipPos({ x: rect.left + rect.width / 2, y: rect.top });
-                            }}
-                            onTouchStart={(e) => {
-                                if (touchTimer.current) window.clearTimeout(touchTimer.current);
-                                setActiveBreak((cur) => (cur === idx ? null : idx));
-                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                setTooltipPos({ x: rect.left + rect.width / 2, y: rect.top });
-                                activeBreakElRef.current = e.currentTarget as HTMLElement;
-                                touchPersistent.current = true;
+                                // On touch devices, treat click as tap: toggle and install outside handler to close when tapping outside
+                                if (isTouchDevice) {
+                                    if (touchTimer.current) window.clearTimeout(touchTimer.current);
+                                    setActiveBreak((cur) => (cur === idx ? null : idx));
+                                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                    setTooltipPos({ x: rect.left + rect.width / 2, y: rect.top });
+                                    activeBreakElRef.current = e.currentTarget as HTMLElement;
+                                    touchPersistent.current = true;
 
-                                const handleOutside = (ev: Event) => {
-                                    const target = ev.target as Node;
-                                    if (activeBreakElRef.current && activeBreakElRef.current.contains(target)) return;
-                                    if (tooltipElRef.current && tooltipElRef.current.contains(target)) return;
-                                    setActiveBreak(null);
-                                    setTooltipPos(null);
-                                    touchPersistent.current = false;
-                                    if (outsideHandlerRef.current) {
-                                        document.removeEventListener('touchstart', outsideHandlerRef.current);
-                                        document.removeEventListener('mousedown', outsideHandlerRef.current);
-                                        outsideHandlerRef.current = null;
-                                    }
-                                };
-                                outsideHandlerRef.current = handleOutside;
-                                document.addEventListener('touchstart', handleOutside);
-                                document.addEventListener('mousedown', handleOutside);
+                                    const handleOutside = (ev: Event) => {
+                                        const target = ev.target as Node;
+                                        if (activeBreakElRef.current && activeBreakElRef.current.contains(target)) return;
+                                        if (tooltipElRef.current && tooltipElRef.current.contains(target)) return;
+                                        setActiveBreak(null);
+                                        setTooltipPos(null);
+                                        touchPersistent.current = false;
+                                        if (outsideHandlerRef.current) {
+                                            document.removeEventListener('touchstart', outsideHandlerRef.current);
+                                            document.removeEventListener('mousedown', outsideHandlerRef.current);
+                                            outsideHandlerRef.current = null;
+                                        }
+                                    };
+                                    outsideHandlerRef.current = handleOutside;
+                                    document.addEventListener('touchstart', handleOutside);
+                                    document.addEventListener('mousedown', handleOutside);
+                                } else {
+                                    // desktop: keep click behavior (toggle) but don't install outside handler (hover handles hide)
+                                    setActiveBreak((cur) => (cur === idx ? null : idx));
+                                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                    setTooltipPos({ x: rect.left + rect.width / 2, y: rect.top });
+                                }
                             }}
                             className="absolute top-0 z-20 h-full rounded"
                             style={{ left: `${relLeft}px`, width: `${bWidth}px`, backgroundColor: bgColor, cursor: 'pointer' }}
