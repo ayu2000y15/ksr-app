@@ -432,9 +432,13 @@ export default function DamagedIndexPage() {
                 // サーバーが返す順序を尊重する（クライアント側で再ソートしない）
                 setInventoryItems(payload.inventory_items as InventoryItemOption[]);
             }
-            if (payload.users) {
-                // サーバーが返す順序（id順）をそのまま使用
-                setUsers(payload.users as UserOption[]);
+            // ユーザー一覧は共通 API から取得する（フロント側で一貫させる）
+            try {
+                const ures = await axios.get('/api/active-users');
+                setUsers(ures.data.users || []);
+            } catch {
+                // fall back to payload.users when available
+                if (payload.users) setUsers(payload.users as UserOption[]);
             }
             if (payload.damage_conditions) setDamageConditions(payload.damage_conditions);
             // fetch server-side aggregated stats
@@ -633,7 +637,8 @@ export default function DamagedIndexPage() {
                                 </CardHeader>
                                 {/* existing attachments header removed; moved into photo area */}
                                 <CardContent>
-                                    <div className="space-y-3">
+                                    {/* two-column layout on md and up; items that should take full width use col-span-2 */}
+                                    <div className="space-y-3 md:grid md:gap-4 md:space-y-0">
                                         <div>
                                             <Label>
                                                 在庫リスト（カテゴリ：名称） <span className="text-red-600">*</span>
@@ -664,7 +669,7 @@ export default function DamagedIndexPage() {
                                                 対応者 <span className="text-red-600">*</span>
                                             </Label>
                                             <SingleSelectCombobox
-                                                options={users.map((u) => ({ value: u.id, label: u.name }))}
+                                                options={users.map((u) => ({ value: u.id, label: `${u.id} ${u.name}` }))}
                                                 selected={form.handler_user_id || null}
                                                 onChange={(val) => {
                                                     const unknownVal = val as unknown;
@@ -731,7 +736,7 @@ export default function DamagedIndexPage() {
                                             />
                                         </div>
 
-                                        <div>
+                                        <div className="col-span-2">
                                             <Label>破損個所（写真）</Label>
                                             <div>
                                                 <div className="flex items-center gap-2">
@@ -871,7 +876,7 @@ export default function DamagedIndexPage() {
                                             {renderFieldError('customer_phone')}
                                         </div>
 
-                                        <div>
+                                        <div className="col-span-2">
                                             <Label>顧客身分証</Label>
                                             <div>
                                                 <div className="flex items-center gap-2">
@@ -997,7 +1002,7 @@ export default function DamagedIndexPage() {
                                             />
                                         </div>
 
-                                        <div>
+                                        <div className="col-span-2">
                                             <Label>レシート写真</Label>
                                             <div className="flex items-center gap-2">
                                                 <input
@@ -1113,7 +1118,7 @@ export default function DamagedIndexPage() {
                                             </DialogContent>
                                         </Dialog>
 
-                                        <div>
+                                        <div className="col-span-2">
                                             <Label>メモ</Label>
                                             <Textarea
                                                 rows={3}
@@ -1123,7 +1128,7 @@ export default function DamagedIndexPage() {
                                             />
                                         </div>
 
-                                        <div className="flex justify-end pt-2">
+                                        <div className="col-span-2 flex justify-end pt-2">
                                             <Button onClick={handleSubmit}>{editingId ? '更新' : '登録'}</Button>
                                         </div>
                                     </div>
@@ -1157,7 +1162,9 @@ export default function DamagedIndexPage() {
                                                                     ? `${it.inventory_item.name || ''} ${it.management_number ? `[${it.management_number}]` : ''}`
                                                                     : '—'}
                                                             </div>
-                                                            <div className="mt-1 text-sm text-gray-500">{it.handler_user?.name || ''}</div>
+                                                            <div className="mt-1 text-sm text-gray-500">
+                                                                {it.handler_user ? `${it.handler_user.id} ${it.handler_user.name}` : ''}
+                                                            </div>
                                                         </div>
                                                         <div className="flex shrink-0 flex-col items-end gap-2">
                                                             {thumb ? (
@@ -1379,7 +1386,9 @@ export default function DamagedIndexPage() {
                                                                     ? `${it.inventory_item.name || ''} ${it.management_number ? `[${it.management_number}]` : ''}`
                                                                     : '—'}
                                                             </td>
-                                                            <td className="p-2 align-middle text-sm">{it.handler_user?.name || ''}</td>
+                                                            <td className="p-2 align-middle text-sm">
+                                                                {it.handler_user ? `${it.handler_user.id} ${it.handler_user.name}` : ''}
+                                                            </td>
                                                             <td className="p-2 align-middle text-sm">
                                                                 <Button
                                                                     variant="outline"
@@ -1424,7 +1433,11 @@ export default function DamagedIndexPage() {
 
                                                                                 <div className="flex items-start justify-between">
                                                                                     <dt className="w-1/3 text-gray-600">対応者</dt>
-                                                                                    <dd className="w-2/3">{it.handler_user?.name || '—'}</dd>
+                                                                                    <dd className="w-2/3">
+                                                                                        {it.handler_user
+                                                                                            ? `${it.handler_user.id} ${it.handler_user.name}`
+                                                                                            : '—'}
+                                                                                    </dd>
                                                                                 </div>
 
                                                                                 <div className="flex items-start justify-between">

@@ -110,33 +110,50 @@ export default function MonthEditor({
         setGrid((prev) => ({ ...prev, [userId]: { ...prev[userId], [date]: val } }));
     };
 
-    const containerRef = useRef<HTMLDivElement | null>(null);
-
     const scrolledToTodayRef = useRef(false);
 
     const scrollBy = (delta: number) => {
-        if (containerRef.current) containerRef.current.scrollBy({ left: delta, behavior: 'smooth' });
+        // メインカレンダーエリアの横スクロール
+        const calendarScrollContainer = document.getElementById('calendar-scroll-container');
+        if (calendarScrollContainer) {
+            calendarScrollContainer.scrollBy({ left: delta, behavior: 'smooth' });
+        }
+
+        // 統計フッターの横スクロールも連動
+        const footerScrollContainer = document.getElementById('footer-scroll-container');
+        if (footerScrollContainer) {
+            footerScrollContainer.scrollBy({ left: delta, behavior: 'smooth' });
+        }
     };
 
     // on first render (or when visibleDays changes), auto-scroll so today is visible in the viewport
     useEffect(() => {
         try {
             if (scrolledToTodayRef.current) return;
-            if (!containerRef.current) return;
+
             // build today's yyyy-mm-dd key in local timezone
             const now = new Date();
             const pad = (n: number) => String(n).padStart(2, '0');
             const key = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
             if (!visibleDays.includes(key)) return;
 
-            const container = containerRef.current;
+            const calendarScrollContainer = document.getElementById('calendar-scroll-container');
+            if (!calendarScrollContainer) return;
+
             // find the header cell for today
-            const th = container.querySelector(`th[data-date="${key}"]`) as HTMLElement | null;
+            const th = calendarScrollContainer.querySelector(`div[data-date="${key}"]`) as HTMLElement | null;
             if (!th) return;
 
             // center the column in the visible area when possible
-            const targetLeft = Math.max(0, th.offsetLeft - container.clientWidth / 2 + th.clientWidth / 2);
-            container.scrollTo({ left: targetLeft, behavior: 'auto' });
+            const targetLeft = Math.max(0, th.offsetLeft - calendarScrollContainer.clientWidth / 2 + th.clientWidth / 2);
+            calendarScrollContainer.scrollTo({ left: targetLeft, behavior: 'auto' });
+
+            // 統計フッターも同期
+            const footerScrollContainer = document.getElementById('footer-scroll-container');
+            if (footerScrollContainer) {
+                footerScrollContainer.scrollTo({ left: targetLeft, behavior: 'auto' });
+            }
+
             scrolledToTodayRef.current = true;
         } catch {
             // noop on errors
@@ -249,107 +266,190 @@ export default function MonthEditor({
                     </div>
                 </div>
 
-                <div className="relative">
-                    <div className="absolute top-0 left-0 flex h-full items-center">
-                        <Button size="sm" onClick={() => scrollBy(-400)} aria-label="左にスクロール">
+                <div className="relative" style={{ height: 'calc(100vh - 200px)' }}>
+                    <div className="absolute top-0 left-0 z-40 flex h-full items-center">
+                        <Button size="sm" onClick={() => scrollBy(-48 * 7)} aria-label="左にスクロール（1週間）">
                             <ArrowLeft className="h-4 w-4" />
                         </Button>
                     </div>
-                    <div className="overflow-x-auto" ref={containerRef} style={{ margin: '0 48px' }}>
-                        <table className="min-w-full table-fixed text-sm">
-                            <thead>
-                                <tr>
-                                    <th className="sticky left-0 z-30 w-48 bg-white p-2 align-top whitespace-nowrap"></th>
-                                    {visibleDays.map((d) => {
-                                        const dt = parseLocal(d);
-                                        const isSat = dt.getDay() === 6;
-                                        const isSun = dt.getDay() === 0;
-                                        const isHoliday = (holidays || []).includes(d);
-                                        const textClass = isHoliday || isSun ? 'text-red-600' : isSat ? 'text-blue-600' : '';
-                                        const tDate = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
-                                        const today = new Date();
-                                        today.setHours(0, 0, 0, 0);
-                                        const isToday = tDate.getTime() === today.getTime();
+                    <div className="absolute top-0 right-0 z-40 flex h-full items-center">
+                        <Button size="sm" onClick={() => scrollBy(48 * 7)} aria-label="右にスクロール（1週間）">
+                            <ArrowRight className="h-4 w-4" />
+                        </Button>
+                    </div>
 
-                                        return (
-                                            <th
-                                                key={d}
-                                                data-date={d}
-                                                className={`w-12 p-1 text-center ${isToday ? 'bg-green-100' : (accentClass ?? '')}`}
-                                            >
-                                                <div className="mb-1">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={selectedDates.has(d)}
-                                                        onChange={() => toggleDateSelection(d)}
-                                                        aria-label={`日付 ${d} を選択`}
-                                                    />
-                                                </div>
-                                                <Link
-                                                    href={route('shifts.daily', { date: d })}
-                                                    className={`inline-block cursor-pointer rounded px-1 py-0.5 select-none ${textClass} hover:bg-gray-100`}
-                                                    title={`この日のタイムラインを見る: ${d}`}
-                                                >
-                                                    <div className="text-xs">{`${dt.getMonth() + 1}/${dt.getDate()}`}</div>
-                                                    <div className="text-[10px]">{weekdayShort(d)}</div>
-                                                </Link>
-                                            </th>
-                                        );
-                                    })}
-                                </tr>
-                            </thead>
-                            <tbody>
+                    {/* カレンダーコンテナ */}
+                    <div className="flex h-full overflow-hidden" style={{ margin: '0 48px' }}>
+                        {/* 左側: 固定ユーザー名列 */}
+                        <div className="flex w-48 flex-shrink-0 flex-col border-r bg-white">
+                            {/* ヘッダー部分 */}
+                            <div className="sticky top-0 z-30 flex h-20 items-end border-b bg-white p-2">
+                                <span className="text-sm font-medium">ユーザー名</span>
+                            </div>
+
+                            {/* ユーザー名一覧 */}
+                            <div
+                                className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden"
+                                style={{
+                                    height: 'calc(100% - 160px)',
+                                    scrollbarWidth: 'none',
+                                    msOverflowStyle: 'none',
+                                }}
+                                id="user-scroll-container"
+                                onScroll={(e) => {
+                                    // 右側カレンダーエリアの縦スクロールと連動
+                                    const calendarScrollContainer = document.getElementById('calendar-scroll-container');
+                                    if (calendarScrollContainer) {
+                                        calendarScrollContainer.scrollTop = e.currentTarget.scrollTop;
+                                    }
+                                }}
+                            >
                                 {users.map((u) => (
-                                    <tr key={u.id}>
-                                        <td
-                                            className="sticky left-0 z-20 truncate bg-white p-1 align-top whitespace-nowrap"
-                                            style={{ maxWidth: '12rem' }}
-                                        >
-                                            {u.name}
-                                        </td>
-                                        {visibleDays.map((d) => {
-                                            const cellVal = grid[u.id]?.[d] ?? '';
-                                            const bgClass =
-                                                cellVal === 'day'
-                                                    ? 'bg-yellow-100 text-yellow-800'
-                                                    : cellVal === 'night'
-                                                      ? 'bg-blue-100 text-blue-800'
-                                                      : cellVal === 'leave'
-                                                        ? 'bg-red-100 text-red-800'
-                                                        : '';
-                                            // determine if this date is strictly before today (local) -> disable select
-                                            const dt = parseLocal(d);
-                                            const dayStart = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime();
-                                            const today = new Date();
-                                            today.setHours(0, 0, 0, 0);
-                                            const isPast = dayStart < today.getTime();
-                                            return (
-                                                <td key={d} className="p-1 text-center">
-                                                    <select
-                                                        value={cellVal}
-                                                        onChange={(e) => {
-                                                            const val = e.target.value as Cell;
-                                                            setCell(u.id, d, val);
-                                                            queueSave(u.id, d, val);
-                                                        }}
-                                                        className={`rounded border p-1 text-xs ${bgClass} ${isPast ? 'cursor-not-allowed opacity-60' : ''}`}
-                                                        disabled={isPast}
-                                                        title={isPast ? '過去日は変更できません' : ''}
-                                                    >
-                                                        <option value=""> </option>
-                                                        <option value="day">昼</option>
-                                                        <option value="night">夜</option>
-                                                        <option value="leave">休</option>
-                                                    </select>
-                                                </td>
-                                            );
-                                        })}
-                                    </tr>
+                                    <div key={`user-${u.id}`} className="flex h-12 items-center border-b bg-white p-2" style={{ maxWidth: '12rem' }}>
+                                        <span className="truncate text-sm">{u.name}</span>
+                                    </div>
                                 ))}
-                            </tbody>
-                            <tfoot>
-                                <tr>
-                                    <td className="sticky left-0 z-20 w-48 bg-white p-1 align-top whitespace-nowrap">出勤数</td>
+                            </div>
+
+                            {/* 左側統計フッター */}
+                            <div className="flex h-20 flex-shrink-0 items-center border-t bg-gray-50 p-2">
+                                <span className="text-sm font-medium">出勤数</span>
+                            </div>
+                        </div>
+
+                        {/* 右側: スクロール可能なカレンダーエリア */}
+                        <div className="flex flex-1 flex-col overflow-hidden">
+                            <div
+                                className="flex-1 overflow-auto [&::-webkit-scrollbar]:hidden"
+                                style={{
+                                    scrollbarWidth: 'thin',
+                                    scrollbarColor: 'rgba(156, 163, 175, 0.5) transparent',
+                                }}
+                                id="calendar-scroll-container"
+                                onScroll={(e) => {
+                                    // 左側ユーザー名列の縦スクロールと連動
+                                    const userScrollContainer = document.getElementById('user-scroll-container');
+                                    if (userScrollContainer) {
+                                        userScrollContainer.scrollTop = e.currentTarget.scrollTop;
+                                    }
+
+                                    // 統計フッターの横スクロールと連動
+                                    const footerScrollContainer = document.getElementById('footer-scroll-container');
+                                    if (footerScrollContainer) {
+                                        footerScrollContainer.scrollLeft = e.currentTarget.scrollLeft;
+                                    }
+                                }}
+                            >
+                                <div className="min-w-full" style={{ minWidth: `${visibleDays.length * 48}px` }}>
+                                    {/* ヘッダー行 */}
+                                    <div className="sticky top-0 z-20 h-20 border-b bg-white">
+                                        <div className="flex">
+                                            {visibleDays.map((d) => {
+                                                const dt = parseLocal(d);
+                                                const isSat = dt.getDay() === 6;
+                                                const isSun = dt.getDay() === 0;
+                                                const isHoliday = (holidays || []).includes(d);
+                                                const textClass = isHoliday || isSun ? 'text-red-600' : isSat ? 'text-blue-600' : '';
+                                                const tDate = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+                                                const today = new Date();
+                                                today.setHours(0, 0, 0, 0);
+                                                const isToday = tDate.getTime() === today.getTime();
+
+                                                return (
+                                                    <div
+                                                        key={d}
+                                                        data-date={d}
+                                                        className={`w-12 flex-shrink-0 border-r p-1 text-center ${isToday ? 'bg-green-100' : (accentClass ?? '')}`}
+                                                    >
+                                                        <div className="mb-1">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={selectedDates.has(d)}
+                                                                onChange={() => toggleDateSelection(d)}
+                                                                aria-label={`日付 ${d} を選択`}
+                                                            />
+                                                        </div>
+                                                        <Link
+                                                            href={route('shifts.daily', { date: d })}
+                                                            className={`inline-block cursor-pointer rounded px-1 py-0.5 select-none ${textClass} hover:bg-gray-100`}
+                                                            title={`この日のタイムラインを見る: ${d}`}
+                                                        >
+                                                            <div className="text-xs">{`${dt.getMonth() + 1}/${dt.getDate()}`}</div>
+                                                            <div className="text-[10px]">{weekdayShort(d)}</div>
+                                                        </Link>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    {/* データ行 */}
+                                    <div style={{ minHeight: 'calc(100vh - 520px)' }}>
+                                        {users.map((u) => (
+                                            <div key={`row-${u.id}`} className="flex h-12 border-b">
+                                                {visibleDays.map((d) => {
+                                                    const cellVal = grid[u.id]?.[d] ?? '';
+                                                    const bgClass =
+                                                        cellVal === 'day'
+                                                            ? 'bg-yellow-100 text-yellow-800'
+                                                            : cellVal === 'night'
+                                                              ? 'bg-blue-100 text-blue-800'
+                                                              : cellVal === 'leave'
+                                                                ? 'bg-red-100 text-red-800'
+                                                                : '';
+                                                    // determine if this date is strictly before today (local) -> disable select
+                                                    const dt = parseLocal(d);
+                                                    const dayStart = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime();
+                                                    const today = new Date();
+                                                    today.setHours(0, 0, 0, 0);
+                                                    const isPast = dayStart < today.getTime();
+                                                    return (
+                                                        <div
+                                                            key={d}
+                                                            className="flex w-12 flex-shrink-0 items-center justify-center border-r p-1 text-center"
+                                                        >
+                                                            <select
+                                                                value={cellVal}
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value as Cell;
+                                                                    setCell(u.id, d, val);
+                                                                    queueSave(u.id, d, val);
+                                                                }}
+                                                                className={`w-full rounded border p-1 text-xs ${bgClass} ${isPast ? 'cursor-not-allowed opacity-60' : ''}`}
+                                                                disabled={isPast}
+                                                                title={isPast ? '過去日は変更できません' : ''}
+                                                            >
+                                                                <option value=""> </option>
+                                                                <option value="day">昼</option>
+                                                                <option value="night">夜</option>
+                                                                <option value="leave">休</option>
+                                                            </select>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 右側統計フッター */}
+                            <div
+                                className="h-20 flex-shrink-0 overflow-x-auto border-t bg-gray-50 [&::-webkit-scrollbar]:hidden"
+                                style={{
+                                    scrollbarWidth: 'none',
+                                    msOverflowStyle: 'none',
+                                }}
+                                id="footer-scroll-container"
+                                onScroll={(e) => {
+                                    // カレンダーエリアの横スクロールと連動
+                                    const calendarScrollContainer = document.getElementById('calendar-scroll-container');
+                                    if (calendarScrollContainer) {
+                                        calendarScrollContainer.scrollLeft = e.currentTarget.scrollLeft;
+                                    }
+                                }}
+                            >
+                                <div className="flex" style={{ minWidth: `${visibleDays.length * 48}px` }}>
                                     {visibleDays.map((d) => {
                                         const dayCount = Object.keys(grid).reduce((acc, uid) => {
                                             const v = (grid as any)[Number(uid)]?.[d] ?? '';
@@ -360,30 +460,28 @@ export default function MonthEditor({
                                             return acc + (v === 'night' ? 1 : 0);
                                         }, 0);
                                         return (
-                                            <td key={d} className="p-1 text-center">
+                                            <div
+                                                key={d}
+                                                className="flex h-full w-12 flex-shrink-0 items-center justify-center border-r p-1 text-center"
+                                            >
                                                 <div className="flex flex-col items-center gap-1">
                                                     <div className="text-[11px]">
-                                                        <span className="inline-block rounded bg-yellow-100 px-2 py-0.5 text-black">
+                                                        <span className="inline-block rounded bg-yellow-100 px-1 py-0.5 text-black">
                                                             昼 {dayCount}
                                                         </span>
                                                     </div>
                                                     <div className="text-[11px]">
-                                                        <span className="inline-block rounded bg-blue-100 px-2 py-0.5 text-black">
+                                                        <span className="inline-block rounded bg-blue-100 px-1 py-0.5 text-black">
                                                             夜 {nightCount}
                                                         </span>
                                                     </div>
                                                 </div>
-                                            </td>
+                                            </div>
                                         );
                                     })}
-                                </tr>
-                            </tfoot>
-                        </table>
-                    </div>
-                    <div className="absolute top-0 right-0 flex h-full items-center">
-                        <Button size="sm" onClick={() => scrollBy(400)} aria-label="右にスクロール">
-                            <ArrowRight className="h-4 w-4" />
-                        </Button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}

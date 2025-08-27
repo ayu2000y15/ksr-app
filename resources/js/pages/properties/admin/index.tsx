@@ -1,4 +1,5 @@
 import HeadingSmall from '@/components/heading-small';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -60,8 +61,14 @@ const SortableHeader = ({
     queryParams?: Record<string, string> | null;
     listName: string;
 }) => {
-    const currentSort = (queryParams && ('sort' in queryParams ? (queryParams as Record<string, string>).sort : undefined)) || new URLSearchParams(window.location.search).get('sort') || '';
-    const currentDirection = (queryParams && ('direction' in queryParams ? (queryParams as Record<string, string>).direction : undefined)) || new URLSearchParams(window.location.search).get('direction') || 'asc';
+    const currentSort =
+        (queryParams && ('sort' in queryParams ? (queryParams as Record<string, string>).sort : undefined)) ||
+        new URLSearchParams(window.location.search).get('sort') ||
+        '';
+    const currentDirection =
+        (queryParams && ('direction' in queryParams ? (queryParams as Record<string, string>).direction : undefined)) ||
+        new URLSearchParams(window.location.search).get('direction') ||
+        'asc';
     const isCurrentSort = currentSort === sort_key;
     const newDirection = isCurrentSort && currentDirection === 'asc' ? 'desc' : 'asc';
 
@@ -1337,8 +1344,7 @@ export default function Index({
                         <div>
                             <Button
                                 onClick={() => {
-                                    // only allow toggling create panel for properties when allowed
-                                    if (tab === 'properties' && !canProperties.create) return;
+                                    if (!canProperties.create) return;
                                     setShowCreate((s) => {
                                         const next = !s;
                                         if (next) {
@@ -1375,7 +1381,7 @@ export default function Index({
                                 }}
                                 aria-pressed={showCreate}
                                 aria-label={showCreate ? '新規作成を閉じる' : '新規作成'}
-                                disabled={tab === 'properties' && !canProperties.create}
+                                disabled={!canProperties.create}
                             >
                                 <Plus className="mr-0 h-4 w-4 sm:mr-2" />
                                 <span className="hidden sm:inline">{showCreate ? '閉じる' : '新規作成'}</span>
@@ -1411,10 +1417,12 @@ export default function Index({
                                                             onClick={(e) => {
                                                                 e.preventDefault();
                                                                 e.stopPropagation();
+                                                                if (!canProperties.update) return;
                                                                 setEditMode({ type: 'agent', id: a.id });
                                                                 setShowCreate(true);
                                                                 setAgentForm({ name: a.name, order_column: a.order_column?.toString() || '' });
                                                             }}
+                                                            disabled={!canProperties.update}
                                                         >
                                                             <Edit className="h-4 w-4" />
                                                         </Button>
@@ -1447,16 +1455,17 @@ export default function Index({
                                                 <TableRow
                                                     key={a.id}
                                                     className="hover:bg-gray-50"
-                                                    draggable
-                                                    onDragStart={(e) => onDragStart(e, a.id)}
-                                                    onDragOver={onDragOver}
-                                                    onDrop={(e) => reorderOnDrop(e, a.id, 'agents')}
+                                                    draggable={canProperties.reorder}
+                                                    onDragStart={canProperties.reorder ? (e) => onDragStart(e, a.id) : undefined}
+                                                    onDragOver={canProperties.reorder ? onDragOver : undefined}
+                                                    onDrop={canProperties.reorder ? (e) => reorderOnDrop(e, a.id, 'agents') : undefined}
                                                 >
                                                     <TableCell>
                                                         <button
                                                             aria-label="ドラッグして並び替え"
-                                                            className="mr-2 inline-block text-gray-400 hover:text-gray-600 md:inline"
+                                                            className={`mr-2 inline-block ${canProperties.reorder ? 'text-gray-400 hover:text-gray-600' : 'cursor-not-allowed text-gray-200'} md:inline`}
                                                             onClick={(e) => e.stopPropagation()}
+                                                            disabled={!canProperties.reorder}
                                                         >
                                                             <GripVertical className="h-4 w-4" />
                                                         </button>
@@ -1478,6 +1487,7 @@ export default function Index({
                                                                     onClick={(e) => {
                                                                         e.preventDefault();
                                                                         e.stopPropagation();
+                                                                        if (!canProperties.update) return;
                                                                         setEditMode({ type: 'agent', id: a.id });
                                                                         setShowCreate(true);
                                                                         setAgentForm({
@@ -1485,6 +1495,7 @@ export default function Index({
                                                                             order_column: a.order_column?.toString() || '',
                                                                         });
                                                                     }}
+                                                                    disabled={!canProperties.update}
                                                                 >
                                                                     <Edit className="mr-2 h-4 w-4" /> 編集
                                                                 </Button>
@@ -1494,6 +1505,7 @@ export default function Index({
                                                                 size="sm"
                                                                 onClick={async (e) => {
                                                                     e.stopPropagation();
+                                                                    if (!canProperties.delete) return;
                                                                     if (!confirm('この不動産会社を削除しますか？')) return;
                                                                     try {
                                                                         const res = await axios.delete(
@@ -1525,6 +1537,7 @@ export default function Index({
                                                                         setTimeout(() => setToast(null), 3000);
                                                                     }
                                                                 }}
+                                                                disabled={!canProperties.delete}
                                                             >
                                                                 <Trash className="mr-2 h-4 w-4" /> 削除
                                                             </Button>
@@ -1548,7 +1561,10 @@ export default function Index({
                                                 <PropertyListItem
                                                     p={p}
                                                     agents={agentsList}
+                                                    canUpdate={canProperties.update}
+                                                    canDelete={canProperties.delete}
                                                     onDelete={async () => {
+                                                        if (!canProperties.delete) return;
                                                         if (!confirm('この物件を削除しますか？')) return;
                                                         try {
                                                             const res = await axios.delete(
@@ -1578,6 +1594,7 @@ export default function Index({
                                                         }
                                                     }}
                                                     onEdit={() => {
+                                                        if (!canProperties.update) return;
                                                         setEditMode({ type: 'property', id: p.id });
                                                         setShowCreate(true);
                                                         setPropertyForm({
@@ -1652,9 +1669,18 @@ export default function Index({
                                                         p={p}
                                                         agents={agentsList}
                                                         onClick={() => togglePropertyOpen(p.id)}
-                                                        onRowDragStart={(e: React.DragEvent) => onDragStart(e, p.id)}
-                                                        onRowDragOver={onDragOver}
-                                                        onRowDrop={(e: React.DragEvent) => reorderOnDrop(e, p.id, 'properties')}
+                                                        onRowDragStart={
+                                                            canProperties.reorder ? (e: React.DragEvent) => onDragStart(e, p.id) : undefined
+                                                        }
+                                                        onRowDragOver={canProperties.reorder ? onDragOver : undefined}
+                                                        onRowDrop={
+                                                            canProperties.reorder
+                                                                ? (e: React.DragEvent) => reorderOnDrop(e, p.id, 'properties')
+                                                                : undefined
+                                                        }
+                                                        canUpdate={canProperties.update}
+                                                        canDelete={canProperties.delete}
+                                                        canReorder={canProperties.reorder}
                                                         onDelete={async () => {
                                                             if (!confirm('この物件を削除しますか？')) return;
                                                             try {
@@ -1687,6 +1713,7 @@ export default function Index({
                                                             }
                                                         }}
                                                         onEdit={() => {
+                                                            if (!canProperties.update) return;
                                                             setEditMode({ type: 'property', id: p.id });
                                                             setShowCreate(true);
                                                             setPropertyForm({
@@ -1753,10 +1780,12 @@ export default function Index({
                                                             onClick={(e) => {
                                                                 e.preventDefault();
                                                                 e.stopPropagation();
+                                                                if (!canProperties.update) return;
                                                                 setEditMode({ type: 'furniture', id: f.id });
                                                                 setShowCreate(true);
                                                                 setFurnitureForm({ name: f.name, order_column: f.order_column?.toString() || '' });
                                                             }}
+                                                            disabled={!canProperties.update}
                                                         >
                                                             <Edit className="h-4 w-4" />
                                                         </Button>
@@ -1766,6 +1795,7 @@ export default function Index({
                                                         size="sm"
                                                         onClick={async (e) => {
                                                             e.stopPropagation();
+                                                            if (!canProperties.delete) return;
                                                             if (!confirm('この家具を削除しますか？')) return;
                                                             try {
                                                                 const res = await axios.delete(
@@ -1796,6 +1826,7 @@ export default function Index({
                                                                 setTimeout(() => setToast(null), 3000);
                                                             }
                                                         }}
+                                                        disabled={!canProperties.delete}
                                                     >
                                                         <Trash className="h-4 w-4" />
                                                     </Button>
@@ -1804,7 +1835,6 @@ export default function Index({
                                         </div>
                                     ))}
                                 </div>
-
                                 <div className="hidden md:block">
                                     <Table>
                                         <TableHeader>
@@ -1827,16 +1857,17 @@ export default function Index({
                                                 <TableRow
                                                     key={f.id}
                                                     className="hover:bg-gray-50"
-                                                    draggable
-                                                    onDragStart={(e) => onDragStart(e, f.id)}
-                                                    onDragOver={onDragOver}
-                                                    onDrop={(e) => reorderOnDrop(e, f.id, 'furnitures')}
+                                                    draggable={canProperties.reorder}
+                                                    onDragStart={canProperties.reorder ? (e) => onDragStart(e, f.id) : undefined}
+                                                    onDragOver={canProperties.reorder ? onDragOver : undefined}
+                                                    onDrop={canProperties.reorder ? (e) => reorderOnDrop(e, f.id, 'furnitures') : undefined}
                                                 >
                                                     <TableCell>
                                                         <button
                                                             aria-label="ドラッグして並び替え"
-                                                            className="mr-2 inline-block text-gray-400 hover:text-gray-600 md:inline"
+                                                            className={`mr-2 inline-block ${canProperties.reorder ? 'text-gray-400 hover:text-gray-600' : 'cursor-not-allowed text-gray-200'} md:inline`}
                                                             onClick={(e) => e.stopPropagation()}
+                                                            disabled={!canProperties.reorder}
                                                         >
                                                             <GripVertical className="h-4 w-4" />
                                                         </button>
@@ -1858,6 +1889,7 @@ export default function Index({
                                                                     onClick={(e) => {
                                                                         e.preventDefault();
                                                                         e.stopPropagation();
+                                                                        if (!canProperties.update) return;
                                                                         setEditMode({ type: 'furniture', id: f.id });
                                                                         setShowCreate(true);
                                                                         setFurnitureForm({
@@ -1865,6 +1897,7 @@ export default function Index({
                                                                             order_column: f.order_column?.toString() || '',
                                                                         });
                                                                     }}
+                                                                    disabled={!canProperties.update}
                                                                 >
                                                                     <Edit className="mr-2 h-4 w-4" /> 編集
                                                                 </Button>
@@ -1874,6 +1907,7 @@ export default function Index({
                                                                 size="sm"
                                                                 onClick={async (e) => {
                                                                     e.stopPropagation();
+                                                                    if (!canProperties.delete) return;
                                                                     if (!confirm('この家具を削除しますか？')) return;
                                                                     try {
                                                                         const res = await axios.delete(
@@ -1905,6 +1939,7 @@ export default function Index({
                                                                         setTimeout(() => setToast(null), 3000);
                                                                     }
                                                                 }}
+                                                                disabled={!canProperties.delete}
                                                             >
                                                                 <Trash className="mr-2 h-4 w-4" /> 削除
                                                             </Button>
@@ -1926,7 +1961,21 @@ export default function Index({
 }
 
 // --- 小さなサブコンポーネント ---
-function PropertyListItem({ p, agents, onDelete, onEdit }: { p: Property; agents: Agent[]; onDelete?: () => void; onEdit?: () => void }) {
+function PropertyListItem({
+    p,
+    agents,
+    onDelete,
+    onEdit,
+    canUpdate = true,
+    canDelete = true,
+}: {
+    p: Property;
+    agents: Agent[];
+    onDelete?: () => void;
+    onEdit?: () => void;
+    canUpdate?: boolean;
+    canDelete?: boolean;
+}) {
     const agentName = (agents || []).find((a: Agent) => a.id === p.real_estate_agent_id)?.name || '—';
 
     return (
@@ -1962,8 +2011,10 @@ function PropertyListItem({ p, agents, onDelete, onEdit }: { p: Property; agents
                                 onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
+                                    if (!canUpdate) return;
                                     onEdit?.();
                                 }}
+                                disabled={!canUpdate}
                             >
                                 <Edit className="h-4 w-4" />
                             </Button>
@@ -1974,9 +2025,11 @@ function PropertyListItem({ p, agents, onDelete, onEdit }: { p: Property; agents
                                 size="sm"
                                 onClick={(e) => {
                                     e.stopPropagation();
+                                    if (!canDelete) return;
                                     onDelete();
                                 }}
                                 className="ml-2"
+                                disabled={!canDelete}
                             >
                                 <Trash className="h-4 w-4" />
                             </Button>
@@ -1997,6 +2050,9 @@ function PropertyTableRow({
     onRowDragOver,
     onRowDrop,
     onClick,
+    canUpdate = true,
+    canDelete = true,
+    canReorder = true,
 }: {
     p: Property;
     agents: Agent[];
@@ -2006,6 +2062,9 @@ function PropertyTableRow({
     onRowDragOver?: (e: React.DragEvent) => void;
     onRowDrop?: (e: React.DragEvent) => void | Promise<void>;
     onClick?: () => void;
+    canUpdate?: boolean;
+    canDelete?: boolean;
+    canReorder?: boolean;
 }) {
     const agentName = (agents || []).find((a: Agent) => a.id === p.real_estate_agent_id)?.name || '—';
 
@@ -2021,8 +2080,9 @@ function PropertyTableRow({
             <TableCell>
                 <button
                     aria-label="ドラッグして並び替え"
-                    className="mr-2 inline-block text-gray-400 hover:text-gray-600 md:inline"
+                    className={`mr-2 inline-block ${canReorder ? 'text-gray-400 hover:text-gray-600' : 'cursor-not-allowed text-gray-200'} md:inline`}
                     onClick={(e) => e.stopPropagation()}
+                    disabled={!canReorder}
                 >
                     <GripVertical className="h-4 w-4" />
                 </button>
@@ -2038,7 +2098,9 @@ function PropertyTableRow({
                     <div className="mt-1 text-xs text-muted-foreground">{p.postcode ? `〒${p.postcode} ${p.address || '—'}` : p.address || '—'}</div>
                 </div>
             </TableCell>
-            <TableCell>{p.parking ? '有' : '無'}</TableCell>
+            <TableCell>
+                {p.parking ? <Badge className="bg-green-100 text-green-800">有</Badge> : <Badge className="bg-gray-100 text-gray-800">無</Badge>}
+            </TableCell>
             <TableCell>{p.contract_date ? new Date(p.contract_date).toLocaleDateString() : '—'}</TableCell>
             <TableCell>{p.termination_date ? new Date(p.termination_date).toLocaleDateString() : '—'}</TableCell>
             <TableCell>{p.key_returned ? 'あり' : 'なし'}</TableCell>
@@ -2050,8 +2112,10 @@ function PropertyTableRow({
                         className="text-sm"
                         onClick={(e) => {
                             e.stopPropagation();
+                            if (!canUpdate) return;
                             onEdit?.();
                         }}
+                        disabled={!canUpdate}
                     >
                         <Edit className="mr-1" /> 編集
                     </Button>
@@ -2061,8 +2125,10 @@ function PropertyTableRow({
                             size="sm"
                             onClick={(e) => {
                                 e.stopPropagation();
+                                if (!canDelete) return;
                                 onDelete();
                             }}
+                            disabled={!canDelete}
                         >
                             <Trash className="mr-2 h-4 w-4" /> 削除
                         </Button>

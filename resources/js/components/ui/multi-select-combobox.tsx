@@ -1,4 +1,4 @@
-import { Check, X, ChevronsUpDown } from 'lucide-react';
+import { Check, ChevronsUpDown } from 'lucide-react';
 import * as React from 'react';
 
 import { cn } from '@/lib/utils';
@@ -14,8 +14,10 @@ export type OptionType = {
 
 interface MultiSelectComboboxProps {
     options: OptionType[];
-    selected: number[];
-    onChange: React.Dispatch<React.SetStateAction<number[]>>;
+    // allow callers to pass a single number or an array; component will normalize
+    selected: number[] | number | null | undefined;
+    // onChange receives the new array of selected ids
+    onChange: (vals: number[]) => void;
     className?: string;
     placeholder?: string;
 }
@@ -24,16 +26,14 @@ function MultiSelectCombobox({ options, selected, onChange, className, placehold
     const [open, setOpen] = React.useState(false);
 
     const handleSelect = (value: number) => {
-        onChange((prevSelected) => {
-            if (prevSelected.includes(value)) {
-                return prevSelected.filter((item) => item !== value);
-            } else {
-                return [...prevSelected, value];
-            }
-        });
+        // compute new selected array from current prop value and emit the new array
+        const base = Array.isArray(selected) ? selected : selected ? [selected as number] : [];
+        const next = base.includes(value) ? base.filter((item) => item !== value) : [...base, value];
+        onChange(next);
     };
 
-    const selectedOptions = selected.map((value) => options.find((option) => option.value === value)).filter(Boolean) as OptionType[];
+    const selectedArray = Array.isArray(selected) ? selected : selected ? [selected as number] : [];
+    const selectedOptions = selectedArray.map((value) => options.find((option) => option.value === value)).filter(Boolean) as OptionType[];
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
@@ -66,7 +66,7 @@ function MultiSelectCombobox({ options, selected, onChange, className, placehold
                         <CommandEmpty>見つかりません</CommandEmpty>
                         <CommandGroup>
                             {options.map((option) => {
-                                const isSelected = selected.includes(option.value);
+                                const isSelected = selectedArray.includes(option.value);
                                 return (
                                     <CommandItem key={option.value} onSelect={() => handleSelect(option.value)}>
                                         <Check className={cn('mr-2 h-4 w-4', isSelected ? 'opacity-100' : 'opacity-0')} />

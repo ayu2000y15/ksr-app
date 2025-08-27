@@ -84,7 +84,7 @@ export default function RolePermissionsPage() {
         inventory: '在庫管理',
         damaged_inventory: '破損在庫管理',
         その他: 'その他',
-    properties: '物件管理',
+        properties: '物件管理',
         // 必要に応じてここに追加
     };
 
@@ -145,12 +145,12 @@ export default function RolePermissionsPage() {
         'damaged_inventory.update': '破損在庫編集',
         'damaged_inventory.delete': '破損在庫削除',
         'damaged_inventory.log.view': '破損在庫ログ閲覧',
-    // properties
-    'properties.view': '物件閲覧',
-    'properties.create': '物件作成',
-    'properties.edit': '物件編集',
-    'properties.delete': '物件削除',
-    'properties.reorder': '物件並び替え',
+        // properties
+        'properties.view': '物件閲覧',
+        'properties.create': '物件作成',
+        'properties.edit': '物件編集',
+        'properties.delete': '物件削除',
+        'properties.reorder': '物件並び替え',
     };
 
     const allSelected = permissions.length > 0 && permissions.every((p) => !!checked[p.id]);

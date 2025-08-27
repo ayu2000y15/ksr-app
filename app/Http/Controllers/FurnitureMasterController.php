@@ -18,6 +18,9 @@ class FurnitureMasterController extends Controller
 
     public function destroy(FurnitureMaster $furniture_master, Request $request)
     {
+        // require delete permission on properties
+        \Illuminate\Support\Facades\Gate::authorize('delete', \App\Models\Property::class);
+
         try {
             $furniture_master->delete();
             if ($request->wantsJson() || $request->ajax()) {
@@ -35,11 +38,16 @@ class FurnitureMasterController extends Controller
 
     public function create()
     {
+        // require create permission on properties
+        \Illuminate\Support\Facades\Gate::authorize('create', \App\Models\Property::class);
         return Inertia::render('properties/masters/furniture-masters/create');
     }
 
     public function store(Request $request)
     {
+        // require create permission on properties
+        \Illuminate\Support\Facades\Gate::authorize('create', \App\Models\Property::class);
+
         $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
             'name' => 'required|string|max:191',
             'order_column' => 'nullable|integer|min:0',
@@ -70,6 +78,9 @@ class FurnitureMasterController extends Controller
 
     public function update(Request $request, FurnitureMaster $furniture_master)
     {
+        // require update permission on properties
+        \Illuminate\Support\Facades\Gate::authorize('update', \App\Models\Property::class);
+
         $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
             'name' => 'required|string|max:191',
             'order_column' => 'nullable|integer|min:0',
@@ -103,7 +114,8 @@ class FurnitureMasterController extends Controller
     // reorder furniture masters via POST { order: [id1, id2, ...] }
     public function reorder(Request $request)
     {
-        $this->authorize('create', \App\Models\InventoryItem::class);
+        // require reorder permission on properties
+        \Illuminate\Support\Facades\Gate::authorize('reorder', \App\Models\Property::class);
 
         $data = $request->validate([
             'order' => 'required|array',

@@ -17,7 +17,8 @@ function PopoverTrigger({
 
 function PopoverContent({
   className,
-  align = "center",
+  // change default align from center to start so dropdowns align to the left of the trigger
+  align = "start",
   sideOffset = 4,
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Content>) {

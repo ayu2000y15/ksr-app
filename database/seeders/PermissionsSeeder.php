@@ -73,7 +73,7 @@ class PermissionsSeeder extends Seeder
             'user_shift_setting.create',
             'user_shift_setting.update',
             'user_shift_setting.delete',
-            
+
             // properties (物件マスタ管理)
             'properties.view',
             'properties.create',

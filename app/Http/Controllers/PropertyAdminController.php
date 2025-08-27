@@ -56,11 +56,25 @@ class PropertyAdminController extends Controller
             $propertiesQuery->orderBy('order_column')->orderBy('name');
         }
         $items = $propertiesQuery->get();
-        // add frontend-friendly keys so client code can read `postcode` and `termination_date`
+        // add frontend-friendly keys so client code can read `postcode`, `termination_date`
+        // and server-controlled display label for selects.
         $items = $items->map(function ($it) {
             $arr = $it->toArray();
             $arr['postcode'] = $it->postal_code ?? null;
             $arr['termination_date'] = $it->cancellation_date ?? null;
+            // build display label as: 物件名(部屋番号) [間取り]
+            $label = $it->name ?? '';
+            $room = trim((string)($it->room_details ?? ''));
+            $layout = trim((string)($it->layout ?? ''));
+            if ($room !== '') {
+                $label .= "({$room})";
+            }
+            if ($layout !== '') {
+                $label .= " [{$layout}]";
+            }
+            $arr['display_label'] = $label;
+            // include parking alias expected by frontend (0/1)
+            $arr['parking'] = $it->has_parking ? 1 : 0;
             return $arr;
         });
 
@@ -98,7 +112,7 @@ class PropertyAdminController extends Controller
             ];
         }
 
-    // determine current user's abilities for properties and include in props
+        // determine current user's abilities for properties and include in props
         $can = [
             'properties' => [
                 'viewAny' => \Illuminate\Support\Facades\Gate::allows('viewAny', Property::class),
@@ -147,7 +161,7 @@ class PropertyAdminController extends Controller
 
     public function store(Request $request)
     {
-    $this->authorize('create', Property::class);
+        $this->authorize('create', Property::class);
         $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
             'name' => 'required|string|max:191',
             'real_estate_agent_id' => 'required|exists:real_estate_agents,id',
@@ -210,6 +224,7 @@ class PropertyAdminController extends Controller
         $propArr = array_merge($prop->toArray(), [
             'postcode' => $prop->postal_code ?? null,
             'termination_date' => $prop->cancellation_date ?? null,
+            'parking' => $prop->has_parking ? 1 : 0,
         ]);
 
         if ($request->wantsJson() || $request->ajax()) {
@@ -280,6 +295,7 @@ class PropertyAdminController extends Controller
         $propertyArr = array_merge($property->toArray(), [
             'postcode' => $property->postal_code ?? null,
             'termination_date' => $property->cancellation_date ?? null,
+            'parking' => $property->has_parking ? 1 : 0,
         ]);
 
         if ($request->wantsJson() || $request->ajax()) {
@@ -292,7 +308,7 @@ class PropertyAdminController extends Controller
     // reorder properties via POST { order: [id1, id2, ...] }
     public function reorder(Request $request)
     {
-    $this->authorize('reorder', Property::class);
+        $this->authorize('reorder', Property::class);
 
         $data = $request->validate([
             'order' => 'required|array',

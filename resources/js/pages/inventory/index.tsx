@@ -310,7 +310,7 @@ export default function Index({ items: initial }: any) {
                     <div className="min-w-0">
                         <HeadingSmall title="在庫管理" description="カテゴリごとに在庫を表示。" />
                     </div>
-                    <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end">
+                    <div className="flex items-center justify-start gap-2 sm:justify-end">
                         {/* カテゴリ編集: show if user can update inventory categories (use inventory.update as proxy) */}
                         {inventoryPerms.update && (
                             <Link href={route('inventory.categories.index')}>
@@ -331,7 +331,9 @@ export default function Index({ items: initial }: any) {
                         {(inventoryPerms.create || inventoryPerms.update) && (
                             <Link href={route('inventory.create')}>
                                 <Button className="whitespace-nowrap">
-                                    <Plus className="mr-2 h-4 w-4" /> 一括編集
+                                    <Plus className="mr-0 h-4 w-4 sm:mr-2" />
+                                    {/* モバイルはアイコンのみ、sm以上でテキスト表示 */}
+                                    <span className="hidden sm:inline">一括編集</span>
                                 </Button>
                             </Link>
                         )}

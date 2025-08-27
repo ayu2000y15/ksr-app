@@ -18,6 +18,9 @@ class RealEstateAgentController extends Controller
 
     public function destroy(RealEstateAgent $real_estate_agent, Request $request)
     {
+        // authorize using property permissions: require properties.delete
+        \Illuminate\Support\Facades\Gate::authorize('delete', \App\Models\Property::class);
+
         try {
             $real_estate_agent->delete();
             if ($request->wantsJson() || $request->ajax()) {
@@ -36,11 +39,16 @@ class RealEstateAgentController extends Controller
 
     public function create()
     {
+        // require create permission on properties
+        \Illuminate\Support\Facades\Gate::authorize('create', \App\Models\Property::class);
         return Inertia::render('properties/masters/real-estate-agents/create');
     }
 
     public function store(Request $request)
     {
+        // require create permission on properties
+        \Illuminate\Support\Facades\Gate::authorize('create', \App\Models\Property::class);
+
         $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
             'name' => 'required|string|max:191',
             'order_column' => 'nullable|integer|min:0',
@@ -71,6 +79,9 @@ class RealEstateAgentController extends Controller
 
     public function update(Request $request, RealEstateAgent $real_estate_agent)
     {
+        // require update permission on properties
+        \Illuminate\Support\Facades\Gate::authorize('update', \App\Models\Property::class);
+
         $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
             'name' => 'required|string|max:191',
             'order_column' => 'nullable|integer|min:0',
@@ -104,7 +115,8 @@ class RealEstateAgentController extends Controller
     // reorder real estate agents via POST { order: [id1, id2, ...] }
     public function reorder(Request $request)
     {
-        $this->authorize('create', \App\Models\InventoryItem::class);
+        // require reorder permission on properties
+        \Illuminate\Support\Facades\Gate::authorize('reorder', \App\Models\Property::class);
 
         $data = $request->validate([
             'order' => 'required|array',
