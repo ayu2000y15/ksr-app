@@ -73,6 +73,13 @@ class PermissionsSeeder extends Seeder
             'user_shift_setting.create',
             'user_shift_setting.update',
             'user_shift_setting.delete',
+            
+            // properties (物件マスタ管理)
+            'properties.view',
+            'properties.create',
+            'properties.edit',
+            'properties.delete',
+            'properties.reorder',
         ];
 
         // 既存の権限はそのままに、新しい権限のみを作成

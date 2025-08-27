@@ -98,6 +98,17 @@ class PropertyAdminController extends Controller
             ];
         }
 
+    // determine current user's abilities for properties and include in props
+        $can = [
+            'properties' => [
+                'viewAny' => \Illuminate\Support\Facades\Gate::allows('viewAny', Property::class),
+                'create' => \Illuminate\Support\Facades\Gate::allows('create', Property::class),
+                'update' => \Illuminate\Support\Facades\Gate::allows('update', Property::class),
+                'delete' => \Illuminate\Support\Facades\Gate::allows('delete', Property::class),
+                'reorder' => \Illuminate\Support\Facades\Gate::allows('reorder', Property::class),
+            ],
+        ];
+
         // render Inertia page and include queryParams so the client can show current sort state
         return Inertia::render('properties/admin/index', [
             'properties' => $items,
@@ -106,6 +117,7 @@ class PropertyAdminController extends Controller
             'property_furnitures_map' => $propertyFurnituresMap,
             'property_furnitures_details' => $propertyFurnituresDetails,
             'queryParams' => $queryParams,
+            'can' => $can,
         ]);
     }
 
@@ -135,6 +147,7 @@ class PropertyAdminController extends Controller
 
     public function store(Request $request)
     {
+    $this->authorize('create', Property::class);
         $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
             'name' => 'required|string|max:191',
             'real_estate_agent_id' => 'required|exists:real_estate_agents,id',
@@ -279,7 +292,7 @@ class PropertyAdminController extends Controller
     // reorder properties via POST { order: [id1, id2, ...] }
     public function reorder(Request $request)
     {
-        $this->authorize('viewAny', Property::class);
+    $this->authorize('reorder', Property::class);
 
         $data = $request->validate([
             'order' => 'required|array',

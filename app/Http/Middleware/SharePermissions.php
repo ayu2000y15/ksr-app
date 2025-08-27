@@ -107,6 +107,13 @@ class SharePermissions
                         'delete' => $safeHas('inventory.delete'),
                         'logs' => $safeHas('inventory.log.view'),
                     ],
+                    'properties' => [
+                        'view' => $safeHas('properties.view'),
+                        'create' => $safeHas('properties.create'),
+                        'update' => $safeHas('properties.edit'),
+                        'delete' => $safeHas('properties.delete'),
+                        'reorder' => $safeHas('properties.reorder'),
+                    ],
                     'is_system_admin' => $isSystemAdmin,
                 ],
             ]);

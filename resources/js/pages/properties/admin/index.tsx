@@ -60,19 +60,18 @@ const SortableHeader = ({
     queryParams?: Record<string, string> | null;
     listName: string;
 }) => {
-    const currentSort = (queryParams && queryParams.sort) || new URLSearchParams(window.location.search).get('sort') || '';
-    const currentDirection = (queryParams && queryParams.direction) || new URLSearchParams(window.location.search).get('direction') || 'asc';
+    const currentSort = (queryParams && ('sort' in queryParams ? (queryParams as Record<string, string>).sort : undefined)) || new URLSearchParams(window.location.search).get('sort') || '';
+    const currentDirection = (queryParams && ('direction' in queryParams ? (queryParams as Record<string, string>).direction : undefined)) || new URLSearchParams(window.location.search).get('direction') || 'asc';
     const isCurrentSort = currentSort === sort_key;
     const newDirection = isCurrentSort && currentDirection === 'asc' ? 'desc' : 'asc';
 
     const href = (() => {
         try {
             if (typeof route === 'function') {
-                // use named route when available (Ziggy)
                 try {
                     return route('properties.admin', { sort: sort_key, direction: newDirection, list: listName });
                 } catch {
-                    // fallthrough
+                    // ignore and fall through to manual URL
                 }
             }
             const u = new URL(window.location.href);
@@ -117,6 +116,10 @@ export default function Index({
     queryParams?: Record<string, string>;
 }) {
     const page = usePage();
+    const pageCan = (page.props as unknown as { can?: Record<string, Record<string, boolean>> }).can || {
+        properties: { viewAny: true, create: true, update: true, delete: true, reorder: true },
+    };
+    const canProperties = pageCan.properties || { viewAny: true, create: true, update: true, delete: true, reorder: true };
     // fallback when controller didn't supply queryParams
     const pageProps = page.props as unknown as { queryParams?: Record<string, string> };
     // property_furnitures_map may be provided by the controller: { [property_id]: [furniture_master_id, ...] }
@@ -1334,6 +1337,8 @@ export default function Index({
                         <div>
                             <Button
                                 onClick={() => {
+                                    // only allow toggling create panel for properties when allowed
+                                    if (tab === 'properties' && !canProperties.create) return;
                                     setShowCreate((s) => {
                                         const next = !s;
                                         if (next) {
@@ -1370,6 +1375,7 @@ export default function Index({
                                 }}
                                 aria-pressed={showCreate}
                                 aria-label={showCreate ? '新規作成を閉じる' : '新規作成'}
+                                disabled={tab === 'properties' && !canProperties.create}
                             >
                                 <Plus className="mr-0 h-4 w-4 sm:mr-2" />
                                 <span className="hidden sm:inline">{showCreate ? '閉じる' : '新規作成'}</span>

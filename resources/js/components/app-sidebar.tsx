@@ -24,7 +24,7 @@ const mainNavItems: NavItem[] = [
     { title: '休暇申請', href: '/shift-applications', icon: CalendarCheck, permission: 'shift_application.view' },
     { title: '在庫管理', href: '/inventory', icon: Package },
     { title: '破損在庫管理', href: '/inventory/damaged', icon: AlertTriangle, permission: 'damaged_inventory.view' },
-    { title: '物件管理', href: '/properties', icon: Home },
+    { title: '物件管理', href: '/properties', icon: Home, permission: 'properties.view' },
 ];
 
 export function AppSidebar() {
@@ -69,8 +69,17 @@ export function AppSidebar() {
                 <SidebarMenu>
                     {mainNavItems.map((item) => {
                         // システム管理者は全て表示
-                        if (!isSuperAdmin && item.permission && !permissions.includes(item.permission)) {
-                            return null;
+                        if (!isSuperAdmin && item.permission) {
+                            // flat permissions from auth.permissions
+                            const hasFlat = permissions.includes(item.permission);
+                            // nested permissions may be like { properties: { view: true } }
+                            const parts = item.permission.split('.');
+                            let hasNested = false;
+                            if (parts.length === 2 && nestedPermissions && nestedPermissions[parts[0]]) {
+                                const key = parts[1];
+                                hasNested = Boolean(nestedPermissions[parts[0]][key]);
+                            }
+                            if (!hasFlat && !hasNested) return null;
                         }
                         // 在庫管理は Inventory ポリシー(viewAny) に基づいて表示
                         if (item.title === '在庫管理') {
