@@ -23,4 +23,9 @@ class Property extends Model
         'order_column',
         'key_returned',
     ];
+
+    public function roomOccupancies()
+    {
+        return $this->hasMany(\App\Models\RoomOccupancy::class);
+    }
 }

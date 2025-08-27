@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
-type OptionType = { label: string; value: number | string };
+type OptionType = { label: string; value: number | string; disabled?: boolean };
 
 interface SingleSelectComboboxProps {
     options: OptionType[];
@@ -45,13 +45,17 @@ function SingleSelectCombobox({ options, selected = null, onChange, className, p
                         <CommandGroup>
                             {options.map((option) => {
                                 const isSelected = option.value === selected;
+                                const isDisabled = !!option.disabled;
                                 return (
                                     <CommandItem
                                         key={String(option.value)}
                                         onSelect={() => {
+                                            if (isDisabled) return; // ignore selection for disabled options
                                             onChange(option.value);
                                             setOpen(false);
                                         }}
+                                        aria-disabled={isDisabled}
+                                        className={cn(isDisabled ? 'opacity-50 pointer-events-none' : '')}
                                     >
                                         <Check className={cn('mr-2 h-4 w-4', isSelected ? 'opacity-100' : 'opacity-0')} />
                                         {option.label}

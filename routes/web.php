@@ -134,6 +134,33 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
     // 在庫管理（Inertia pages）
     Route::get('/inventory', [\App\Http\Controllers\InventoryPageController::class, 'index'])->name('inventory.index');
     Route::get('/inventory/create', [\App\Http\Controllers\InventoryPageController::class, 'create'])->name('inventory.create');
+    // 物件管理（入退寮ガント表示）
+    Route::get('/properties', [\App\Http\Controllers\PropertyPageController::class, 'index'])->name('properties.index');
+    // 物件マスタ管理トップ
+    Route::get('/properties/admin', [\App\Http\Controllers\PropertyAdminController::class, 'index'])->name('properties.admin');
+    // explicit named route for masters properties index (Ziggy-safe)
+    Route::get('/properties/masters/properties', [\App\Http\Controllers\PropertyAdminController::class, 'index'])->name('properties.masters.properties.index');
+    // マスタ: 物件 / 不動産会社 / 家具
+    Route::prefix('properties')->name('properties.')->group(function () {
+        Route::resource('masters/real-estate-agents', \App\Http\Controllers\RealEstateAgentController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
+        Route::resource('masters/furniture-masters', \App\Http\Controllers\FurnitureMasterController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
+        Route::resource('masters/properties', \App\Http\Controllers\PropertyAdminController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
+        // reorder endpoints for drag-and-drop ordering
+        Route::post('masters/real-estate-agents/reorder', [\App\Http\Controllers\RealEstateAgentController::class, 'reorder'])->name('properties.masters.real-estate-agents.reorder');
+        Route::post('masters/furniture-masters/reorder', [\App\Http\Controllers\FurnitureMasterController::class, 'reorder'])->name('properties.masters.furniture-masters.reorder');
+        Route::post('masters/properties/reorder', [\App\Http\Controllers\PropertyAdminController::class, 'reorder'])->name('properties.masters.properties.reorder');
+
+        // Accept POST for update to support clients that send POST instead of PATCH
+        Route::post('masters/real-estate-agents/{real_estate_agent}', [\App\Http\Controllers\RealEstateAgentController::class, 'update'])->name('properties.masters.real-estate-agents.update.post');
+        Route::post('masters/furniture-masters/{furniture_master}', [\App\Http\Controllers\FurnitureMasterController::class, 'update'])->name('properties.masters.furniture-masters.update.post');
+        Route::post('masters/properties/{property}', [\App\Http\Controllers\PropertyAdminController::class, 'update'])->name('properties.masters.properties.update.post');
+        // property furniture (物件の家具) create endpoint used by the admin UI when editing a property
+        Route::post('masters/property-furniture', [\App\Http\Controllers\PropertyFurnitureController::class, 'store'])->name('properties.masters.property-furniture.store');
+        // update existing property furniture row (POST to support clients that post)
+        Route::post('masters/property-furniture/{property_furniture}', [\App\Http\Controllers\PropertyFurnitureController::class, 'update'])->name('properties.masters.property-furniture.update.post');
+        // delete property furniture row
+        Route::delete('masters/property-furniture/{property_furniture}', [\App\Http\Controllers\PropertyFurnitureController::class, 'destroy'])->name('properties.masters.property-furniture.destroy');
+    });
     // 在庫カテゴリ管理 (一覧・作成・更新・削除) — 名前空間を inventory.* に揃える
     Route::prefix('inventory')->name('inventory.')->group(function () {
         Route::resource('categories', \App\Http\Controllers\InventoryCategoryController::class)->except(['show']);

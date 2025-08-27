@@ -10,4 +10,5 @@ class RealEstateAgent extends Model
     use HasFactory;
 
     protected $fillable = ['name', 'order_column'];
+    public $timestamps = false;
 }

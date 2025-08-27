@@ -24,7 +24,7 @@ const mainNavItems: NavItem[] = [
     { title: '休暇申請', href: '/shift-applications', icon: CalendarCheck, permission: 'shift_application.view' },
     { title: '在庫管理', href: '/inventory', icon: Package },
     { title: '破損在庫管理', href: '/inventory/damaged', icon: AlertTriangle, permission: 'damaged_inventory.view' },
-    { title: '物件管理', href: '#', icon: Home }, // TODO
+    { title: '物件管理', href: '/properties', icon: Home },
 ];
 
 export function AppSidebar() {
