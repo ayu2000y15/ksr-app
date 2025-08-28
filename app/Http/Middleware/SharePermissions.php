@@ -107,6 +107,12 @@ class SharePermissions
                         'delete' => $safeHas('inventory.delete'),
                         'logs' => $safeHas('inventory.log.view'),
                     ],
+                    'damaged_inventory' => [
+                        'view' => $safeHas('damaged_inventory.view'),
+                        'create' => $safeHas('damaged_inventory.create'),
+                        'update' => $safeHas('damaged_inventory.update'),
+                        'delete' => $safeHas('damaged_inventory.delete'),
+                    ],
                     'properties' => [
                         'view' => $safeHas('properties.view'),
                         'create' => $safeHas('properties.create'),

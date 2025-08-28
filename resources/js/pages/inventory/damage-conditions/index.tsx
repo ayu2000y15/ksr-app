@@ -24,11 +24,12 @@ export default function Index({ items: initialItems = [] }: { items?: DamageCond
 
     const page = usePage();
     const { permissions } = page.props as unknown as { permissions?: unknown };
-    type Perms = { damage_condition?: { create?: boolean; update?: boolean; delete?: boolean }; is_system_admin?: boolean };
+    // Use damaged_inventory.* group from shared permissions
+    type Perms = { damaged_inventory?: { view?: boolean; create?: boolean; update?: boolean; delete?: boolean }; is_system_admin?: boolean };
     const permsObj = typeof permissions === 'object' && permissions !== null ? (permissions as unknown as Perms) : ({} as Perms);
-    const canCreate = Boolean(permsObj.damage_condition?.create || permsObj.is_system_admin);
-    const canUpdate = Boolean(permsObj.damage_condition?.update || permsObj.is_system_admin);
-    const canDelete = Boolean(permsObj.damage_condition?.delete || permsObj.is_system_admin);
+    const canCreate = Boolean(permsObj.damaged_inventory?.create || permsObj.is_system_admin);
+    const canUpdate = Boolean(permsObj.damaged_inventory?.update || permsObj.is_system_admin);
+    const canDelete = Boolean(permsObj.damaged_inventory?.delete || permsObj.is_system_admin);
 
     const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' | 'info' } | null>(null);
 
