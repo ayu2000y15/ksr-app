@@ -46,7 +46,7 @@ class ShiftPolicy
         }
     }
 
-    public function update(User $user, Shift $shift)
+    public function update(User $user, ?Shift $shift = null)
     {
         try {
             return $user->hasPermissionTo('shift.update');
@@ -55,7 +55,7 @@ class ShiftPolicy
         }
     }
 
-    public function delete(User $user, Shift $shift)
+    public function delete(User $user, ?Shift $shift = null)
     {
         try {
             return $user->hasPermissionTo('shift.delete');
