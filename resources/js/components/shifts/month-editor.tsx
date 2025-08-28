@@ -460,6 +460,10 @@ export default function MonthEditor({
                                 ・<strong>確定ボタン</strong>:
                                 過去日にのみ表示されます。確定ボタンを押せば勤務時間と休憩時間が確定され、統計情報が正しく計算されます。
                             </div>
+                            <div>
+                                ・<strong>日別の詳細シフト</strong>:
+                                日付を選択すると、その日の詳細シフトを編集できます。休憩登録や欠席の登録は日別の詳細から行ってください。
+                            </div>
                         </div>
                     </div>
                 </div>
