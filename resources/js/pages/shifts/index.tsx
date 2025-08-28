@@ -182,7 +182,7 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
             router.get(
                 route('shifts.index'),
                 { month },
-                { preserveState: true, only: ['shiftDetails', 'existingShifts', 'holidays', 'users', 'queryParams'] },
+                { preserveState: true, only: ['shiftDetails', 'existingShifts', 'holidays', 'users', 'queryParams', 'defaultShifts'] },
             );
         } catch (err) {
             // simple fallback: close modal
@@ -257,8 +257,18 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                     </div>
 
                     <div>
-                        <Button aria-label="ユーザー統計" variant="outline">
-                            ユーザー統計
+                        <Button
+                            aria-label="ユーザー別統計"
+                            variant="outline"
+                            onClick={() => {
+                                try {
+                                    router.get(route('shifts.user-stats'));
+                                } catch (e) {
+                                    // noop
+                                }
+                            }}
+                        >
+                            ユーザー別統計
                         </Button>
                     </div>
                 </div>
@@ -296,13 +306,18 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                         })()}
                         holidays={(page.props as any).holidays || []}
                         existingShifts={existingShiftsMap as any}
+                        shiftDetails={(page.props as any).shiftDetails || []}
                         defaultShifts={serverDefaultShifts}
                         onMonthChange={async (monthIso: string) => {
                             // request only the props we need to update the editor and list
+                            // include defaultShifts so month editor can decide which day/night options to show
                             router.get(
                                 route('shifts.index'),
                                 { month: monthIso },
-                                { preserveState: true, only: ['existingShifts', 'shiftDetails', 'holidays', 'users', 'queryParams'] },
+                                {
+                                    preserveState: true,
+                                    only: ['existingShifts', 'shiftDetails', 'holidays', 'users', 'queryParams', 'defaultShifts'],
+                                },
                             );
                         }}
                     />

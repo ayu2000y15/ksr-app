@@ -91,7 +91,7 @@ export default function Index({ users: initialUsers, queryParams = {} }: PagePro
             case 'active':
                 return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">アクティブ</Badge>;
             case 'retired':
-                return <Badge variant="secondary">退職</Badge>;
+                return <Badge className="bg-red-100 text-red-800">退職</Badge>;
             case 'shared':
                 return <Badge variant="default">共有アカウント</Badge>;
             default:

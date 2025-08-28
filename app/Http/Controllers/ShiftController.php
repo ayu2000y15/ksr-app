@@ -174,11 +174,12 @@ class ShiftController extends Controller
             if ($shift) {
                 // If client cleared the value or set to leave, remove scheduled shift_details for that date
                 if (is_null($entry['shift_type']) || $entry['shift_type'] === '') {
-                    ShiftDetail::where('user_id', $entry['user_id'])->whereRaw('date(date) = ?', [$entry['date']])->where('status', 'scheduled')->delete();
+                    // remove all shift details for that user/date (work, break, etc.) when clearing the shift
+                    ShiftDetail::where('user_id', $entry['user_id'])->whereRaw('date(date) = ?', [$entry['date']])->delete();
                     $shift->delete();
                 } elseif ($entry['shift_type'] === 'leave') {
-                    // update to leave and remove any scheduled details
-                    ShiftDetail::where('user_id', $entry['user_id'])->whereRaw('date(date) = ?', [$entry['date']])->where('status', 'scheduled')->delete();
+                    // update to leave and remove any existing details for that date (including breaks)
+                    ShiftDetail::where('user_id', $entry['user_id'])->whereRaw('date(date) = ?', [$entry['date']])->delete();
                     $shift->update(['shift_type' => $entry['shift_type']]);
                 } else {
                     // day or night: update and ensure shift_details exist
@@ -194,7 +195,8 @@ class ShiftController extends Controller
                     ]);
                     // If leave was set, ensure there are no scheduled shift_details; otherwise create from defaults
                     if ($entry['shift_type'] === 'leave') {
-                        ShiftDetail::where('user_id', $entry['user_id'])->whereRaw('date(date) = ?', [$entry['date']])->where('status', 'scheduled')->delete();
+                        // ensure no shift_details remain for this date when marking as leave
+                        ShiftDetail::where('user_id', $entry['user_id'])->whereRaw('date(date) = ?', [$entry['date']])->delete();
                     } else {
                         $this->applyDefaultShiftDetails($entry['user_id'], $entry['date'], $entry['shift_type']);
                     }
@@ -234,8 +236,8 @@ class ShiftController extends Controller
             $shift = Shift::create(['user_id' => $data['user_id'], 'date' => $data['date'], 'shift_type' => 'leave']);
         }
 
-        // For a leave day, remove any scheduled shift_details for that user/date
-        ShiftDetail::where('user_id', $data['user_id'])->whereRaw('date(date) = ?', [$data['date']])->where('status', 'scheduled')->delete();
+        // For a leave day, remove any shift_details for that user/date (work, break, scheduled, actual)
+        ShiftDetail::where('user_id', $data['user_id'])->whereRaw('date(date) = ?', [$data['date']])->delete();
 
         if ($request->expectsJson() || $request->ajax()) {
             return response()->json(['message' => '休に変更しました。'], 200);
@@ -295,8 +297,8 @@ class ShiftController extends Controller
         $defaults = DefaultShift::where('day_of_week', $weekday)->where('shift_type', $shiftType)->get();
         // If no defaults exist, create a placeholder scheduled work ShiftDetail from 00:00 to 00:00
         if ($defaults->isEmpty()) {
-            // remove existing scheduled details for that user/date to avoid duplicates
-            ShiftDetail::where('user_id', $userId)->whereRaw('date(date) = ?', [$date])->where('status', 'scheduled')->delete();
+            // remove existing details for that user/date to avoid duplicates (delete all types: work, break, etc.)
+            ShiftDetail::where('user_id', $userId)->whereRaw('date(date) = ?', [$date])->delete();
 
             $zero = Carbon::parse($date . ' 00:00:00')->toDateTimeString();
             ShiftDetail::create([
@@ -311,8 +313,8 @@ class ShiftController extends Controller
             return;
         }
 
-        // remove existing scheduled details for that user/date to avoid duplicates
-        ShiftDetail::where('user_id', $userId)->whereRaw('date(date) = ?', [$date])->where('status', 'scheduled')->delete();
+        // remove existing details for that user/date to avoid duplicates (delete all types: work, break, etc.)
+        ShiftDetail::where('user_id', $userId)->whereRaw('date(date) = ?', [$date])->delete();
 
         foreach ($defaults as $df) {
             // build datetime for start/end using the date and default's time (HH:MM)
@@ -432,5 +434,73 @@ class ShiftController extends Controller
 
         $shift->delete();
         return Redirect::route('shifts.index')->with('success', 'シフトを削除しました。');
+    }
+
+    /**
+     * Toggle confirmation for all work ShiftDetails on a given date.
+     * POST params: date=YYYY-MM-DD, action=confirm|unconfirm (optional; toggles when absent)
+     */
+    public function toggleConfirmDate(Request $request)
+    {
+        if (Auth::user()->hasRole('システム管理者')) {
+            // bypass
+        } else {
+            $this->authorize('update', Shift::class);
+        }
+
+        $data = $request->validate([
+            'date' => 'required|date',
+            'action' => 'nullable|in:confirm,unconfirm',
+        ]);
+
+        $date = Carbon::parse($data['date'])->toDateString();
+        $action = $data['action'] ?? null;
+
+        // find all work ShiftDetails for the calendar date (use date column)
+        $workDetails = ShiftDetail::whereRaw('date(date) = ?', [$date])->where('type', 'work')->get();
+
+        if ($workDetails->isEmpty()) {
+            return response()->json(['message' => '対象の勤務詳細が見つかりませんでした。', 'confirmed' => false], 200);
+        }
+
+        // decide target status: if action specified, use it; otherwise toggle based on whether any scheduled exist
+        $hasScheduled = $workDetails->contains(function ($d) {
+            return $d->status === 'scheduled';
+        });
+        $hasActual = $workDetails->contains(function ($d) {
+            return $d->status === 'actual';
+        });
+
+        if ($action === 'confirm') {
+            $targetStatus = 'actual';
+        } elseif ($action === 'unconfirm') {
+            $targetStatus = 'scheduled';
+        } else {
+            // toggle: if there are scheduled entries, confirm them; else unconfirm
+            $targetStatus = $hasScheduled ? 'actual' : 'scheduled';
+        }
+
+        // perform update in transaction
+        \DB::transaction(function () use ($workDetails, $targetStatus) {
+            if ($targetStatus === 'actual') {
+                // confirming: only change scheduled -> actual. Leave absent untouched.
+                foreach ($workDetails as $d) {
+                    if ($d->type === 'work' && $d->status === 'scheduled') {
+                        $d->status = 'actual';
+                        $d->save();
+                    }
+                }
+            } else {
+                // unconfirming: only change actual -> scheduled. Leave absent untouched.
+                foreach ($workDetails as $d) {
+                    if ($d->type === 'work' && $d->status === 'actual') {
+                        $d->status = 'scheduled';
+                        $d->save();
+                    }
+                }
+            }
+        });
+
+        return response()->json(['message' => $targetStatus === 'actual' ? '勤務を確定しました。' : '勤務の確定を解除しました。', 'confirmed' => $targetStatus === 'actual'], 200);
     }
 }

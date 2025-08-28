@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button';
 import Toast from '@/components/ui/toast';
 import { Link, router } from '@inertiajs/react';
 import axios from 'axios';
-import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Info } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 type Cell = '' | 'day' | 'night' | 'leave';
@@ -12,6 +12,7 @@ export default function MonthEditor({
     days,
     holidays = [],
     existingShifts = {},
+    shiftDetails = [],
     // optional map provided by server: userId -> 出勤日数
     attendanceCounts,
     // optional array of default shift patterns from server
@@ -23,6 +24,7 @@ export default function MonthEditor({
     days: string[];
     holidays?: string[];
     existingShifts?: Record<number, Record<string, Cell>>;
+    shiftDetails?: any[];
     attendanceCounts?: Record<number, number>;
     defaultShifts?: Array<any>;
     onMonthChange?: (monthIso: string) => void;
@@ -363,6 +365,34 @@ export default function MonthEditor({
         }
     };
 
+    // determine whether there exists any 'work' ShiftDetail that overlaps the given date
+    const hasWorkForDate = (date: string) => {
+        try {
+            if (!shiftDetails || !Array.isArray(shiftDetails)) return false;
+            const dayStart = new Date(date + 'T00:00:00');
+            const dayEnd = new Date(date + 'T23:59:59');
+            const parseOrNull = (v: any) => {
+                if (!v) return null;
+                const s = String(v).replace(' ', 'T');
+                const d = new Date(s);
+                return isNaN(d.getTime()) ? null : d;
+            };
+            return (shiftDetails || []).some((sd: any) => {
+                try {
+                    if (sd.type !== 'work') return false;
+                    const s = parseOrNull(sd.start_time ?? sd.date);
+                    const e = parseOrNull(sd.end_time ?? sd.start_time ?? sd.date);
+                    if (!s || !e) return false;
+                    return s <= dayEnd && e >= dayStart;
+                } catch {
+                    return false;
+                }
+            });
+        } catch {
+            return false;
+        }
+    };
+
     const toggleDateSelection = (date: string) => {
         try {
             const dt = parseLocal(date);
@@ -418,6 +448,19 @@ export default function MonthEditor({
                             選択日を昼に
                         </Button>
                         {saving && <div className="text-sm text-muted-foreground">保存中…</div>}
+                    </div>
+                </div>
+
+                {/* ユーザー向けヒント: 月切替ボタンの下に表示（背景 + アイコン） */}
+                <div className="mb-4">
+                    <div className="flex items-start gap-3 rounded border-l-4 border-yellow-200 bg-yellow-50 p-3 text-sm text-muted-foreground">
+                        <Info className="h-5 w-5 flex-shrink-0 text-yellow-700" />
+                        <div className="leading-tight">
+                            <div>
+                                ・<strong>確定ボタン</strong>:
+                                過去日にのみ表示されます。確定ボタンを押せば勤務時間と休憩時間が確定され、統計情報が正しく計算されます。
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -531,7 +574,6 @@ export default function MonthEditor({
                                                     >
                                                         <div className="mb-1">
                                                             {(() => {
-                                                                // determine if this date is strictly before today (local) -> hide checkbox
                                                                 try {
                                                                     const dayStart = new Date(
                                                                         dt.getFullYear(),
@@ -542,6 +584,18 @@ export default function MonthEditor({
                                                                     todayStart.setHours(0, 0, 0, 0);
                                                                     const isPastCheckbox = dayStart < todayStart.getTime();
                                                                     if (isPastCheckbox) {
+                                                                        // for past dates, show the confirm/unconfirm button only when there is at least one work record for the date
+                                                                        if (hasWorkForDate(d)) {
+                                                                            return (
+                                                                                <ConfirmToggleButton
+                                                                                    date={d}
+                                                                                    shiftDetails={shiftDetails}
+                                                                                    onToast={(m: string, t?: any) =>
+                                                                                        setToast({ message: m, type: t })
+                                                                                    }
+                                                                                />
+                                                                            );
+                                                                        }
                                                                         return <div aria-hidden="true" style={{ height: '16px' }} />;
                                                                     }
                                                                 } catch {
@@ -557,14 +611,17 @@ export default function MonthEditor({
                                                                 );
                                                             })()}
                                                         </div>
-                                                        <Link
-                                                            href={route('shifts.daily', { date: d })}
-                                                            className={`inline-block cursor-pointer rounded px-1 py-0.5 select-none ${textClass} hover:bg-gray-100`}
-                                                            title={`この日のタイムラインを見る: ${d}`}
-                                                        >
-                                                            <div className="text-xs">{`${dt.getMonth() + 1}/${dt.getDate()}`}</div>
-                                                            <div className="text-[10px]">{weekdayShort(d)}</div>
-                                                        </Link>
+                                                        <div className="flex flex-col items-center gap-1">
+                                                            <Link
+                                                                href={route('shifts.daily', { date: d })}
+                                                                className={`inline-block cursor-pointer rounded px-1 py-0.5 select-none ${textClass} hover:bg-gray-100`}
+                                                                title={`この日のタイムラインを見る: ${d}`}
+                                                            >
+                                                                <div className="text-xs">{`${dt.getMonth() + 1}/${dt.getDate()}`}</div>
+                                                                <div className="text-[10px]">{weekdayShort(d)}</div>
+                                                            </Link>
+                                                            {/* button shown above (in the mb-1 area) for past dates */}
+                                                        </div>
                                                     </div>
                                                 );
                                             })}
@@ -684,5 +741,96 @@ export default function MonthEditor({
                 {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
             </div>
         </div>
+    );
+}
+
+function ConfirmToggleButton({
+    date,
+    shiftDetails,
+    onToast,
+}: {
+    date: string;
+    shiftDetails?: any[];
+    onToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
+}) {
+    const [loading, setLoading] = useState(false);
+    const [confirmed, setConfirmed] = useState<boolean | null>(null);
+
+    // derive initial confirmed state from provided shiftDetails:
+    // - if any work-type detail for the date has status 'scheduled', prefer showing the "確定" action (i.e. not confirmed)
+    // - otherwise, if any work-type detail has status 'actual', treat as confirmed
+    useEffect(() => {
+        try {
+            if (!shiftDetails) return;
+            const dayStart = new Date(date + 'T00:00:00');
+            const dayEnd = new Date(date + 'T23:59:59');
+            const parseOrNull = (v: any) => {
+                if (!v) return null;
+                const s = String(v).replace(' ', 'T');
+                const d = new Date(s);
+                return isNaN(d.getTime()) ? null : d;
+            };
+
+            let hasScheduled = false;
+            let hasActual = false;
+            (shiftDetails || []).some((sd: any) => {
+                try {
+                    if (sd.type !== 'work') return false;
+                    const s = parseOrNull(sd.start_time ?? sd.date);
+                    const e = parseOrNull(sd.end_time ?? sd.start_time ?? sd.date);
+                    if (!s || !e) return false;
+                    const overlaps = s <= dayEnd && e >= dayStart;
+                    if (!overlaps) return false;
+                    if (sd.status === 'scheduled') {
+                        hasScheduled = true;
+                        return true; // stop early, scheduled takes priority
+                    }
+                    if (sd.status === 'actual') {
+                        hasActual = true;
+                    }
+                    return false;
+                } catch {
+                    return false;
+                }
+            });
+
+            if (hasScheduled) {
+                setConfirmed(false);
+            } else if (hasActual) {
+                setConfirmed(true);
+            } else {
+                setConfirmed(null);
+            }
+        } catch {
+            // ignore
+        }
+    }, [date, shiftDetails]);
+
+    const toggle = async () => {
+        setLoading(true);
+        try {
+            const res = await axios.post(route('shifts.toggle_confirm_date'), { date });
+            const j = res.data || {};
+            setConfirmed(j.confirmed === true);
+            if (onToast) onToast(j.message || (j.confirmed ? '確定しました。' : '解除しました。'), 'success');
+        } catch (e) {
+            if (onToast) onToast('操作に失敗しました。', 'error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <button
+            className={`rounded border px-2 py-0.5 text-xs ${confirmed ? 'bg-green-100 text-green-800' : 'bg-white text-gray-700'}`}
+            onClick={(e) => {
+                e.preventDefault();
+                toggle();
+            }}
+            disabled={loading}
+            title="当日の勤務確定/解除"
+        >
+            {loading ? '...' : confirmed ? '解除' : '確定'}
+        </button>
     );
 }

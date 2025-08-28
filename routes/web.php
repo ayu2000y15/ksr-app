@@ -59,6 +59,8 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
     Route::get('/users/{user}/edit', [UserController::class, 'edit'])->name('users.edit');
     Route::patch('/users/{user}', [UserController::class, 'update'])->name('users.update');
     Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
+    // ユーザー統計ページ（shifts 配下のパスに移動）
+    Route::get('/shifts/user-stats', [UserController::class, 'stats'])->name('shifts.user-stats');
 
     // --- 管理画面（Inertiaページ） ---
     Route::inertia('/admin/roles', 'admin/roles')->name('admin.roles');
@@ -103,6 +105,9 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
     Route::post('/shifts/mark-break', [App\Http\Controllers\ShiftController::class, 'markBreak'])->name('shifts.mark_break');
     // 既に休がある日を解除する（休のキャンセル）
     Route::post('/shifts/unmark-break', [App\Http\Controllers\ShiftController::class, 'unmarkBreak'])->name('shifts.unmark_break');
+
+    // Toggle confirm/unconfirm for all scheduled work ShiftDetails on a date
+    Route::post('/shifts/toggle-confirm-date', [App\Http\Controllers\ShiftController::class, 'toggleConfirmDate'])->name('shifts.toggle_confirm_date');
 
     // ShiftDetail 単体更新（開始/終了時刻の編集）
     Route::patch('/shift-details/{shift_detail}', [App\Http\Controllers\ShiftDetailController::class, 'update'])->name('shift-details.update');
