@@ -548,9 +548,9 @@ export default function Dashboard() {
 
                 <div>
                     <Card>
-                        <CardHeader className="flex flex-wrap items-center justify-between">
+                        <CardHeader className="flex flex-wrap items-center justify-between md:flex-row">
                             <div className="flex items-center gap-2">
-                                <CardTitle className="text-lg sm:text-xl">{formattedDate}</CardTitle>
+                                <CardTitle className="text-ms sm:text-xl">{formattedDate}</CardTitle>
                                 {canViewShifts && (
                                     <Button
                                         onClick={() => {
@@ -574,7 +574,7 @@ export default function Dashboard() {
                                     </Button>
                                 )}
                             </div>
-                            <div className="flex items-center gap-2 flex-wrap">
+                            <div className="flex flex-wrap items-center gap-2">
                                 <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
                                     <PopoverTrigger asChild>
                                         <Button variant="outline" size="icon">
