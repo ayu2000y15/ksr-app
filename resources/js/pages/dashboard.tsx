@@ -606,7 +606,7 @@ export default function Dashboard() {
                                     <div>
                                         <div className="flex">
                                             {/* left fixed column outside horizontal scroller */}
-                                            <div className="w-20 flex-shrink-0 text-xs md:w-40">
+                                            <div className="w-28 flex-shrink-0 text-xs md:w-40">
                                                 <div className="flex h-8 items-center gap-2 border-b border-gray-200 px-2 text-xs">
                                                     <Badge variant="default" className="border-transparent bg-yellow-100 text-yellow-800">
                                                         昼 {`(${dayCount})`}
