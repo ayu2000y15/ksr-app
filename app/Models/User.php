@@ -24,6 +24,8 @@ class User extends Authenticatable
         'temporary_password',
         'phone_number',
         'line_name',
+        'gender',
+        'has_car',
         'status',
         'memo',
         'must_change_password',
@@ -51,6 +53,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'temporary_password_expires_at' => 'datetime',
             'must_change_password' => 'boolean',
+            'has_car' => 'boolean',
         ];
     }
 

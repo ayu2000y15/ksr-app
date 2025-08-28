@@ -11,7 +11,7 @@ class RoomOccupancy extends Model
 
     protected $fillable = [
         'property_id',
-        'user_id',
+        // 'user_id' column is deprecated in application code; keep column in DB but do not write/read it from model
         'user_ids',
         'move_in_date',
         'move_out_date',
@@ -29,10 +29,6 @@ class RoomOccupancy extends Model
         return $this->belongsTo(\App\Models\Property::class);
     }
 
-    public function user()
-    {
-        return $this->belongsTo(\App\Models\User::class);
-    }
 
     /**
      * The user who confirmed checkout (退去確認者)

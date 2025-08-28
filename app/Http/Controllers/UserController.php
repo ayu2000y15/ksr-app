@@ -26,7 +26,7 @@ class UserController extends Controller
         } else {
             $this->authorize('viewAny', User::class);
         }
-        
+
         // 並び替えの対象となるカラムをホワイトリストで定義
         $sortableColumns = ['id', 'name', 'email', 'status', 'created_at'];
         $sort = in_array($request->query('sort', 'id'), $sortableColumns) ? $request->query('sort', 'id') : 'id';
@@ -205,6 +205,10 @@ class UserController extends Controller
             'phone_number.max' => '電話番号は:max文字以内で入力してください。',
             'line_name.max' => 'LINE名は:max文字以内で入力してください。',
             'memo.string' => 'メモは文字列で入力してください。',
+            'gender.required' => '性別は必須です。',
+            'gender.in' => '無効な性別が選択されました。',
+            'has_car.required' => '車の有無は必須です。',
+            'has_car.boolean' => '車の有無は真偽値で指定してください。',
         ];
 
         $request->validate([
@@ -214,6 +218,8 @@ class UserController extends Controller
             'phone_number' => 'nullable|string|max:20',
             'line_name' => 'nullable|string|max:255',
             'memo' => 'nullable|string',
+            'gender' => 'required|in:male,female,other',
+            'has_car' => 'required|boolean',
         ], $messages);
 
         // 仮パスワードを生成
@@ -223,6 +229,8 @@ class UserController extends Controller
             'name' => $request->name,
             'email' => $request->email,
             'status' => $request->status,
+            'gender' => $request->gender,
+            'has_car' => boolval($request->has_car),
             'phone_number' => $request->phone_number,
             'line_name' => $request->line_name,
             'memo' => $request->memo,
@@ -275,6 +283,10 @@ class UserController extends Controller
             'phone_number.max' => '電話番号は:max文字以内で入力してください。',
             'line_name.max' => 'LINE名は:max文字以内で入力してください。',
             'memo.string' => 'メモは文字列で入力してください。',
+            'gender.required' => '性別は必須です。',
+            'gender.in' => '無効な性別が選択されました。',
+            'has_car.required' => '車の有無は必須です。',
+            'has_car.boolean' => '車の有無は真偽値で指定してください。',
         ];
 
         $request->validate([
@@ -284,9 +296,11 @@ class UserController extends Controller
             'phone_number' => 'nullable|string|max:20',
             'line_name' => 'nullable|string|max:255',
             'memo' => 'nullable|string',
+            'gender' => 'required|in:male,female,other',
+            'has_car' => 'required|boolean',
         ], $messages);
 
-        $user->update($request->only(['name', 'email', 'status', 'phone_number', 'line_name', 'memo']));
+        $user->update($request->only(['name', 'email', 'status', 'gender', 'has_car', 'phone_number', 'line_name', 'memo']));
 
         return Redirect::route('users.index')->with('success', 'ユーザー情報を更新しました。');
     }

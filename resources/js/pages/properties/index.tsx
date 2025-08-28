@@ -73,21 +73,18 @@ export default function Index({ properties }: any) {
     };
 
     // normalize room occupancies into ranges
+    // This produces the same normalized shape used by the update logic so initial render and
+    // post-update UI are consistent. Prefer explicit user_ids / user_names and keep legacy
+    // fallbacks for names when present.
     const normalizeRows = (propsList: any[]) =>
         (propsList || []).map((p: any) => {
             const occs = (p.room_occupancies || []).map((o: any) => {
-                // determine user display name(s)
-                const user_name = o.user ? o.user.name : o.user_name ? o.user_name : o.user_id ? `user:${o.user_id}` : '';
-                const user_ids = Array.isArray(o.user_ids) ? o.user_ids : o.user_id ? [o.user_id] : [];
-                const user_names = Array.isArray(o.user_names)
-                    ? o.user_names
-                    : user_name
-                      ? [user_name]
-                      : user_ids.length > 0
-                        ? user_ids.map((id: any) => `user:${id}`)
-                        : [];
+                // prefer explicit fields provided by API: user_ids, user_names, user_name
+                const user_ids = Array.isArray(o.user_ids) ? o.user_ids : [];
+                const user_names = Array.isArray(o.user_names) ? o.user_names : undefined;
+                const user_name = o.user_name || (o.user && o.user.name) || undefined;
 
-                // derive move_out_confirm fields from any available source (new names or legacy checkout_* names)
+                // derive move_out_confirm fields from available sources (keep legacy fallbacks)
                 const move_out_confirm_user_name =
                     o.move_out_confirm_user_name ||
                     (o.move_out_confirm_user && o.move_out_confirm_user.name) ||
@@ -97,11 +94,15 @@ export default function Index({ properties }: any) {
 
                 const move_out_confirm_date = o.move_out_confirm_date || o.checkout_date || '';
 
+                // prefer checkout_user object when present; otherwise expose id for later resolution
+                const checkout_user = o.checkout_user || (o.checkout_user_id ? { id: o.checkout_user_id, name: undefined } : undefined);
+
                 return {
                     id: o.id,
-                    user_name,
-                    user_ids,
-                    user_names,
+                    // keep both explicit user_ids and possible user_names/user_name to match update path
+                    user_ids: user_ids,
+                    user_names: user_names,
+                    user_name: user_name,
                     start: o.move_in_date,
                     // if move_out_date is empty, use visible endDate for layout but mark as open-ended
                     end: o.move_out_date || endDate,
@@ -110,7 +111,7 @@ export default function Index({ properties }: any) {
                     move_out_confirm_date,
                     // expose confirmer id and original checkout_user object (if present) so click-to-edit can populate the select
                     move_out_confirm_user_id: o.move_out_confirm_user_id ?? o.checkout_user_id ?? null,
-                    checkout_user: o.checkout_user || undefined,
+                    checkout_user: checkout_user,
                     checkout_user_id: o.checkout_user_id ?? null,
                 };
             });
@@ -163,7 +164,16 @@ export default function Index({ properties }: any) {
     // 入寮者登録フォーム状態
     const [showMoveInForm, setShowMoveInForm] = useState(false);
     const [users, setUsers] = useState<{ id: number; name: string }[]>([]);
-    const [allUsersMap, setAllUsersMap] = useState<Record<number, string>>({});
+    const initialUsersFromProps = (page.props && (page.props as any).users) || null;
+    const [allUsersMap, setAllUsersMap] = useState<Record<number, { name: string; gender?: string | null; has_car?: boolean }>>(() => {
+        const map: Record<number, { name: string; gender?: string | null; has_car?: boolean }> = {};
+        if (initialUsersFromProps && Array.isArray(initialUsersFromProps)) {
+            initialUsersFromProps.forEach((u: any) => {
+                if (u && u.id != null) map[u.id] = { name: u.name || '', gender: u.gender ?? null, has_car: u.has_car ?? false };
+            });
+        }
+        return map;
+    });
     const [form, setForm] = useState<any>({
         id: null,
         property_id: '',
@@ -206,13 +216,26 @@ export default function Index({ properties }: any) {
         try {
             const res = await axios.get('/api/users');
             const list = res.data || [];
-            const map: Record<number, string> = {};
-            list.forEach((u: any) => {
-                if (u && u.id != null) map[u.id] = u.name || '';
+            // merge fetched users into existing map so we don't wipe out SSR-provided flags
+            setAllUsersMap((prev) => {
+                const next = { ...prev } as Record<number, { name: string; gender?: string | null; has_car?: boolean }>;
+                list.forEach((u: any) => {
+                    if (!u || u.id == null) return;
+                    const id = u.id;
+                    const existing = prev[id] || { name: '', gender: null, has_car: false };
+                    next[id] = {
+                        name: u.name ?? existing.name ?? '',
+                        gender: u.gender ?? existing.gender ?? null,
+                        // prefer explicit fetched value, fallback to existing value to avoid losing true
+                        has_car: typeof u.has_car === 'boolean' ? u.has_car : (existing.has_car ?? false),
+                    };
+                });
+                return next;
             });
-            setAllUsersMap(map);
-        } catch {
-            setAllUsersMap({});
+        } catch (err) {
+            // don't wipe out existing SSR-provided map on network/auth errors
+            // eslint-disable-next-line no-console
+            console.warn('fetchAllUsersMap failed, keeping existing allUsersMap', err);
         }
     };
 
@@ -222,6 +245,64 @@ export default function Index({ properties }: any) {
         // always try to fetch all users map once so tooltips can resolve names
         fetchAllUsersMap();
     }, [showMoveInForm]);
+
+    // Render user name spans (used both in confirmation tooltip and gantt bars)
+    const renderUsersForOcc = (occ: any) => {
+        const parts: { id?: number; name: string; gender?: string | null; has_car?: boolean }[] = [];
+        if (Array.isArray(occ.user_names)) {
+            occ.user_names.filter(Boolean).forEach((n: string) => {
+                if (typeof n === 'string' && n.startsWith('user:')) {
+                    const id = Number(n.split(':')[1]);
+                    let u = allUsersMap[id];
+                    if (!u && page && (page.props as any).users) {
+                        const pu = (page.props as any).users as any[];
+                        const found = pu.find((x: any) => Number(x.id) === Number(id));
+                        if (found) u = found;
+                    }
+                    parts.push({
+                        id,
+                        name: (u && u.name) || n,
+                        gender: u && u.gender ? u.gender : null,
+                        has_car: u && typeof u.has_car === 'boolean' ? u.has_car : false,
+                    });
+                } else {
+                    parts.push({ name: n, has_car: false });
+                }
+            });
+        } else if (occ.user_name) {
+            parts.push({ name: occ.user_name, has_car: false });
+        } else if (Array.isArray(occ.user_ids)) {
+            occ.user_ids.forEach((id: number) => {
+                let u = allUsersMap[id];
+                if (!u && page && (page.props as any).users) {
+                    const pu = (page.props as any).users as any[];
+                    const found = pu.find((x: any) => Number(x.id) === Number(id));
+                    if (found) u = found;
+                }
+                parts.push({
+                    id,
+                    name: (u && u.name) || `user:${id}`,
+                    gender: u && u.gender ? u.gender : null,
+                    has_car: u && typeof u.has_car === 'boolean' ? u.has_car : false,
+                });
+            });
+        }
+
+        return parts.map((p, i) => (
+            <span
+                key={String(p.id ?? p.name) + '-' + i}
+                className={`inline-flex items-center gap-1 text-sm ${p.gender === 'male' ? 'text-blue-600' : p.gender === 'female' ? 'text-red-600' : ''}`}
+            >
+                <span className="truncate">{p.name}</span>
+                {p.has_car ? (
+                    <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-violet-50 text-violet-600" aria-hidden>
+                        <Car className="h-3 w-3" />
+                    </span>
+                ) : null}
+                {i < parts.length - 1 ? <span className="text-gray-400">,</span> : null}
+            </span>
+        ));
+    };
 
     const renderFieldError = (field: string) => {
         const arr = errors[field] as string[] | undefined;
@@ -290,7 +371,8 @@ export default function Index({ properties }: any) {
                         const cid = occ.move_out_confirm_user_id ?? occ.checkout_user_id ?? null;
                         const normalized = {
                             id: occ.id,
-                            user_ids: Array.isArray(occ.user_ids) ? occ.user_ids : occ.user_id ? [occ.user_id] : [],
+                            // prefer user_ids only; do not derive from deprecated user_id
+                            user_ids: Array.isArray(occ.user_ids) ? occ.user_ids : [],
                             user_names: occ.user_names || undefined,
                             user_name: occ.user_name || undefined,
                             start: occ.move_in_date,
@@ -301,7 +383,7 @@ export default function Index({ properties }: any) {
                             move_out_confirm_user_name:
                                 occ.move_out_confirm_user_name ||
                                 (occ.checkout_user && occ.checkout_user.name) ||
-                                (cid ? allUsersMap[cid as number] : undefined) ||
+                                (cid ? (allUsersMap[cid as number] ? allUsersMap[cid as number].name : undefined) : undefined) ||
                                 undefined,
                             move_out_confirm_date: occ.move_out_confirm_date || occ.checkout_date || undefined,
                             // ensure checkout_user object exists (fallback to id+name from allUsersMap)
@@ -349,6 +431,7 @@ export default function Index({ properties }: any) {
         <AppSidebarLayout breadcrumbs={[{ title: '物件管理', href: route('properties.index') }]}>
             <Head title="物件管理" />
             <div className="p-4 sm:p-6 lg:p-8">
+                <style>{`.no-scrollbar::-webkit-scrollbar{display:none}.no-scrollbar{-ms-overflow-style:none;scrollbar-width:none;}`}</style>
                 <div className="mb-6 flex flex-nowrap items-start justify-between gap-3">
                     <div className="min-w-0">
                         <div className="flex items-center gap-3">
@@ -564,7 +647,7 @@ export default function Index({ properties }: any) {
                         <div className="sticky top-0 z-20 border-b bg-gray-50 px-3 py-2 font-medium">物件名</div>
                         {/* Scrollable property list */}
                         <div
-                            className="scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-200 flex-1 overflow-y-auto"
+                            className="no-scrollbar flex-1 overflow-y-auto"
                             id="property-scroll-container"
                             onScroll={(e) => {
                                 // ガントエリアの縦スクロールと連動
@@ -647,15 +730,26 @@ export default function Index({ properties }: any) {
                             >
                                 <div className="relative" style={{ minWidth: `${timelineWidth}px` }}>
                                     <div style={{ height: 40 }}>
-                                        {days.map((d, idx) => (
-                                            <div
-                                                key={`hd-${d}`}
-                                                className="absolute bottom-0 pl-1 text-left text-xs text-gray-600"
-                                                style={{ left: `${idx * cellWidth}px`, width: `${cellWidth}px` }}
-                                            >
-                                                {formatMonthDay(d)}
-                                            </div>
-                                        ))}
+                                        {days.map((d, idx) => {
+                                            const dt = new Date(d);
+                                            const isSat = dt.getDay() === 6;
+                                            const isSun = dt.getDay() === 0;
+                                            const isHoliday = (page.props as any).holidays && (page.props as any).holidays.includes(d);
+                                            const textClass = isHoliday || isSun ? 'text-red-600' : isSat ? 'text-blue-600' : 'text-gray-600';
+                                            return (
+                                                <div
+                                                    key={`hd-${d}`}
+                                                    // center the date label horizontally and vertically within the cell
+                                                    className={`absolute top-0 flex flex-col items-center justify-center text-[11px] ${textClass}`}
+                                                    style={{ left: `${idx * cellWidth}px`, width: `${cellWidth}px`, height: '40px' }}
+                                                >
+                                                    <div className="text-center leading-4">{formatMonthDay(d)}</div>
+                                                    <div className="text-center text-[10px]">
+                                                        ({['日', '月', '火', '水', '木', '金', '土'][dt.getDay()]})
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             </div>
@@ -733,6 +827,7 @@ export default function Index({ properties }: any) {
                                                                     className="rounded-full bg-red-600 p-0.5 shadow-sm"
                                                                     onMouseEnter={() => setOpenTooltipId(key)}
                                                                     onMouseLeave={() => setOpenTooltipId((prev) => (prev === key ? null : prev))}
+                                                                    onClick={() => setOpenTooltipId((prev) => (prev === key ? null : key))}
                                                                 >
                                                                     <Flag className="h-4 w-4 text-white" />
                                                                 </div>
@@ -768,24 +863,8 @@ export default function Index({ properties }: any) {
                                                     const iconKey = `confirm-${o.id}`;
                                                     const confirmerName =
                                                         o.move_out_confirm_user_name || (o.checkout_user && o.checkout_user.name) || '';
-                                                    // resolve user display names for this occupancy (single or multiple)
-                                                    const usersDisplay = (() => {
-                                                        if (Array.isArray(o.user_names)) {
-                                                            const resolved = o.user_names.filter(Boolean).map((n: string) => {
-                                                                if (typeof n === 'string' && n.startsWith('user:')) {
-                                                                    const id = Number(n.split(':')[1]);
-                                                                    return allUsersMap[id] || n;
-                                                                }
-                                                                return n;
-                                                            });
-                                                            return resolved.join(', ');
-                                                        }
-                                                        if (o.user_name) return o.user_name;
-                                                        if (Array.isArray(o.user_ids))
-                                                            return o.user_ids.map((id: number) => allUsersMap[id] || `user:${id}`).join(', ');
-                                                        if (o.user_id) return allUsersMap[o.user_id] || `user:${o.user_id}`;
-                                                        return '';
-                                                    })();
+                                                    // use centralized renderer for users display
+                                                    const usersJsx = renderUsersForOcc(o);
 
                                                     return (
                                                         <div
@@ -808,6 +887,9 @@ export default function Index({ properties }: any) {
                                                                         onMouseLeave={() =>
                                                                             setOpenTooltipId((prev) => (prev === iconKey ? null : prev))
                                                                         }
+                                                                        onClick={() =>
+                                                                            setOpenTooltipId((prev) => (prev === iconKey ? null : iconKey))
+                                                                        }
                                                                     >
                                                                         <User className="h-4 w-4 text-white" />
                                                                     </div>
@@ -815,9 +897,9 @@ export default function Index({ properties }: any) {
                                                                 <TooltipContent side="top" align="center">
                                                                     <div className="text-left whitespace-nowrap">
                                                                         <div className="font-medium">
-                                                                            {usersDisplay ? (
+                                                                            {usersJsx && usersJsx.length > 0 ? (
                                                                                 <div>
-                                                                                    <span>【{usersDisplay}】 </span>
+                                                                                    <span>【{usersJsx}】</span>
                                                                                 </div>
                                                                             ) : null}
                                                                             {r.property.display_label ?? r.property.name}
@@ -879,28 +961,12 @@ export default function Index({ properties }: any) {
                                                         const left = sIdx * cellWidth;
                                                         const width = (eIdx - sIdx + 1) * cellWidth;
 
-                                                        let usersDisplay = '';
-                                                        if (Array.isArray(o.user_names)) {
-                                                            const resolved = o.user_names.filter(Boolean).map((n: string) => {
-                                                                if (typeof n === 'string' && n.startsWith('user:')) {
-                                                                    const id = Number(n.split(':')[1]);
-                                                                    return allUsersMap[id] || n;
-                                                                }
-                                                                return n;
-                                                            });
-                                                            usersDisplay = resolved.join(', ');
-                                                        } else if (o.user_name) {
-                                                            usersDisplay = o.user_name;
-                                                        } else if (Array.isArray(o.user_ids)) {
-                                                            const resolved = o.user_ids.map((id: number) => allUsersMap[id] || `user:${id}`);
-                                                            usersDisplay = resolved.join(', ');
-                                                        } else if (o.user_id) {
-                                                            usersDisplay = allUsersMap[o.user_id] || `user:${o.user_id}`;
-                                                        }
+                                                        // reuse centralized renderer so gantt bar matches tooltip
+                                                        const usersFragment = renderUsersForOcc(o);
 
                                                         const label = o.open_ended
-                                                            ? `${usersDisplay} (${formatMonthDay(o.start)}〜)`
-                                                            : `${usersDisplay} (${formatMonthDay(o.start)}〜${formatMonthDay(o.end)})`;
+                                                            ? `(${formatMonthDay(o.start)}〜)`
+                                                            : `(${formatMonthDay(o.start)}〜${formatMonthDay(o.end)})`;
                                                         const propertyLabel = r.property.display_label ?? r.property.name;
 
                                                         return (
@@ -916,10 +982,15 @@ export default function Index({ properties }: any) {
                                                                 >
                                                                     <TooltipTrigger asChild>
                                                                         <div
-                                                                            className={`flex items-center overflow-hidden rounded bg-sky-500/80 px-2 text-sm text-white shadow-sm ${
+                                                                            className={`flex items-center overflow-hidden rounded bg-lime-300/80 px-2 text-sm text-black shadow-sm ${
                                                                                 isSmallScreen ? 'h-6 text-xs' : 'h-8'
                                                                             }`}
                                                                             onClick={() => {
+                                                                                // If touch device, toggle tooltip on tap instead of opening edit form
+                                                                                if (isTouch) {
+                                                                                    setOpenTooltipId((prev) => (prev === o.id ? null : o.id));
+                                                                                    return;
+                                                                                }
                                                                                 // block opening edit form if user lacks edit permission
                                                                                 if (!canEdit) {
                                                                                     alert('権限がありません');
@@ -943,14 +1014,18 @@ export default function Index({ properties }: any) {
                                                                                     move_out_confirm_date:
                                                                                         o.move_out_confirm_date || o.checkout_date || '',
                                                                                 });
-                                                                                if (isTouch) setOpenTooltipId(openTooltipId === o.id ? null : o.id);
                                                                             }}
                                                                             onMouseEnter={() => setOpenTooltipId(o.id)}
                                                                             onMouseLeave={() =>
                                                                                 setOpenTooltipId((prev) => (prev === o.id ? null : prev))
                                                                             }
                                                                         >
-                                                                            <span className="truncate">{label}</span>
+                                                                            <div className="flex items-center px-2">
+                                                                                <div className="truncate">
+                                                                                    {usersFragment}{' '}
+                                                                                    <span className="text-xs text-gray-700">{label}</span>
+                                                                                </div>
+                                                                            </div>
                                                                         </div>
                                                                     </TooltipTrigger>
                                                                     <TooltipContent side="top" align="center">

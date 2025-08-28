@@ -11,6 +11,9 @@ export default function UserShiftSettings(): JSX.Element {
     const users = page.props.users || [];
     const settings = page.props.settings || {};
 
+    // 最大ID桁数を計算して、ID表示部分の幅を固定する（名前の頭を揃えるため）
+    const maxIdDigits = Math.max(2, ...(users || []).map((u: any) => String(u.id).length));
+
     const breadcrumbs = [
         { title: 'ダッシュボード', href: route('dashboard') },
         { title: '各種設定', href: route('admin.role-permissions') },
@@ -104,7 +107,17 @@ export default function UserShiftSettings(): JSX.Element {
                             <TableBody>
                                 {rows.map((r: any, idx: number) => (
                                     <TableRow key={r.user_id}>
-                                        <TableCell>{r.user_name}</TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center">
+                                                <span
+                                                    className="inline-block text-right font-mono text-sm text-muted-foreground"
+                                                    style={{ width: `${maxIdDigits}ch` }}
+                                                >
+                                                    {String(r.user_id)}
+                                                </span>
+                                                <span className="ml-3 truncate">{r.user_name}</span>
+                                            </div>
+                                        </TableCell>
                                         <TableCell>
                                             <input
                                                 type="number"

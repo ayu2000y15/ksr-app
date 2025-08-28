@@ -1,10 +1,11 @@
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import AppLayout from '@/layouts/app-layout';
-import { type BreadcrumbItem } from '@/types';
-import { Head, usePage } from '@inertiajs/react';
+import { type BreadcrumbItem, type SharedData } from '@/types';
+import { Head, router, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { ja } from 'date-fns/locale';
 import { CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -258,7 +259,124 @@ export default function Dashboard() {
     const [ganttWidth, setGanttWidth] = useState(900);
     const [ganttOffset, setGanttOffset] = useState(300);
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
-    const { auth } = usePage().props as any;
+    const page = usePage<SharedData>();
+    const { auth } = page.props as any;
+    const permissions: string[] = page.props?.auth?.permissions ?? [];
+    const isSuperAdmin: boolean = page.props?.auth?.isSuperAdmin ?? (page.props as any)['auth.isSuperAdmin'] ?? false;
+    const nestedPermissions = (page.props as unknown as { permissions?: Record<string, any> } | undefined)?.permissions;
+
+    // determine if user may view/manage shifts using same logic as app-sidebar
+    let canViewShifts = false;
+    if (isSuperAdmin) canViewShifts = true;
+    else {
+        const perm = 'shift.view';
+        const hasFlat = permissions.includes(perm);
+        let hasNested = false;
+        const parts = perm.split('.');
+        if (parts.length === 2 && nestedPermissions && nestedPermissions[parts[0]]) {
+            const key = parts[1];
+            hasNested = Boolean(nestedPermissions[parts[0]][key]);
+        }
+        if (hasFlat || hasNested) canViewShifts = true;
+    }
+    const leftRowsRef = useRef<HTMLDivElement | null>(null);
+    const rightRowsRef = useRef<HTMLDivElement | null>(null);
+    // separate refs for desktop/mobile instances so we can pick the visible one
+    const leftDesktopRef = useRef<HTMLDivElement | null>(null);
+    const rightDesktopRef = useRef<HTMLDivElement | null>(null);
+    const leftMobileRef = useRef<HTMLDivElement | null>(null);
+    const rightMobileRef = useRef<HTMLDivElement | null>(null);
+    const [rowsHeight, setRowsHeight] = useState<number>(360);
+
+    useEffect(() => {
+        const compute = () => {
+            try {
+                // pick a visible element among possible desktop/mobile containers
+                const candidates = [rightDesktopRef.current, rightMobileRef.current, leftDesktopRef.current, leftMobileRef.current];
+                const topEl =
+                    candidates.find((el) => !!el && (el.getClientRects().length > 0 || (el as HTMLElement).offsetParent != null)) ||
+                    rightRowsRef.current ||
+                    leftRowsRef.current;
+                const top = topEl ? topEl.getBoundingClientRect().top : 0;
+                const reserved = 220; // header, paddings, controls
+                const avail = Math.max(160, window.innerHeight - top - reserved);
+                setRowsHeight(avail);
+            } catch {
+                setRowsHeight(360);
+            }
+        };
+
+        compute();
+        window.addEventListener('resize', compute);
+        let ro: ResizeObserver | null = null;
+        try {
+            ro = new ResizeObserver(compute);
+            ro.observe(document.body);
+        } catch {
+            /* ignore ResizeObserver not supported */
+        }
+        return () => {
+            window.removeEventListener('resize', compute);
+            if (ro) ro.disconnect();
+        };
+    }, []);
+
+    // sync vertical scroll between left and right columns
+    useEffect(() => {
+        // determine visible left/right containers (desktop or mobile)
+        const pickVisible = () => {
+            const leftCandidates = [leftDesktopRef.current, leftRowsRef.current, leftMobileRef.current];
+            const rightCandidates = [rightDesktopRef.current, rightRowsRef.current, rightMobileRef.current];
+            const leftEl = leftCandidates.find((el) => !!el && (el.getClientRects().length > 0 || (el as HTMLElement).offsetParent != null)) || null;
+            const rightEl =
+                rightCandidates.find((el) => !!el && (el.getClientRects().length > 0 || (el as HTMLElement).offsetParent != null)) || null;
+            return { leftEl, rightEl };
+        };
+
+        const { leftEl: left, rightEl: right } = pickVisible();
+        if (!left || !right) return;
+        // prevent re-entrant updates causing jitter: use a small lock + rAF
+        const syncing = { value: false } as { value: boolean };
+
+        const onRight = () => {
+            if (syncing.value) return;
+            const target = right.scrollTop;
+            if (left.scrollTop === target) return;
+            syncing.value = true;
+            // align in next frame to avoid intermediate events
+            requestAnimationFrame(() => {
+                left.scrollTop = target;
+                // release lock in next frame
+                requestAnimationFrame(() => {
+                    syncing.value = false;
+                });
+            });
+        };
+
+        const onLeft = () => {
+            if (syncing.value) return;
+            const target = left.scrollTop;
+            if (right.scrollTop === target) return;
+            syncing.value = true;
+            requestAnimationFrame(() => {
+                right.scrollTop = target;
+                requestAnimationFrame(() => {
+                    syncing.value = false;
+                });
+            });
+        };
+
+        right.addEventListener('scroll', onRight, { passive: true });
+        left.addEventListener('scroll', onLeft, { passive: true });
+
+        // if viewport changes (responsive), re-run effect to rebind listeners
+        return () => {
+            try {
+                right.removeEventListener('scroll', onRight);
+                left.removeEventListener('scroll', onLeft);
+            } catch {}
+        };
+    }, [rowsHeight, shifts]);
 
     useEffect(() => {
         (async () => {
@@ -393,6 +511,25 @@ export default function Dashboard() {
         formattedDate = new Intl.DateTimeFormat('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' }).format(currentDate);
     }
 
+    // 昼/夜の出勤人数を計算（欠勤はカウントしない）
+    let dayCount = 0;
+    let nightCount = 0;
+    shifts.forEach((s) => {
+        try {
+            const st = String(s.shift_type ?? s.type ?? '');
+            const isNight = st === 'night';
+            const absent =
+                String(s.status ?? '') === 'absent' ||
+                (Array.isArray(s.breaks) && s.breaks.some((b: { status?: string | undefined }) => String(b.status ?? '') === 'absent'));
+            if (!absent) {
+                if (isNight) nightCount += 1;
+                else dayCount += 1;
+            }
+        } catch {
+            /* ignore malformed entries */
+        }
+    });
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="ダッシュボード" />
@@ -412,7 +549,31 @@ export default function Dashboard() {
                 <div>
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between">
-                            <CardTitle className="text-lg sm:text-xl">{formattedDate}</CardTitle>
+                            <div className="flex items-center gap-2">
+                                <CardTitle className="text-lg sm:text-xl">{formattedDate}</CardTitle>
+                                {canViewShifts && (
+                                    <Button
+                                        onClick={() => {
+                                            const d = new Date();
+                                            const pad = (n: number) => String(n).padStart(2, '0');
+                                            const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+                                            // navigate to daily timeline for today
+                                            try {
+                                                router.get(
+                                                    route('shifts.daily'),
+                                                    { date: iso },
+                                                    { preserveState: true, only: ['shiftDetails', 'queryParams'] },
+                                                );
+                                            } catch {
+                                                // fallback: direct link navigation
+                                                window.location.href = route('shifts.daily', { date: iso });
+                                            }
+                                        }}
+                                    >
+                                        今日のシフト
+                                    </Button>
+                                )}
+                            </div>
                             <div className="flex items-center gap-2">
                                 <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
                                     <PopoverTrigger asChild>
@@ -442,108 +603,100 @@ export default function Dashboard() {
                             ) : (
                                 <div>
                                     {/* Desktop View */}
-                                    <div className="hidden sm:flex">
-                                        <div className="w-40 flex-shrink-0">
-                                            <div className="h-8 border-b border-gray-200"></div>
-                                            <div className="flex flex-col">
-                                                {shifts.map((s) => {
-                                                    const absent =
-                                                        String(s.status ?? '') === 'absent' ||
-                                                        (Array.isArray(s.breaks) && s.breaks.some((b: any) => String(b.status ?? '') === 'absent'));
-                                                    const isCurrentUser = auth.user && Number(s.user?.id ?? s.user_id) === Number(auth.user.id);
-                                                    return (
-                                                        <div
-                                                            key={s.id}
-                                                            className={`flex h-10 items-center border-b px-2 text-sm font-medium ${isCurrentUser ? 'bg-blue-50 font-semibold text-blue-900' : 'border-transparent'}`}
-                                                        >
-                                                            <span className={`mr-2 font-mono ${absent ? 'text-gray-500 line-through' : ''}`}>
-                                                                {String(s.user?.id ?? s.user_id)}
-                                                            </span>
-                                                            <span className={absent ? 'text-gray-500 line-through' : ''}>{s.user?.name ?? '—'}</span>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-
-                                        <div className="flex-1 overflow-x-auto">
-                                            <div style={{ minWidth: `${ganttWidth}px` }}>
-                                                <TimeScale offsetMinutes={ganttOffset} totalWidth={ganttWidth} />
-                                                <div className="flex flex-col">
-                                                    {shifts.map((s) => {
-                                                        const absent =
-                                                            String(s.status ?? '') === 'absent' ||
-                                                            (Array.isArray(s.breaks) &&
-                                                                s.breaks.some((b: any) => String(b.status ?? '') === 'absent'));
-                                                        const isCurrentUser = auth.user && Number(s.user?.id ?? s.user_id) === Number(auth.user.id);
-                                                        return (
-                                                            <div
-                                                                key={s.id}
-                                                                className={`border-b ${isCurrentUser ? 'bg-blue-50' : 'border-transparent bg-gray-50'}`}
-                                                            >
-                                                                <GanttBar
-                                                                    shift={s}
-                                                                    isAbsent={absent}
-                                                                    visualOffsetMinutes={ganttOffset}
-                                                                    currentDate={currentDate}
-                                                                />
-                                                            </div>
-                                                        );
-                                                    })}
+                                    <div>
+                                        <div className="flex">
+                                            {/* left fixed column outside horizontal scroller */}
+                                            <div className="w-20 flex-shrink-0 text-xs md:w-40">
+                                                <div className="flex h-8 items-center gap-2 border-b border-gray-200 px-2 text-xs">
+                                                    <Badge variant="default" className="border-transparent bg-yellow-100 text-yellow-800">
+                                                        昼 {`(${dayCount})`}
+                                                    </Badge>
+                                                    <Badge variant="outline" className="border-transparent bg-indigo-100 text-indigo-800">
+                                                        夜 {`(${nightCount})`}
+                                                    </Badge>
+                                                </div>
+                                                <div
+                                                    ref={(el) => {
+                                                        leftRowsRef.current = el;
+                                                        leftDesktopRef.current = el;
+                                                    }}
+                                                    style={{ maxHeight: 'calc(100vh - 220px)', overflowY: 'auto', overflowX: 'hidden' }}
+                                                >
+                                                    <div className="flex flex-col">
+                                                        {shifts.map((s) => {
+                                                            const absent =
+                                                                String(s.status ?? '') === 'absent' ||
+                                                                (Array.isArray(s.breaks) &&
+                                                                    s.breaks.some(
+                                                                        (b: { status?: string | undefined }) => String(b.status ?? '') === 'absent',
+                                                                    ));
+                                                            const isCurrentUser =
+                                                                auth.user && Number(s.user?.id ?? s.user_id) === Number(auth.user.id);
+                                                            return (
+                                                                <div
+                                                                    key={s.id}
+                                                                    className={`flex h-10 items-center truncate border-b px-2 text-xs font-medium md:text-sm ${isCurrentUser ? 'bg-blue-50' : 'bg-white'}`}
+                                                                >
+                                                                    <span
+                                                                        className={`mr-2 inline-block w-12 text-right font-mono ${absent ? 'text-gray-500 line-through' : ''}`}
+                                                                    >
+                                                                        {String(s.user?.id ?? s.user_id)}
+                                                                    </span>
+                                                                    <span className={absent ? 'truncate text-gray-500 line-through' : 'truncate'}>
+                                                                        {s.user?.name ?? '—'}
+                                                                    </span>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    </div>
 
-                                    {/* Mobile View */}
-                                    <div className="flex sm:hidden">
-                                        <div className="pr-2">
-                                            <div className="h-8 border-b border-transparent"></div>
-                                            <div className="flex flex-col">
-                                                {shifts.map((s) => {
-                                                    const absent =
-                                                        String(s.status ?? '') === 'absent' ||
-                                                        (Array.isArray(s.breaks) && s.breaks.some((b: any) => String(b.status ?? '') === 'absent'));
-                                                    const isCurrentUser = auth.user && Number(s.user?.id ?? s.user_id) === Number(auth.user.id);
-                                                    return (
-                                                        <div
-                                                            key={s.id}
-                                                            className={`flex h-10 items-center border-b px-1 text-sm font-medium ${isCurrentUser ? 'bg-blue-50 font-semibold text-blue-900' : 'border-transparent'}`}
-                                                        >
-                                                            <span className={`mr-2 font-mono ${absent ? 'text-gray-500 line-through' : ''}`}>
-                                                                {String(s.user?.id ?? s.user_id)}
-                                                            </span>
-                                                            <span className={absent ? 'text-gray-500 line-through' : ''}>{s.user?.name ?? '—'}</span>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
+                                            {/* right area: horizontal scroller containing time scale and gantt */}
+                                            <div className="flex-1 overflow-x-auto" style={{ overflowY: 'hidden' }}>
+                                                <div style={{ minWidth: `${ganttWidth}px` }}>
+                                                    <div className="sticky top-0 z-20 bg-white">
+                                                        <TimeScale offsetMinutes={ganttOffset} totalWidth={ganttWidth} />
+                                                    </div>
 
-                                        <div className="flex-1 overflow-x-auto">
-                                            <div style={{ minWidth: `${ganttWidth}px` }}>
-                                                <TimeScale offsetMinutes={ganttOffset} totalWidth={ganttWidth} />
-                                                <div className="flex flex-col">
-                                                    {shifts.map((s) => {
-                                                        const absent =
-                                                            String(s.status ?? '') === 'absent' ||
-                                                            (Array.isArray(s.breaks) &&
-                                                                s.breaks.some((b: any) => String(b.status ?? '') === 'absent'));
-                                                        const isCurrentUser = auth.user && Number(s.user?.id ?? s.user_id) === Number(auth.user.id);
-                                                        return (
-                                                            <div
-                                                                key={s.id}
-                                                                className={`border-b ${isCurrentUser ? 'bg-blue-50' : 'border-transparent bg-gray-50'}`}
-                                                            >
-                                                                <GanttBar
-                                                                    shift={s}
-                                                                    isAbsent={absent}
-                                                                    visualOffsetMinutes={ganttOffset}
-                                                                    currentDate={currentDate}
-                                                                />
+                                                    <div
+                                                        ref={(el) => {
+                                                            rightRowsRef.current = el;
+                                                            rightDesktopRef.current = el;
+                                                        }}
+                                                        style={{ maxHeight: 'calc(100vh - 220px)', overflowY: 'auto', overflowX: 'hidden' }}
+                                                    >
+                                                        <div style={{ minWidth: `${ganttWidth}px` }}>
+                                                            <div className="flex flex-col">
+                                                                {shifts.map((s) => {
+                                                                    const absent =
+                                                                        String(s.status ?? '') === 'absent' ||
+                                                                        (Array.isArray(s.breaks) &&
+                                                                            s.breaks.some(
+                                                                                (b: { status?: string | undefined }) =>
+                                                                                    String(b.status ?? '') === 'absent',
+                                                                            ));
+                                                                    const isCurrentUser =
+                                                                        auth.user && Number(s.user?.id ?? s.user_id) === Number(auth.user.id);
+                                                                    return (
+                                                                        <div
+                                                                            key={s.id}
+                                                                            className={`flex h-10 items-center border-b ${isCurrentUser ? 'bg-blue-50' : 'bg-white'}`}
+                                                                        >
+                                                                            <div className="flex h-10 items-center">
+                                                                                <GanttBar
+                                                                                    shift={s}
+                                                                                    isAbsent={absent}
+                                                                                    visualOffsetMinutes={ganttOffset}
+                                                                                    currentDate={currentDate}
+                                                                                />
+                                                                            </div>
+                                                                        </div>
+                                                                    );
+                                                                })}
                                                             </div>
-                                                        );
-                                                    })}
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>

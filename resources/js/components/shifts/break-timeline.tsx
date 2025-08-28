@@ -1,5 +1,5 @@
 import axios from 'axios';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 type ShiftDetail = {
     id: number;
@@ -50,6 +50,12 @@ export default function BreakTimeline(props: {
     useEffect(() => setInterval(initialInterval), [initialInterval]);
     const [selTarget, setSelTarget] = useState<{ id: number | null; startIndex: number | null } | null>(null);
     const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+    const scrollRef = useRef<HTMLDivElement | null>(null);
+    const labelsRef = useRef<HTMLDivElement | null>(null);
+    const ganttRef = useRef<HTMLDivElement | null>(null);
+    const footerRightRef = useRef<HTMLDivElement | null>(null);
+    const isSyncingRef = useRef(false);
+    const [areaHeight, setAreaHeight] = useState<number | null>(null);
     const parseDbTime = (dt?: string | null) => {
         if (!dt) return null;
         const m = String(dt).match(/(\d{4})[-/ ]?(\d{2})[-/ ]?(\d{2})[T\s](\d{1,2}):(\d{2})/);
@@ -156,6 +162,100 @@ export default function BreakTimeline(props: {
         }
         return Array.from(m.values());
     }, [breaks, shiftDetails]);
+
+    // calculate the available height for the scrollable area (labels + timeline)
+    const recalcAreaHeight = useCallback(() => {
+        try {
+            const el = scrollRef.current;
+            if (!el) return;
+            const top = el.getBoundingClientRect().top;
+            const vh = window.innerHeight || (document.documentElement && document.documentElement.clientHeight) || 768;
+            // leave a small bottom margin so content isn't flush to bottom
+            const desired = Math.max(200, vh - top - 48);
+            setAreaHeight(desired);
+        } catch {
+            // ignore
+        }
+    }, []);
+
+    useEffect(() => {
+        recalcAreaHeight();
+        window.addEventListener('resize', recalcAreaHeight);
+        const ro = new ResizeObserver(() => recalcAreaHeight());
+        if (document.body) ro.observe(document.body);
+        return () => {
+            window.removeEventListener('resize', recalcAreaHeight);
+            try {
+                ro.disconnect();
+            } catch {}
+        };
+    }, [recalcAreaHeight]);
+
+    // sync scroll positions between label column and gantt column
+    const syncScrollFromLabels = () => {
+        if (isSyncingRef.current) return;
+        const li = labelsRef.current;
+        const gi = ganttRef.current;
+        if (!li || !gi) return;
+        isSyncingRef.current = true;
+        requestAnimationFrame(() => {
+            try {
+                gi.scrollTop = li.scrollTop;
+            } catch {}
+            isSyncingRef.current = false;
+        });
+    };
+
+    const syncScrollFromGantt = () => {
+        if (isSyncingRef.current) return;
+        const li = labelsRef.current;
+        const gi = ganttRef.current;
+        if (!li || !gi) return;
+        isSyncingRef.current = true;
+        requestAnimationFrame(() => {
+            try {
+                li.scrollTop = gi.scrollTop;
+            } catch {}
+            isSyncingRef.current = false;
+        });
+    };
+
+    // sync horizontal scroll between gantt and attendance footer
+    useEffect(() => {
+        const gi = ganttRef.current;
+        const fi = footerRightRef.current;
+        if (!gi || !fi) return;
+        const onGantt = () => {
+            if (isSyncingRef.current) return;
+            isSyncingRef.current = true;
+            requestAnimationFrame(() => {
+                try {
+                    fi.scrollLeft = gi.scrollLeft;
+                } catch {}
+                isSyncingRef.current = false;
+            });
+        };
+        const onFooter = () => {
+            if (isSyncingRef.current) return;
+            isSyncingRef.current = true;
+            requestAnimationFrame(() => {
+                try {
+                    gi.scrollLeft = fi.scrollLeft;
+                } catch {}
+                isSyncingRef.current = false;
+            });
+        };
+        gi.addEventListener('scroll', onGantt);
+        fi.addEventListener('scroll', onFooter);
+        // initialize
+        try {
+            fi.scrollLeft = gi.scrollLeft;
+        } catch {}
+        return () => {
+            gi.removeEventListener('scroll', onGantt);
+            fi.removeEventListener('scroll', onFooter);
+        };
+    }, []);
 
     // track external absent updates so break UI updates immediately when another component
     // (e.g. DailyTimeline) marks a shift as absent without the parent shifting props
@@ -274,6 +374,7 @@ export default function BreakTimeline(props: {
 
     return (
         <div className="rounded border bg-white p-4">
+            <style>{`.labels-scroll::-webkit-scrollbar{display:none}.labels-scroll{-ms-overflow-style:none;scrollbar-width:none;} .footer-scroll::-webkit-scrollbar{display:none}.footer-scroll{-ms-overflow-style:none;scrollbar-width:none;}`}</style>
             <div className="mb-3 flex items-center justify-between">
                 <div className="text-lg font-medium">{date ? String(date).slice(0, 10).replace(/-/g, '/') : ''}</div>
                 <div className="flex items-center gap-3">
@@ -282,9 +383,22 @@ export default function BreakTimeline(props: {
                 </div>
             </div>
 
-            <div className="flex">
-                <div className="w-28 flex-shrink-0 sm:w-48">
-                    <div className="h-10 border-b bg-white" />
+            <div
+                ref={scrollRef}
+                className="flex"
+                style={{ overflowY: areaHeight ? 'auto' : undefined, maxHeight: areaHeight ? `${areaHeight}px` : undefined }}
+            >
+                <div
+                    ref={labelsRef}
+                    onScroll={() => syncScrollFromLabels()}
+                    className="labels-scroll w-28 flex-shrink-0 sm:w-48"
+                    style={{
+                        overflowY: areaHeight ? 'auto' : undefined,
+                        maxHeight: areaHeight ? `${areaHeight}px` : undefined,
+                        paddingBottom: '36px',
+                    }}
+                >
+                    <div className="h-10 border-b bg-white" style={{ position: 'sticky', top: 0, zIndex: 30, background: 'white' }} />
                     <div className="space-y-2">
                         {(visibleItems || []).map((it) => (
                             <div key={`label-${it.id}`} className="flex h-10 items-center border-b bg-white pr-2">
@@ -293,12 +407,29 @@ export default function BreakTimeline(props: {
                             </div>
                         ))}
                     </div>
-                    <div className="flex h-6 items-center border-t bg-white p-4 text-sm font-medium text-muted-foreground">出勤人数</div>
                 </div>
-
-                <div className="flex-1 overflow-x-auto">
+                <div
+                    ref={ganttRef}
+                    onScroll={() => syncScrollFromGantt()}
+                    className="flex-1"
+                    style={{
+                        overflowX: 'auto',
+                        overflowY: areaHeight ? 'auto' : undefined,
+                        maxHeight: areaHeight ? `${areaHeight}px` : undefined,
+                        paddingBottom: '36px',
+                    }}
+                >
                     <div style={{ minWidth: `${totalPixelWidth}px` }}>
-                        <div className="grid h-10 items-center" style={{ gridTemplateColumns: `repeat(${timeSlots.length}, ${columnWidth}px)` }}>
+                        <div
+                            className="grid h-10 items-center"
+                            style={{
+                                gridTemplateColumns: `repeat(${timeSlots.length}, ${columnWidth}px)`,
+                                position: 'sticky',
+                                top: 0,
+                                zIndex: 20,
+                                background: 'white',
+                            }}
+                        >
                             {timeSlots.map((t, i) => {
                                 const displayTime = t;
                                 const displayHour = Math.floor((displayTime % 1440) / 60);
@@ -545,18 +676,26 @@ export default function BreakTimeline(props: {
                                 );
                             })}
                         </div>
-                        <div className="flex h-6 items-center">
-                            <div
-                                className="grid"
-                                style={{ gridTemplateColumns: `repeat(${timeSlots.length}, ${columnWidth}px)`, minWidth: `${totalPixelWidth}px` }}
-                            >
-                                {attendanceCounts.map((c, i) => (
-                                    <div key={`cnt-${i}`} className="h-6 border-l text-center text-sm font-medium">
-                                        {c}
-                                    </div>
-                                ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* Attendance footer fixed below scroll area: left label + right horizontally-scrollable counts */}
+            <div className="mt-1 flex items-center border-t bg-white">
+                <div className="w-28 flex-shrink-0 p-2 text-sm font-medium text-muted-foreground sm:w-48">出勤人数</div>
+                <div ref={footerRightRef} className="footer-scroll flex-1 overflow-x-auto">
+                    <div
+                        style={{
+                            minWidth: `${totalPixelWidth}px`,
+                            display: 'grid',
+                            gridTemplateColumns: `repeat(${timeSlots.length}, ${columnWidth}px)`,
+                        }}
+                    >
+                        {attendanceCounts.map((c, i) => (
+                            <div key={`cnt-${i}`} className="h-6 border-l text-center text-sm font-medium">
+                                {c}
                             </div>
-                        </div>
+                        ))}
                     </div>
                 </div>
             </div>

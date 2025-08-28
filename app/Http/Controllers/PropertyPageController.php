@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Property;
+use App\Models\Holiday;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -14,8 +15,8 @@ class PropertyPageController extends Controller
 
         // load properties with their room occupancies and optionally related users
         $properties = Property::with(['roomOccupancies' => function ($q) {
-            // also eager-load the checkout user and final move-out user if present
-            $q->with(['user', 'checkoutUser', 'finalMoveOutUser'])->orderBy('move_in_date');
+            // eager-load only relevant related users (checkout/final move-out); single-user relation removed
+            $q->with(['checkoutUser', 'finalMoveOutUser'])->orderBy('move_in_date');
         }])->orderBy('order_column')->orderBy('name')->get();
 
         // map properties to arrays and add server-controlled display_label used by the frontend
@@ -74,10 +75,7 @@ class PropertyPageController extends Controller
 
                     // if user_ids JSON column exists, attach user names array for frontend convenience
                     if (!empty($occ['user_ids']) && is_array($occ['user_ids'])) {
-                        $occ['user_names'] = array_values(array_filter(array_map(function ($uid) use ($occ, $userNamesById) {
-                            if (!empty($occ['user']) && isset($occ['user']['id']) && $occ['user']['id'] == $uid) {
-                                return $occ['user']['name'] ?? null;
-                            }
+                        $occ['user_names'] = array_values(array_filter(array_map(function ($uid) use ($userNamesById) {
                             if (isset($userNamesById[$uid])) {
                                 return $userNamesById[$uid];
                             }
@@ -92,8 +90,23 @@ class PropertyPageController extends Controller
             return $arr;
         });
 
+        // send holidays (dates) as Y-m-d strings so frontend can mark them reliably
+        $holidays = Holiday::pluck('date')
+            ->map(function ($d) {
+                return \Carbon\Carbon::parse($d)->toDateString();
+            })
+            ->toArray();
+
+        // send minimal users list (id, name, gender, has_car) so frontend can render icons on initial SSR
+        $users = \App\Models\User::where('status', 'active')->orderBy('id')->get(['id', 'name', 'gender', 'has_car']);
+        if ($users->count() === 0) {
+            $users = \App\Models\User::orderBy('id')->get(['id', 'name', 'gender', 'has_car']);
+        }
+
         return Inertia::render('properties/index', [
             'properties' => $items,
+            'holidays' => $holidays,
+            'users' => $users,
         ]);
     }
 }

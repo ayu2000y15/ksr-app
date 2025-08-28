@@ -14,6 +14,8 @@ export default function Create() {
         name: '',
         email: '',
         status: 'active',
+        gender: '',
+        has_car: false,
         phone_number: '',
         line_name: '',
         memo: '',
@@ -100,6 +102,68 @@ export default function Create() {
                                         </label>
                                     </div>
                                     <InputError message={errors.status} className="mt-2" />
+                                </div>
+
+                                <div>
+                                    <Label htmlFor="gender">
+                                        性別 <span className="text-red-500">*</span>
+                                    </Label>
+                                    <div className="mt-2 flex items-center gap-6">
+                                        <label className="flex items-center gap-2">
+                                            <input
+                                                type="radio"
+                                                name="gender"
+                                                value="male"
+                                                checked={data.gender === 'male'}
+                                                onChange={() => setData('gender', 'male')}
+                                                required
+                                            />
+                                            <span>男性</span>
+                                        </label>
+
+                                        <label className="flex items-center gap-2">
+                                            <input
+                                                type="radio"
+                                                name="gender"
+                                                value="female"
+                                                checked={data.gender === 'female'}
+                                                onChange={() => setData('gender', 'female')}
+                                            />
+                                            <span>女性</span>
+                                        </label>
+                                    </div>
+                                    <InputError message={errors.gender} className="mt-2" />
+                                </div>
+
+                                <div>
+                                    <Label htmlFor="has_car">
+                                        車の有無 <span className="text-red-500">*</span>
+                                    </Label>
+                                    <div className="mt-2 flex items-center gap-6">
+                                        <label className="flex items-center gap-2">
+                                            <input
+                                                type="radio"
+                                                name="has_car"
+                                                value="1"
+                                                checked={data.has_car === true}
+                                                onChange={() => setData('has_car', true)}
+                                                required
+                                            />
+                                            <span>有</span>
+                                        </label>
+
+                                        <label className="flex items-center gap-2">
+                                            <input
+                                                type="radio"
+                                                name="has_car"
+                                                value="0"
+                                                checked={data.has_car === false}
+                                                onChange={() => setData('has_car', false)}
+                                            />
+                                            <span>無</span>
+                                        </label>
+                                    </div>
+                                    <InputError message={errors.has_car} className="mt-2" />
                                 </div>
 
                                 <div>

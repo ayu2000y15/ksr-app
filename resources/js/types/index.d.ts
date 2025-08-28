@@ -42,6 +42,8 @@ export interface User {
     email: string;
     phone_number: string | null;
     line_name: string | null;
+    gender?: 'male' | 'female' | 'other' | null;
+    has_car?: boolean;
     status: 'active' | 'retired' | 'shared';
     memo: string | null;
     email_verified_at: string | null;

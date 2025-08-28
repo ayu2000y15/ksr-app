@@ -63,6 +63,8 @@ class ShiftController extends Controller
             'shiftDetails' => $shiftDetails,
             // upcoming shift applications (future dates only, include user relation)
             'upcomingApplications' => ShiftApplication::with('user')->where('date', '>', Carbon::now()->startOfDay())->orderBy('date', 'asc')->get(),
+            // include default shift patterns so frontend can determine which shift types are available per weekday/holiday
+            'defaultShifts' => DefaultShift::all(),
             'queryParams' => $request->query() ?: null,
         ]);
     }

@@ -7,13 +7,6 @@ export function SidebarSettingsMenu({ isCollapsed, currentPath }: { isCollapsed:
     const page = usePage<import('@/types').SharedData>();
     const permissions: string[] = page.props?.auth?.permissions ?? [];
     const isSuperAdmin: boolean = page.props?.auth?.isSuperAdmin ?? (page.props as any)['auth.isSuperAdmin'] ?? false;
-    React.useEffect(() => {
-        const authProps = page.props?.auth as unknown as { permissions?: string[] } | undefined;
-        const nestedPermissions = (page.props as unknown as { permissions?: Record<string, unknown> } | undefined)?.permissions;
-        console.log('[SidebarSettingsMenu] page.props.auth.permissions', authProps?.permissions);
-        console.log('[SidebarSettingsMenu] page.props.permissions', nestedPermissions);
-        console.log('[SidebarSettingsMenu] isSuperAdmin', isSuperAdmin);
-    }, [page.props, isSuperAdmin]);
 
     const settings = [
         { title: 'ロール管理', href: '/admin/roles', icon: Shield, permission: 'role.view' },

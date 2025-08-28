@@ -52,7 +52,7 @@ Route::middleware(['web', 'auth'])->group(function () {
     Route::get('/users', function () {
         // 一時的に権限チェックを無効化
         // $this->authorize('viewAny', User::class);
-        return User::with('roles')->orderBy('name')->get();
+        return User::with('roles')->where('status', 'active')->orderBy('id')->get();
     });
 
     // アプリ内のアクティブユーザー一覧（入寮・退寮フォーム用）
@@ -143,7 +143,7 @@ Route::middleware(['web', 'auth'])->group(function () {
                 return response()->json(['message' => '指定の入寮レコードが見つかりません'], 404);
             }
             $occ->property_id = $data['property_id'];
-            $occ->user_id = $data['user_ids'][0] ?? null;
+            // Do not write to the deprecated user_id column; keep user_ids as the canonical source of truth
             $occ->user_ids = $data['user_ids'];
             $occ->move_in_date = $data['move_in_date'];
             $occ->move_out_date = $data['move_out_date'] ?? null;
@@ -156,7 +156,7 @@ Route::middleware(['web', 'auth'])->group(function () {
         // create new
         $occ = \App\Models\RoomOccupancy::create([
             'property_id' => $data['property_id'],
-            'user_id' => $data['user_ids'][0] ?? null, // keep primary user_id for compatibility
+            // Intentionally do NOT set the deprecated user_id column here. Use user_ids exclusively.
             'user_ids' => $data['user_ids'],
             'move_in_date' => $data['move_in_date'],
             'move_out_date' => $data['move_out_date'] ?? null,

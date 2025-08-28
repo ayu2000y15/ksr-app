@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button';
 import { usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { Plus, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 type BreakPayload = { shift_detail_id: number; start_time: string; end_time: string; type?: string };
 
@@ -272,6 +272,38 @@ export default function DailyTimeline(props: {
 
     const displayDate = date ? String(date).slice(0, 10).replace(/-/g, '/') : '';
 
+    // vertical scroll area sizing: compute available height so timeline area fits viewport
+    const wrapperRef = useRef<HTMLDivElement | null>(null);
+    const [scrollAreaHeight, setScrollAreaHeight] = useState<number>(400);
+    useEffect(() => {
+        const compute = () => {
+            try {
+                const top = wrapperRef.current ? wrapperRef.current.getBoundingClientRect().top : 0;
+                // reserve space for surrounding chrome (header, paddings, footers).
+                // Assumption: reserve ~200px; this keeps area from overflowing the viewport.
+                const reserved = 200;
+                const avail = Math.max(160, window.innerHeight - top - reserved);
+                setScrollAreaHeight(avail);
+            } catch {
+                // ignore and keep previous height
+            }
+        };
+        compute();
+        window.addEventListener('resize', compute);
+        // also observe body size changes if available
+        let ro: ResizeObserver | null = null;
+        try {
+            ro = new ResizeObserver(() => compute());
+            ro.observe(document.body);
+        } catch {
+            // ResizeObserver not available in some envs
+        }
+        return () => {
+            window.removeEventListener('resize', compute);
+            if (ro) ro.disconnect();
+        };
+    }, []);
+
     const addUserShift = async () => {
         if (!selectedUserId) return alert('ユーザーを選択してください');
         setAdding(true);
@@ -444,7 +476,7 @@ export default function DailyTimeline(props: {
                 )}
             </div>
 
-            <div className="overflow-x-auto">
+            <div ref={wrapperRef} className="overflow-x-auto">
                 {/* Header/time ruler: use fixed wide columns only in break mode; keep original flexible grid for shift mode */}
                 {mode === 'break' ? (
                     <div className="min-w-full">
@@ -483,7 +515,7 @@ export default function DailyTimeline(props: {
                     </div>
                 )}
 
-                <div className="mt-2 space-y-2">
+                <div style={{ maxHeight: `${scrollAreaHeight}px`, overflowY: 'auto' }} className="mt-2 space-y-2">
                     {items
                         .filter((it: Item) => {
                             // In break mode, skip shifts that are absent (database status) or locally marked absent

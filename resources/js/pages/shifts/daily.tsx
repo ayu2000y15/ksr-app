@@ -18,10 +18,9 @@ export default function Daily() {
     const props = page.props as any;
     // DEBUG: log Inertia props obtained via usePage() to inspect available props at runtime
     try {
-         
         console.log('usePage props:', props);
         // also log props.users explicitly for quick inspection
-         
+
         console.log('props.users:', window.page && window.page.props && window.page.props.users);
     } catch {
         // ignore
@@ -152,6 +151,18 @@ export default function Daily() {
             // ignore
         }
     }, []);
+
+    // Always start locked when entering break mode
+    useEffect(() => {
+        try {
+            if (mode === 'break') {
+                setBreakLocked(true);
+                if (typeof window !== 'undefined') localStorage.setItem('daily.breakLocked', '1');
+            }
+        } catch {
+            // ignore
+        }
+    }, [mode]);
 
     useEffect(() => {
         try {
@@ -313,8 +324,8 @@ export default function Daily() {
         <AppSidebarLayout breadcrumbs={breadcrumbs}>
             <Head title={`日間タイムライン ${displayDate || ''}`} />
             <div className="p-4 sm:p-6 lg:p-8">
-                <div className="mb-3 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-shrink-0 items-center gap-2">
                         <button
                             className={`rounded px-3 py-1 text-sm ${mode === 'shift' ? 'bg-indigo-600 text-white' : 'bg-gray-100'}`}
                             onClick={() => setMode('shift')}
@@ -328,113 +339,177 @@ export default function Daily() {
                             休憩登録
                         </button>
                     </div>
-                    {mode === 'break' && (
-                        <div className="flex items-center gap-2">
-                            <label className="text-sm">種別:</label>
-                            <button
-                                className={`rounded px-2 py-1 text-sm ${breakType === 'actual' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}
-                                title={breakType === 'actual' ? '実績モード（クリックで予定に切り替え）' : '予定モード（クリックで実績に切り替え）'}
-                                onClick={() => setBreakType((s) => (s === 'actual' ? 'planned' : 'actual'))}
+
+                    {/* centered status: placed on same line as buttons; becomes full-width on small screens */}
+                    <div className="order-3 flex w-full justify-start sm:order-2 sm:flex-1 sm:justify-center">
+                        {mode === 'break' && (
+                            <div
+                                role="status"
+                                className={`rounded px-4 py-2 text-sm font-medium ${
+                                    breakType === 'actual' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
+                                }`}
                             >
-                                <span className="inline-flex items-center">
-                                    <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-                                        {breakType === 'actual' ? (
-                                            <>
-                                                <path
-                                                    d="M12 2v6"
-                                                    stroke="currentColor"
-                                                    strokeWidth="1.5"
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                />
-                                                <rect x="4" y="8" width="16" height="14" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none" />
-                                            </>
-                                        ) : (
-                                            <>
-                                                <path
-                                                    d="M4 12h16"
-                                                    stroke="currentColor"
-                                                    strokeWidth="1.5"
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                />
-                                                <path
-                                                    d="M12 4v16"
-                                                    stroke="currentColor"
-                                                    strokeWidth="1.5"
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                />
-                                            </>
-                                        )}
-                                    </svg>
-                                    <span>{breakType === 'actual' ? '実績' : '予定'}</span>
-                                </span>
-                            </button>
-                            <button
-                                className={`rounded px-2 py-1 text-sm ${breakLocked ? 'bg-gray-200 text-gray-700' : 'bg-green-600 text-white'}`}
-                                title={
-                                    breakLocked ? '休憩はロックされています。クリックで解除します。' : '休憩は編集可能です。クリックでロックします。'
-                                }
-                                onClick={() => setBreakLocked((s) => !s)}
-                            >
-                                {breakLocked ? (
+                                休憩編集モード: {breakType === 'actual' ? '実績' : '予定'}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="order-2 flex items-center gap-2 sm:order-3">
+                        {mode === 'break' && (
+                            <div className="flex items-center gap-2">
+                                <button
+                                    className={`rounded px-2 py-1 text-sm ${breakType === 'actual' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}
+                                    title={
+                                        breakType === 'actual' ? '実績モード（クリックで予定に切り替え）' : '予定モード（クリックで実績に切り替え）'
+                                    }
+                                    onClick={() => setBreakType((s) => (s === 'actual' ? 'planned' : 'actual'))}
+                                >
                                     <span className="inline-flex items-center">
                                         <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-                                            <rect x="3" y="11" width="18" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none" />
-                                            <path
-                                                d="M7 11V8a5 5 0 0110 0v3"
-                                                stroke="currentColor"
-                                                strokeWidth="1.5"
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                fill="none"
-                                            />
+                                            {breakType === 'actual' ? (
+                                                <>
+                                                    {/* clock-style icon for "actual" */}
+                                                    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                                                    <path
+                                                        d="M12 7v5"
+                                                        stroke="currentColor"
+                                                        strokeWidth="1.5"
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                    />
+                                                    <path
+                                                        d="M12 12h3"
+                                                        stroke="currentColor"
+                                                        strokeWidth="1.5"
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                    />
+                                                </>
+                                            ) : (
+                                                <>
+                                                    {/* calendar-like icon for "planned" */}
+                                                    <rect
+                                                        x="3"
+                                                        y="5"
+                                                        width="18"
+                                                        height="16"
+                                                        rx="2"
+                                                        stroke="currentColor"
+                                                        strokeWidth="1.5"
+                                                        fill="none"
+                                                    />
+                                                    <path
+                                                        d="M8 3v4"
+                                                        stroke="currentColor"
+                                                        strokeWidth="1.5"
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                    />
+                                                    <path
+                                                        d="M16 3v4"
+                                                        stroke="currentColor"
+                                                        strokeWidth="1.5"
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                    />
+                                                    <path
+                                                        d="M3 11h18"
+                                                        stroke="currentColor"
+                                                        strokeWidth="1.5"
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                    />
+                                                </>
+                                            )}
                                         </svg>
-                                        <span>ロック中</span>
+                                        <span>{breakType === 'actual' ? '実績' : '予定'}</span>
                                     </span>
-                                ) : (
-                                    <span className="inline-flex items-center">
-                                        <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-                                            <rect x="3" y="11" width="18" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none" />
-                                            <path
-                                                d="M16 11V8a4 4 0 00-8 0"
-                                                stroke="currentColor"
-                                                strokeWidth="1.5"
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
+                                </button>
+                                <button
+                                    className={`rounded px-2 py-1 text-sm ${breakLocked ? 'bg-gray-200 text-gray-700' : 'bg-green-600 text-white'}`}
+                                    title={
+                                        breakLocked
+                                            ? '休憩はロックされています。クリックで解除します。'
+                                            : '休憩は編集可能です。クリックでロックします。'
+                                    }
+                                    onClick={() => setBreakLocked((s) => !s)}
+                                >
+                                    {breakLocked ? (
+                                        <span className="inline-flex items-center">
+                                            <svg
+                                                className="mr-2 h-4 w-4"
+                                                viewBox="0 0 24 24"
                                                 fill="none"
-                                            />
-                                            <path
-                                                d="M9 16h6"
-                                                stroke="currentColor"
-                                                strokeWidth="1.5"
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                aria-hidden
+                                            >
+                                                <rect
+                                                    x="3"
+                                                    y="11"
+                                                    width="18"
+                                                    height="10"
+                                                    rx="2"
+                                                    stroke="currentColor"
+                                                    strokeWidth="1.5"
+                                                    fill="none"
+                                                />
+                                                <path
+                                                    d="M7 11V8a5 5 0 0110 0v3"
+                                                    stroke="currentColor"
+                                                    strokeWidth="1.5"
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    fill="none"
+                                                />
+                                            </svg>
+                                            <span>ロック中</span>
+                                        </span>
+                                    ) : (
+                                        <span className="inline-flex items-center">
+                                            <svg
+                                                className="mr-2 h-4 w-4"
+                                                viewBox="0 0 24 24"
                                                 fill="none"
-                                            />
-                                        </svg>
-                                        <span>編集可</span>
-                                    </span>
-                                )}
-                            </button>
-                        </div>
-                    )}
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                aria-hidden
+                                            >
+                                                <rect
+                                                    x="3"
+                                                    y="11"
+                                                    width="18"
+                                                    height="10"
+                                                    rx="2"
+                                                    stroke="currentColor"
+                                                    strokeWidth="1.5"
+                                                    fill="none"
+                                                />
+                                                <path
+                                                    d="M16 11V8a4 4 0 00-8 0"
+                                                    stroke="currentColor"
+                                                    strokeWidth="1.5"
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    fill="none"
+                                                />
+                                                <path
+                                                    d="M9 16h6"
+                                                    stroke="currentColor"
+                                                    strokeWidth="1.5"
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    fill="none"
+                                                />
+                                            </svg>
+                                            <span>編集可</span>
+                                        </span>
+                                    )}
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
-                {/* Informational banner shown when in break mode */}
-                {mode === 'break' && (
-                    <div className="mb-4 flex justify-center">
-                        <div
-                            role="status"
-                            className={`rounded px-4 py-2 text-sm font-medium ${
-                                breakType === 'actual' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
-                            }`}
-                        >
-                            休憩編集モード: {breakType === 'actual' ? '実績' : '予定'}
-                        </div>
-                    </div>
-                )}
+                {/* status moved into header line */}
 
                 {mode === 'shift' ? (
                     <ShiftTimeline

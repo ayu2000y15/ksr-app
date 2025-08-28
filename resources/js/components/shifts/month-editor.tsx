@@ -12,6 +12,10 @@ export default function MonthEditor({
     days,
     holidays = [],
     existingShifts = {},
+    // optional map provided by server: userId -> 出勤日数
+    attendanceCounts,
+    // optional array of default shift patterns from server
+    defaultShifts,
     onMonthChange,
     accentClass,
 }: {
@@ -19,6 +23,8 @@ export default function MonthEditor({
     days: string[];
     holidays?: string[];
     existingShifts?: Record<number, Record<string, Cell>>;
+    attendanceCounts?: Record<number, number>;
+    defaultShifts?: Array<any>;
     onMonthChange?: (monthIso: string) => void;
     accentClass?: string;
 }) {
@@ -70,19 +76,15 @@ export default function MonthEditor({
     const buildInitialGrid = useCallback(
         (dayList: string[]) => {
             const initial: Record<number, Record<string, Cell>> = {};
+            const es = existingShifts as Record<string, Record<string, Cell>> | undefined;
             users.forEach((u) => {
                 initial[u.id] = {};
                 dayList.forEach((d) => {
                     // prefer existing DB value (handle numeric or string keys), otherwise empty (未設定)
                     let val: Cell = '';
-                    if (existingShifts) {
-                        const byNum = (existingShifts as any)[u.id];
-                        const byStr = (existingShifts as any)[String(u.id)];
-                        const source = byNum ?? byStr ?? null;
-                        if (source && source[d] !== undefined) {
-                            // cast defensively to Cell
-                            val = source[d] as Cell;
-                        }
+                    const source = es?.[String(u.id)] ?? es?.[u.id];
+                    if (source && source[d] !== undefined) {
+                        val = source[d] as Cell;
                     }
                     initial[u.id][d] = val;
                 });
@@ -93,10 +95,27 @@ export default function MonthEditor({
     );
 
     const [grid, setGrid] = useState<Record<number, Record<string, Cell>>>(() => ({}));
+    // keep a ref to grid so async callbacks can read latest values
+    const gridRef = useRef(grid);
+    useEffect(() => {
+        gridRef.current = grid;
+    }, [grid]);
     const [saving, setSaving] = useState(false);
     const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' | 'info' } | null>(null);
 
     const [selectedDates, setSelectedDates] = useState<Set<string>>(() => new Set());
+
+    // attendance map shown in UI; initialized from prop if provided
+    const [attendanceMap, setAttendanceMap] = useState<Record<number, number>>(() =>
+        typeof attendanceCounts !== 'undefined' && attendanceCounts ? { ...attendanceCounts } : {},
+    );
+
+    // when prop changes, sync
+    useEffect(() => {
+        if (typeof attendanceCounts !== 'undefined' && attendanceCounts) {
+            setAttendanceMap({ ...attendanceCounts });
+        }
+    }, [attendanceCounts]);
 
     // debounce map to coalesce rapid changes
     const pendingSavesRef = useRef<Record<string, NodeJS.Timeout>>({});
@@ -110,19 +129,110 @@ export default function MonthEditor({
         setGrid((prev) => ({ ...prev, [userId]: { ...prev[userId], [date]: val } }));
     };
 
+    // helper to get attendance count for a user: prefer server-provided map, then user fields, otherwise count from existingShifts for visibleDays
+    const getAttendanceCount = (u: { id: number; [k: string]: unknown }) => {
+        if (attendanceMap && attendanceMap[u.id] !== undefined) return attendanceMap[u.id];
+        if (u.attendance_count !== undefined) return u.attendance_count;
+        if (u.work_days !== undefined) return u.work_days;
+
+        const es = existingShifts as Record<string, Record<string, Cell>> | undefined;
+        const source = es?.[String(u.id)] ?? es?.[u.id];
+        if (!source) return 0;
+        return visibleDays.reduce((acc, d) => acc + (source[d] === 'day' || source[d] === 'night' ? 1 : 0), 0);
+    };
+
     const scrolledToTodayRef = useRef(false);
+    // ref to store ongoing animation frames so we can cancel them
+    const scrollAnimRef = useRef<Record<string, number | null>>({});
+
+    // animate scrollLeft to target over duration (ms) with easeInOutQuad
+    const animateScroll = (el: HTMLElement, target: number, duration = 360, key = 'default') => {
+        if (!el) return;
+        // cancel previous
+        const prev = scrollAnimRef.current[key];
+        if (prev) cancelAnimationFrame(prev);
+        const start = el.scrollLeft;
+        const delta = target - start;
+        if (delta === 0) return;
+        const startTime = performance.now();
+
+        const ease = (t: number) => (t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t); // easeInOut
+
+        const step = (now: number) => {
+            const elapsed = now - startTime;
+            const t = Math.min(1, elapsed / duration);
+            const eased = ease(t);
+            el.scrollLeft = Math.round(start + delta * eased);
+            if (t < 1) {
+                scrollAnimRef.current[key] = requestAnimationFrame(step);
+            } else {
+                scrollAnimRef.current[key] = null;
+                // ensure final position
+                el.scrollLeft = target;
+            }
+        };
+
+        scrollAnimRef.current[key] = requestAnimationFrame(step);
+    };
+    const handleScrollInteraction = (delta: number) => {
+        console.debug('[MonthEditor] handleScrollInteraction', { delta });
+        scrollBy(delta);
+    };
+
+    // scroll by a fraction of the visible viewport (direction: -1 left, 1 right)
+    const scrollViewport = (direction: number) => {
+        const cal = document.getElementById('calendar-scroll-container') as HTMLElement | null;
+        if (!cal) {
+            // fallback to fixed amount
+            handleScrollInteraction(direction * 48 * 7);
+            return;
+        }
+        // scroll by 90% of the visible width to behave like normal horizontal paging
+        const delta = Math.round(cal.clientWidth * 0.9) * direction;
+        handleScrollInteraction(delta);
+    };
 
     const scrollBy = (delta: number) => {
-        // メインカレンダーエリアの横スクロール
-        const calendarScrollContainer = document.getElementById('calendar-scroll-container');
+        // デバッグ付き: メインカレンダーエリアの横スクロール（scrollTo を使い、範囲チェックを行う）
+        const calendarScrollContainer = document.getElementById('calendar-scroll-container') as HTMLElement | null;
+        console.debug('[MonthEditor] scrollBy called', { delta, calendarScrollContainerExists: !!calendarScrollContainer });
         if (calendarScrollContainer) {
-            calendarScrollContainer.scrollBy({ left: delta, behavior: 'smooth' });
+            const scrollLeft = calendarScrollContainer.scrollLeft;
+            const scrollWidth = calendarScrollContainer.scrollWidth;
+            const clientWidth = calendarScrollContainer.clientWidth;
+            const maxLeft = Math.max(0, scrollWidth - clientWidth);
+            const target = Math.min(maxLeft, Math.max(0, scrollLeft + delta));
+            const metrics = { scrollLeft, scrollWidth, clientWidth, maxLeft, target };
+            console.debug('[MonthEditor] calendar metrics', metrics);
+            try {
+                animateScroll(calendarScrollContainer, target, 360, 'calendar');
+            } catch (e) {
+                // フォールバック
+                console.debug('[MonthEditor] animateScroll failed, falling back to assignment', e);
+                calendarScrollContainer.scrollLeft = target;
+            }
+            // ログのために少し遅延して最終位置を出す
+            setTimeout(() => console.debug('[MonthEditor] calendar final scrollLeft', calendarScrollContainer.scrollLeft), 50);
         }
 
         // 統計フッターの横スクロールも連動
-        const footerScrollContainer = document.getElementById('footer-scroll-container');
+        const footerScrollContainer = document.getElementById('footer-scroll-container') as HTMLElement | null;
+        console.debug('[MonthEditor] footer exists', { footerScrollContainerExists: !!footerScrollContainer });
         if (footerScrollContainer) {
-            footerScrollContainer.scrollBy({ left: delta, behavior: 'smooth' });
+            const scrollLeftF = footerScrollContainer.scrollLeft;
+            const scrollWidthF = footerScrollContainer.scrollWidth;
+            const clientWidthF = footerScrollContainer.clientWidth;
+            const maxLeftF = Math.max(0, scrollWidthF - clientWidthF);
+            const targetF = Math.min(maxLeftF, Math.max(0, scrollLeftF + delta));
+            const metricsF = { scrollLeftF, scrollWidthF, clientWidthF, maxLeftF, targetF };
+            console.debug('[MonthEditor] footer metrics', metricsF);
+            try {
+                animateScroll(footerScrollContainer, targetF, 360, 'footer');
+            } catch (e) {
+                console.debug('[MonthEditor] footer animateScroll failed, falling back', e);
+                footerScrollContainer.scrollLeft = targetF;
+            }
+            setTimeout(() => console.debug('[MonthEditor] footer final scrollLeft', footerScrollContainer.scrollLeft), 50);
         }
     };
 
@@ -192,6 +302,17 @@ export default function MonthEditor({
             const res = await axios.post(route('shifts.bulk_update'), { entries: [{ user_id: userId, date, shift_type: payloadType }] });
             const msg = res?.data?.message ?? '保存しました';
             setToast({ message: msg, type: 'success' });
+            // after successful save, recalc attendance count for this user from gridRef
+            try {
+                const g = gridRef.current[userId] ?? {};
+                const cnt = visibleDays.reduce((acc, d) => {
+                    const v = g[d] ?? '';
+                    return acc + (v === 'day' || v === 'night' ? 1 : 0);
+                }, 0);
+                setAttendanceMap((prev) => ({ ...(prev ?? {}), [userId]: cnt }));
+            } catch {
+                // ignore
+            }
         } catch (err: unknown) {
             // try to extract a meaningful message safely
             let msg = '保存に失敗しました';
@@ -222,7 +343,37 @@ export default function MonthEditor({
         return ['日', '月', '火', '水', '木', '金', '土'][dt.getDay()];
     };
 
+    // determine whether a default shift pattern exists for the given date and shift_type
+    const hasDefaultFor = (date: string, shiftType: 'day' | 'night') => {
+        try {
+            const dt = parseLocal(date);
+            const dow = dt.getDay(); // 0-6
+            const isHoliday = (holidays || []).includes(date);
+            const patternType = isHoliday ? 'holiday' : 'weekday';
+            const ds = defaultShifts || [];
+            return ds.some((p: any) => {
+                // be lenient about numeric/string types
+                const pDow = Number(p.day_of_week);
+                const pShift = p.shift_type;
+                const pType = p.type;
+                return pDow === dow && String(pShift) === shiftType && String(pType) === patternType;
+            });
+        } catch {
+            return false;
+        }
+    };
+
     const toggleDateSelection = (date: string) => {
+        try {
+            const dt = parseLocal(date);
+            const dayStart = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime();
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            if (dayStart < today.getTime()) return; // ignore past dates
+        } catch {
+            // if parse fails, proceed with toggle
+        }
+
         setSelectedDates((prev) => {
             const next = new Set(prev);
             if (next.has(date)) next.delete(date);
@@ -235,8 +386,12 @@ export default function MonthEditor({
         if (selectedDates.size === 0) return;
         users.forEach((u) => {
             selectedDates.forEach((d) => {
-                setCell(u.id, d, 'day');
-                queueSave(u.id, d, 'day');
+                // only set to 'day' if the cell is currently empty (do not overwrite existing assignments)
+                const cur = gridRef.current?.[u.id]?.[d] ?? '';
+                if (cur === '') {
+                    setCell(u.id, d, 'day');
+                    queueSave(u.id, d, 'day');
+                }
             });
         });
         setToast({ message: '選択日を昼にしました', type: 'success' });
@@ -267,13 +422,22 @@ export default function MonthEditor({
                 </div>
 
                 <div className="relative" style={{ height: 'calc(100vh - 200px)' }}>
-                    <div className="absolute top-0 left-0 z-40 flex h-full items-center">
-                        <Button size="sm" onClick={() => scrollBy(-48 * 7)} aria-label="左にスクロール（1週間）">
+                    {/* debug badge removed */}
+                    <div
+                        className="absolute top-0 left-0 z-40 flex h-full items-center"
+                        onClick={() => scrollViewport(-1)}
+                        onPointerDown={() => scrollViewport(-1)}
+                    >
+                        <Button size="sm" aria-label="左にスクロール（1週間）">
                             <ArrowLeft className="h-4 w-4" />
                         </Button>
                     </div>
-                    <div className="absolute top-0 right-0 z-40 flex h-full items-center">
-                        <Button size="sm" onClick={() => scrollBy(48 * 7)} aria-label="右にスクロール（1週間）">
+                    <div
+                        className="absolute top-0 right-0 z-40 flex h-full items-center"
+                        onClick={() => scrollViewport(1)}
+                        onPointerDown={() => scrollViewport(1)}
+                    >
+                        <Button size="sm" aria-label="右にスクロール（1週間）">
                             <ArrowRight className="h-4 w-4" />
                         </Button>
                     </div>
@@ -281,10 +445,10 @@ export default function MonthEditor({
                     {/* カレンダーコンテナ */}
                     <div className="flex h-full overflow-hidden" style={{ margin: '0 48px' }}>
                         {/* 左側: 固定ユーザー名列 */}
-                        <div className="flex w-48 flex-shrink-0 flex-col border-r bg-white">
+                        <div className="flex w-24 flex-shrink-0 flex-col border-r bg-white md:w-48">
                             {/* ヘッダー部分 */}
                             <div className="sticky top-0 z-30 flex h-20 items-end border-b bg-white p-2">
-                                <span className="text-sm font-medium">ユーザー名</span>
+                                <span className="text-sm font-medium">{`ユーザー名 (出勤日数)`}</span>
                             </div>
 
                             {/* ユーザー名一覧 */}
@@ -306,7 +470,11 @@ export default function MonthEditor({
                             >
                                 {users.map((u) => (
                                     <div key={`user-${u.id}`} className="flex h-12 items-center border-b bg-white p-2" style={{ maxWidth: '12rem' }}>
-                                        <span className="truncate text-sm">{u.name}</span>
+                                        <span className="truncate text-sm">
+                                            <span className="mr-2 inline-block w-8 text-right font-mono text-sm">{u.id}</span>
+                                            <span className="truncate">{u.name} </span>
+                                            <span className="ml-2 text-xs text-muted-foreground">({String(getAttendanceCount(u))})</span>
+                                        </span>
                                     </div>
                                 ))}
                             </div>
@@ -362,12 +530,32 @@ export default function MonthEditor({
                                                         className={`w-12 flex-shrink-0 border-r p-1 text-center ${isToday ? 'bg-green-100' : (accentClass ?? '')}`}
                                                     >
                                                         <div className="mb-1">
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={selectedDates.has(d)}
-                                                                onChange={() => toggleDateSelection(d)}
-                                                                aria-label={`日付 ${d} を選択`}
-                                                            />
+                                                            {(() => {
+                                                                // determine if this date is strictly before today (local) -> hide checkbox
+                                                                try {
+                                                                    const dayStart = new Date(
+                                                                        dt.getFullYear(),
+                                                                        dt.getMonth(),
+                                                                        dt.getDate(),
+                                                                    ).getTime();
+                                                                    const todayStart = new Date();
+                                                                    todayStart.setHours(0, 0, 0, 0);
+                                                                    const isPastCheckbox = dayStart < todayStart.getTime();
+                                                                    if (isPastCheckbox) {
+                                                                        return <div aria-hidden="true" style={{ height: '16px' }} />;
+                                                                    }
+                                                                } catch {
+                                                                    // fall back to showing checkbox if parse fails
+                                                                }
+                                                                return (
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={selectedDates.has(d)}
+                                                                        onChange={() => toggleDateSelection(d)}
+                                                                        aria-label={`日付 ${d} を選択`}
+                                                                    />
+                                                                );
+                                                            })()}
                                                         </div>
                                                         <Link
                                                             href={route('shifts.daily', { date: d })}
@@ -415,13 +603,20 @@ export default function MonthEditor({
                                                                     setCell(u.id, d, val);
                                                                     queueSave(u.id, d, val);
                                                                 }}
-                                                                className={`w-full rounded border p-1 text-xs ${bgClass} ${isPast ? 'cursor-not-allowed opacity-60' : ''}`}
+                                                                className={`w-full rounded border py-1 text-xs ${bgClass} ${isPast ? 'cursor-not-allowed opacity-60' : ''}`}
                                                                 disabled={isPast}
-                                                                title={isPast ? '過去日は変更できません' : ''}
+                                                                title={
+                                                                    isPast
+                                                                        ? '過去日は変更できません。\n時間を変更する場合は日間タイムラインから変更してください。'
+                                                                        : ''
+                                                                }
                                                             >
                                                                 <option value=""> </option>
-                                                                <option value="day">昼</option>
-                                                                <option value="night">夜</option>
+                                                                {/* show 'day' only if a default shift exists for this date, or if it's currently selected */}
+                                                                {(hasDefaultFor(d, 'day') || cellVal === 'day') && <option value="day">昼</option>}
+                                                                {(hasDefaultFor(d, 'night') || cellVal === 'night') && (
+                                                                    <option value="night">夜</option>
+                                                                )}
                                                                 <option value="leave">休</option>
                                                             </select>
                                                         </div>
@@ -452,11 +647,13 @@ export default function MonthEditor({
                                 <div className="flex" style={{ minWidth: `${visibleDays.length * 48}px` }}>
                                     {visibleDays.map((d) => {
                                         const dayCount = Object.keys(grid).reduce((acc, uid) => {
-                                            const v = (grid as any)[Number(uid)]?.[d] ?? '';
+                                            const numericUid = Number(uid);
+                                            const v = grid[numericUid]?.[d] ?? '';
                                             return acc + (v === 'day' ? 1 : 0);
                                         }, 0);
                                         const nightCount = Object.keys(grid).reduce((acc, uid) => {
-                                            const v = (grid as any)[Number(uid)]?.[d] ?? '';
+                                            const numericUid = Number(uid);
+                                            const v = grid[numericUid]?.[d] ?? '';
                                             return acc + (v === 'night' ? 1 : 0);
                                         }, 0);
                                         return (

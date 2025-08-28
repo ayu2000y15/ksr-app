@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import Toast from '@/components/ui/toast';
 import { useForm, usePage } from '@inertiajs/react';
 import React from 'react';
 
@@ -23,6 +24,8 @@ export default function LeaveApplicationModal({ open, onOpenChange, date }: { op
         if (authUser && authUser.id) setData('user_id', authUser.id);
     }, [authUser]);
 
+    const [toast, setToast] = React.useState<{ message: string; type?: 'success' | 'error' | 'info' } | null>(null);
+
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
         // ensure user_id is present
@@ -31,6 +34,9 @@ export default function LeaveApplicationModal({ open, onOpenChange, date }: { op
             onSuccess: () => {
                 reset();
                 onOpenChange(false);
+                // show guidance toast
+                setToast({ message: '念のためシフト担当者に確認してください', type: 'info' });
+                setTimeout(() => setToast(null), 3500);
             },
             onError: (errs) => {
                 console.error('申請エラー', errs);
@@ -60,7 +66,8 @@ export default function LeaveApplicationModal({ open, onOpenChange, date }: { op
                     <div className="space-y-4 px-4">
                         <div>
                             <Label>日付</Label>
-                            <Input type="date" value={data.date} onChange={(e) => setData('date', e.target.value)} />
+                            {/* 日付はモーダル上で変更不可にする */}
+                            <Input type="date" value={data.date} disabled readOnly />
                         </div>
                         <div>
                             <Label>理由</Label>
@@ -80,6 +87,7 @@ export default function LeaveApplicationModal({ open, onOpenChange, date }: { op
                     </DialogFooter>
                 </form>
             </DialogContent>
+            {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
         </Dialog>
     );
 }

@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { BreadcrumbItem, PageProps, PaginatedResponse, User } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { LoaderCircle, Plus, Trash } from 'lucide-react';
+import { Car, LoaderCircle, Plus, Trash } from 'lucide-react';
 import { ReactNode, useEffect, useState } from 'react';
 
 // パンくずリストの定義
@@ -134,13 +134,23 @@ export default function Index({ users: initialUsers, queryParams = {} }: PagePro
                             {users.map((user) => (
                                 <div
                                     key={user.id}
-                                    className={`rounded-md border p-4 hover:bg-gray-50 ${canUpdateUsers ? 'cursor-pointer' : ''}`}
+                                    className={`relative rounded-md border p-4 hover:bg-gray-50 ${canUpdateUsers ? 'cursor-pointer' : ''}`}
                                     onClick={() => canUpdateUsers && router.get(route('users.edit', user.id), {}, { preserveScroll: true })}
                                 >
                                     <div className="flex items-start justify-between gap-4">
                                         <div className="min-w-0">
                                             <div className="flex items-center gap-3">
-                                                <div className="truncate text-sm font-medium text-foreground">{user.name}</div>
+                                                <div
+                                                    className={`truncate text-sm font-medium ${
+                                                        user.gender === 'male'
+                                                            ? 'text-blue-600'
+                                                            : user.gender === 'female'
+                                                              ? 'text-red-600'
+                                                              : 'text-foreground'
+                                                    }`}
+                                                >
+                                                    {user.name}
+                                                </div>
                                                 <div className="truncate text-xs text-muted-foreground">
                                                     {user.roles && user.roles.length > 0 ? (
                                                         user.roles.map((r) => r.name).join(', ')
@@ -158,6 +168,17 @@ export default function Index({ users: initialUsers, queryParams = {} }: PagePro
                                             <div className="text-xs text-muted-foreground">{new Date(user.created_at).toLocaleDateString()}</div>
                                         </div>
                                     </div>
+                                    {user.has_car && (
+                                        <div className="absolute bottom-3 left-3">
+                                            <span
+                                                role="img"
+                                                aria-label="車あり"
+                                                className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-violet-50 text-violet-600 shadow-sm"
+                                            >
+                                                <Car className="h-4 w-4" />
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -211,15 +232,38 @@ export default function Index({ users: initialUsers, queryParams = {} }: PagePro
                                                     canUpdateUsers && router.get(route('users.edit', user.id), {}, { preserveScroll: true })
                                                 }
                                             >
-                                                <div className="flex items-center gap-3">
-                                                    <span>{user.name}</span>
-                                                    <span className="text-sm text-muted-foreground">
-                                                        {user.roles && user.roles.length > 0 ? (
-                                                            user.roles.map((r) => r.name).join(', ')
-                                                        ) : (
-                                                            <span className="text-xs">未登録</span>
-                                                        )}
-                                                    </span>
+                                                <div className="flex w-full items-center gap-3">
+                                                    <div className="flex items-center gap-3">
+                                                        <span
+                                                            className={`${
+                                                                user.gender === 'male'
+                                                                    ? 'text-blue-600'
+                                                                    : user.gender === 'female'
+                                                                      ? 'text-red-600'
+                                                                      : ''
+                                                            }`}
+                                                        >
+                                                            {user.name}
+                                                        </span>
+                                                        <span className="text-sm text-muted-foreground">
+                                                            {user.roles && user.roles.length > 0 ? (
+                                                                user.roles.map((r) => r.name).join(', ')
+                                                            ) : (
+                                                                <span className="text-xs">未登録</span>
+                                                            )}
+                                                        </span>
+                                                    </div>
+                                                    {user.has_car && (
+                                                        <div className="ml-auto">
+                                                            <span
+                                                                role="img"
+                                                                aria-label="車あり"
+                                                                className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-violet-50 text-violet-600 shadow-sm"
+                                                            >
+                                                                <Car className="h-4 w-4" />
+                                                            </span>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </TableCell>
                                             <TableCell

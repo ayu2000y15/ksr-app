@@ -15,6 +15,16 @@ import axios from 'axios';
 import { LoaderCircle, Trash } from 'lucide-react';
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 
+type DefaultShiftType = {
+    id: number;
+    name?: string;
+    type?: 'weekday' | 'holiday' | string;
+    day_of_week?: number | string;
+    shift_type?: 'day' | 'night' | string;
+    start_time?: string;
+    end_time?: string;
+};
+
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'シフト管理', href: route('shifts.index') }];
 
 const SortableHeader = ({ children, sort_key, queryParams }: { children: ReactNode; sort_key: string; queryParams: any }) => {
@@ -105,7 +115,7 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
     useEffect(() => {
         if (queryDate) {
             // navigate to shifts.index with date param (avoid using a non-registered Ziggy route)
-            router.get(route('shifts.index'), { date: queryDate }, { preserveState: true, only: ['shiftDetails', 'queryParams'] });
+            router.get(route('shifts.daily'), { date: queryDate }, { preserveState: true, only: ['shiftDetails', 'queryParams'] });
         }
     }, [queryDate]);
 
@@ -119,7 +129,9 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
         }
     }, [(page.props as any).users]);
 
-    const [selectedAccent, setSelectedAccent] = useState<string>('');
+    const serverDefaultShifts: DefaultShiftType[] = ((page.props as any).defaultShifts as DefaultShiftType[]) || [];
+
+    // selectedAccent removed: calendar color selector not needed per request
 
     // prefer server-provided existingShifts (built in ShiftController), fallback to client build
     const serverExisting = (page.props as any).existingShifts ?? null;
@@ -221,21 +233,34 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                         </div>
                     </div>
                 )}
-                {/* Accent color selector for calendar display */}
-                <div className="mb-4 flex items-center gap-3">
-                    <label className="text-sm">カレンダー表示色：</label>
-                    <select
-                        value={selectedAccent}
-                        onChange={(e) => setSelectedAccent(e.target.value)}
-                        className="rounded border p-1 text-sm"
-                        aria-label="カレンダー表示色の選択"
-                    >
-                        <option value="">デフォルト</option>
-                        <option value="bg-green-50">薄い緑</option>
-                        <option value="bg-sky-50">薄い水色</option>
-                        <option value="bg-yellow-50">薄い黄</option>
-                        <option value="bg-blue-50">薄い青</option>
-                    </select>
+                {/* 今日のシフトボタンとユーザー統計ボタン */}
+                <div className="mb-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <Button
+                            onClick={() => {
+                                // navigate to today's timeline (日間表示)
+                                try {
+                                    const now = new Date();
+                                    const pad = (n: number) => String(n).padStart(2, '0');
+                                    const y = now.getFullYear();
+                                    const m = pad(now.getMonth() + 1);
+                                    const d = pad(now.getDate());
+                                    const iso = `${y}-${m}-${d}`;
+                                    router.get(route('shifts.daily'), { date: iso }, { preserveState: true, only: ['shiftDetails', 'queryParams'] });
+                                } catch (e) {
+                                    // noop
+                                }
+                            }}
+                        >
+                            今日のシフト
+                        </Button>
+                    </div>
+
+                    <div>
+                        <Button aria-label="ユーザー統計" variant="outline">
+                            ユーザー統計
+                        </Button>
+                    </div>
                 </div>
                 {/* 月間エディタ（表形式） */}
                 {page.props.users && (
@@ -271,7 +296,7 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                         })()}
                         holidays={(page.props as any).holidays || []}
                         existingShifts={existingShiftsMap as any}
-                        accentClass={selectedAccent}
+                        defaultShifts={serverDefaultShifts}
                         onMonthChange={async (monthIso: string) => {
                             // request only the props we need to update the editor and list
                             router.get(

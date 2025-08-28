@@ -38,15 +38,6 @@ export function AppSidebar() {
     // nested permissions from SharePermissions middleware (Inertia shared props)
     const nestedPermissions = (page.props as unknown as { permissions?: Record<string, any> } | undefined)?.permissions;
     const inventoryPerms = nestedPermissions?.inventory ?? { view: false, create: false, update: false, delete: false, logs: false };
-    React.useEffect(() => {
-        // debug: log permissions received from server
-        // auth.permissions is a flat array; page.props.permissions may be nested
-        const authProps = page.props?.auth as unknown as { permissions?: string[] } | undefined;
-        const nestedPermissions = (page.props as unknown as { permissions?: Record<string, unknown> } | undefined)?.permissions;
-        console.log('[AppSidebar] page.props.auth.permissions', authProps?.permissions);
-        console.log('[AppSidebar] page.props.permissions', nestedPermissions);
-        console.log('[AppSidebar] isSuperAdmin', isSuperAdmin);
-    }, [page.props, isSuperAdmin]);
 
     // 各種設定の展開状態
     const [showSettings, setShowSettings] = React.useState(false);

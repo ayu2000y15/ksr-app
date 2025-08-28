@@ -4,8 +4,10 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import Toast from '@/components/ui/toast';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { Head, Link, useForm } from '@inertiajs/react';
+import React from 'react';
 
 const breadcrumbs = [
     { title: '休暇申請', href: route('shift-applications.index') },
@@ -19,10 +21,16 @@ export default function Create() {
         reason: '',
     });
 
+    const [toast, setToast] = React.useState<{ message: string; type?: 'success' | 'error' | 'info' } | null>(null);
+
     const submit = (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         post(route('shift-applications.store'), {
-            onSuccess: () => reset(),
+            onSuccess: () => {
+                reset();
+                setToast({ message: '念のためシフト担当者に確認してください', type: 'info' });
+                setTimeout(() => setToast(null), 3500);
+            },
         });
     };
 
@@ -68,6 +76,7 @@ export default function Create() {
                     </form>
                 </div>
             </div>
+            {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
         </AppSidebarLayout>
     );
 }
