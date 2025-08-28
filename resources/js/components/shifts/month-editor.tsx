@@ -618,7 +618,7 @@ export default function MonthEditor({
                                                                 title={`この日のタイムラインを見る: ${d}`}
                                                             >
                                                                 <div className="text-xs">{`${dt.getMonth() + 1}/${dt.getDate()}`}</div>
-                                                                <div className="text-[10px]">{weekdayShort(d)}</div>
+                                                                <div className="text-[10px]">({weekdayShort(d)})</div>
                                                             </Link>
                                                             {/* button shown above (in the mb-1 area) for past dates */}
                                                         </div>
@@ -822,7 +822,7 @@ function ConfirmToggleButton({
 
     return (
         <button
-            className={`rounded border px-2 py-0.5 text-xs ${confirmed ? 'bg-green-100 text-green-800' : 'bg-white text-gray-700'}`}
+            className={`rounded border px-1 py-1 text-xs ${confirmed ? 'bg-green-100 text-green-800' : 'bg-white text-gray-700'}`}
             onClick={(e) => {
                 e.preventDefault();
                 toggle();
