@@ -158,6 +158,7 @@ export default function PostEdit() {
     const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
     // track ids of attachments deleted by the user so server can remove them from storage/db
     const [deletedAttachmentIds, setDeletedAttachmentIds] = useState<number[]>([]);
+    // ...existing code...
 
     function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
         if (!e.target.files) return;
@@ -211,13 +212,16 @@ export default function PostEdit() {
     }
 
     useEffect(() => {
-        // fetch roles and users for selection
+        // fetch roles and users for selection (match posts/create behavior)
         fetch('/api/roles', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
             .then((r) => r.json())
             .then((d) => {
                 const roles = (d || []) as Array<{ id: number; name: string }>;
                 try {
-                    const currentUser = (window as any).page?.props?.auth?.user || null;
+                    type InertiaPage = { props?: { auth?: { user?: { id?: number; name?: string; roles?: Array<{ id: number; name: string }> } } } };
+                    declare const page: InertiaPage | undefined;
+                    const currentUser = page?.props?.auth?.user || null;
+
                     const currentRoleNames = Array.isArray(currentUser?.roles)
                         ? currentUser.roles.map((rr: { id: number; name: string }) => rr.name)
                         : [];
@@ -242,7 +246,7 @@ export default function PostEdit() {
             .then((r) => r.json())
             .then((d) => setAvailableUsers(d || []))
             .catch(() => setAvailableUsers([]));
-    }, [initialPost]);
+    }, []);
 
     // if initialPost is not provided via server props, fetch it from API using the id in the URL
     useEffect(() => {
@@ -937,7 +941,7 @@ export default function PostEdit() {
                                     <div className="mt-2">
                                         <select
                                             id="is_public"
-                                            className="rounded border p-2 text-sm"
+                                            className="w-full rounded border p-2 text-sm"
                                             value={isPublic ? '1' : '0'}
                                             onChange={(e) => setIsPublic(e.target.value === '1')}
                                         >

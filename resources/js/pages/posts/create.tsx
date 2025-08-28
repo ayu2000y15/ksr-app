@@ -159,6 +159,7 @@ export default function PostCreate() {
     const [availableUsers, setAvailableUsers] = useState<any[]>([]);
     const [selectedRoles, setSelectedRoles] = useState<number[]>([]);
     const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
+    // autosave removed
 
     useEffect(() => {
         // fetch roles and users for selection
@@ -260,6 +261,18 @@ export default function PostCreate() {
         }
         form.append('is_public', isPublic ? '1' : '0');
         form.append('audience', audience);
+        // include manual items and manualTag in FormData when post type is manual
+        if (data.type === 'manual') {
+            try {
+                form.append('manual_tag', manualTag || '');
+                manualItems.forEach((it, i) => {
+                    form.append(`items[${i}][text]`, it.text || '');
+                    form.append(`items[${i}][order]`, String(i));
+                });
+            } catch (e) {
+                // safe-guard: if manualItems are not available in this scope, continue
+            }
+        }
         if (audience === 'restricted') {
             selectedRoles.forEach((id) => form.append('roles[]', String(id)));
             selectedUsers.forEach((id) => form.append('users[]', String(id)));
@@ -316,12 +329,12 @@ export default function PostCreate() {
         try {
             // DEBUG: dump FormData entries to console to verify body/manual_tag are being sent
             try {
-                 
                 console.log('[posts.create] FormData entries before submit:', Array.from((form as any).entries ? (form as any).entries() : []));
             } catch (e) {}
 
             const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-            const res = await fetch('/api/posts', {
+            const submitUrl = '/api/posts';
+            const res = await fetch(submitUrl, {
                 method: 'POST',
                 credentials: 'same-origin',
                 body: form,
@@ -391,6 +404,7 @@ export default function PostCreate() {
             <div className="py-12">
                 <div className="mx-auto max-w-2xl sm:px-6 lg:px-8">
                     <form onSubmit={submit}>
+                        {/* autosave disabled - no periodic saves */}
                         {/* show server-side / validation errors in a clear summary */}
                         {Object.keys(serverErrors || {}).length > 0 && (
                             <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">
@@ -413,7 +427,7 @@ export default function PostCreate() {
                                     <div className="mt-2">
                                         <select
                                             id="type"
-                                            className="rounded border p-2 text-sm"
+                                            className="w-full rounded border p-2 text-sm"
                                             value={data.type}
                                             onChange={(e) => setData('type', e.target.value)}
                                         >
@@ -734,7 +748,7 @@ export default function PostCreate() {
                                     <div className="mt-2">
                                         <select
                                             id="is_public"
-                                            className="rounded border p-2 text-sm"
+                                            className="w-full rounded border p-2 text-sm"
                                             value={isPublic ? '1' : '0'}
                                             onChange={(e) => setIsPublic(e.target.value === '1')}
                                         >
@@ -807,13 +821,16 @@ export default function PostCreate() {
                                 </div>
                             </CardContent>
 
-                            <CardFooter className="flex justify-end gap-4">
-                                <Link href={route('posts.index')}>
-                                    <Button variant="outline" type="button">
-                                        キャンセル
-                                    </Button>
-                                </Link>
-                                <Button disabled={processing}>投稿する</Button>
+                            <CardFooter className="flex items-center justify-between gap-4">
+                                <div className="text-sm text-muted-foreground">&nbsp;</div>
+                                <div className="flex justify-end gap-4">
+                                    <Link href={route('posts.index')}>
+                                        <Button variant="outline" type="button">
+                                            キャンセル
+                                        </Button>
+                                    </Link>
+                                    <Button disabled={processing}>投稿する</Button>
+                                </div>
                             </CardFooter>
                         </Card>
                     </form>
