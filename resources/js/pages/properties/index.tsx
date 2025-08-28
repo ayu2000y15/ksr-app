@@ -160,6 +160,7 @@ export default function Index({ properties }: any) {
 
     const cellWidth = isSmallScreen ? 34 : 42; // smaller cell on mobile
     const timelineWidth = days.length * cellWidth;
+    const today = formatDate(new Date());
 
     // 入寮者登録フォーム状態
     const [showMoveInForm, setShowMoveInForm] = useState(false);
@@ -736,11 +737,12 @@ export default function Index({ properties }: any) {
                                             const isSun = dt.getDay() === 0;
                                             const isHoliday = (page.props as any).holidays && (page.props as any).holidays.includes(d);
                                             const textClass = isHoliday || isSun ? 'text-red-600' : isSat ? 'text-blue-600' : 'text-gray-600';
+                                            const isToday = d === today;
                                             return (
                                                 <div
                                                     key={`hd-${d}`}
                                                     // center the date label horizontally and vertically within the cell
-                                                    className={`absolute top-0 flex flex-col items-center justify-center text-[11px] ${textClass}`}
+                                                    className={`absolute top-0 flex flex-col items-center justify-center text-[11px] ${textClass} ${isToday ? 'bg-green-200' : ''}`}
                                                     style={{ left: `${idx * cellWidth}px`, width: `${cellWidth}px`, height: '40px' }}
                                                 >
                                                     <div className="text-center leading-4">{formatMonthDay(d)}</div>
@@ -792,13 +794,21 @@ export default function Index({ properties }: any) {
                                     }) => (
                                         <div key={`row-${r.property.id}`} className="relative h-16 border-t">
                                             {/* 日付ごとの縦線（変更なし） */}
-                                            {days.map((d, idx) => (
-                                                <div
-                                                    key={`line-${r.property.id}-${d}`}
-                                                    className="absolute top-0 bottom-0 z-0 border-l border-gray-200"
-                                                    style={{ left: `${idx * cellWidth}px` }}
-                                                />
-                                            ))}
+                                            {days.map((d, idx) => {
+                                                const isTodayCol = d === today;
+                                                return (
+                                                    <div key={`line-${r.property.id}-${d}`} style={{ left: `${idx * cellWidth}px` }}>
+                                                        <div
+                                                            className={`absolute top-0 bottom-0 z-[-1] ${isTodayCol ? 'bg-yellow-50' : ''}`}
+                                                            style={{ width: `${cellWidth}px`, left: 0 }}
+                                                        />
+                                                        <div
+                                                            className="absolute top-0 bottom-0 z-0 border-l border-gray-200"
+                                                            style={{ left: 0, width: `${cellWidth}px` }}
+                                                        />
+                                                    </div>
+                                                );
+                                            })}
 
                                             {/* 物件解約日アイコン（変更なし） */}
                                             {(() => {

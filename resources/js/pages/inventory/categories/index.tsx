@@ -44,9 +44,10 @@ export default function Index({ categories: initialCategories = [], queryParams 
 
     const page = usePage();
     const { permissions } = page.props as any;
-    const canCreate = permissions?.category?.create || permissions?.is_system_admin;
-    const canUpdate = permissions?.category?.update || permissions?.is_system_admin;
-    const canDelete = permissions?.category?.delete || permissions?.is_system_admin;
+    // Use inventory.* permissions for categories (align with server-side permissions)
+    const canCreate = permissions?.inventory?.create || permissions?.is_system_admin;
+    const canUpdate = permissions?.inventory?.update || permissions?.is_system_admin;
+    const canDelete = permissions?.inventory?.delete || permissions?.is_system_admin;
 
     const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' | 'info' } | null>(null);
 
