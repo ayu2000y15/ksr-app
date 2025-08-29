@@ -11,7 +11,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { Head, Link, usePage } from '@inertiajs/react';
 import axios from 'axios';
-import { Car, ChevronLeft, ChevronRight, Flag, Plus, User } from 'lucide-react';
+import { Car, ChevronLeft, ChevronRight, Flag, Plus, User, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 function formatDate(d: Date) {
@@ -483,8 +483,13 @@ export default function Index({ properties }: any) {
                     <div className="mb-6 flex justify-center">
                         <div className="w-full lg:w-2/3">
                             <Card>
-                                <CardHeader>
+                                <CardHeader className="flex-row items-center justify-between">
                                     <CardTitle>入寮者登録</CardTitle>
+                                    <div>
+                                        <Button variant="ghost" size="sm" onClick={() => setShowMoveInForm(false)} aria-label="閉じる">
+                                            <X className="h-4 w-4" />
+                                        </Button>
+                                    </div>
                                 </CardHeader>
                                 <CardContent>
                                     <div className="space-y-3 md:grid md:gap-4 md:space-y-0">
@@ -742,7 +747,7 @@ export default function Index({ properties }: any) {
                                                 <div
                                                     key={`hd-${d}`}
                                                     // center the date label horizontally and vertically within the cell
-                                                    className={`absolute top-0 flex flex-col items-center justify-center text-[11px] ${textClass} ${isToday ? 'bg-green-200' : ''}`}
+                                                    className={`absolute top-0 flex flex-col items-center justify-center text-[11px] ${textClass} ${isToday ? 'bg-yellow-200' : ''} border-l border-gray-200`}
                                                     style={{ left: `${idx * cellWidth}px`, width: `${cellWidth}px`, height: '40px' }}
                                                 >
                                                     <div className="text-center leading-4">{formatMonthDay(d)}</div>
@@ -775,6 +780,22 @@ export default function Index({ properties }: any) {
                             }}
                         >
                             <div className="relative" style={{ minWidth: `${timelineWidth}px` }}>
+                                {/* 縦線オーバーレイ: ヘッダーとガント領域の列線を統一して描画 */}
+                                <div className="pointer-events-none absolute inset-0 z-0">
+                                    {days.map((d, idx) => {
+                                        const isTodayCol = d === today;
+                                        return (
+                                            <div
+                                                key={`vline-${d}-${idx}`}
+                                                className="absolute top-0 bottom-0"
+                                                style={{ left: `${idx * cellWidth}px`, width: `${cellWidth}px` }}
+                                            >
+                                                {isTodayCol ? <div className="absolute top-0 bottom-0 left-0 w-full bg-yellow-50" /> : null}
+                                                <div className="absolute top-0 bottom-0 left-0 w-px bg-gray-100" />
+                                            </div>
+                                        );
+                                    })}
+                                </div>
                                 {rowsState.map(
                                     (r: {
                                         property: { id: number; name: string; address?: string; display_label?: string };

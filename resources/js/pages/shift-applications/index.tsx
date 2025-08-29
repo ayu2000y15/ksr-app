@@ -11,7 +11,7 @@ import axios from 'axios';
 import { LoaderCircle, Plus, Trash } from 'lucide-react';
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 
-const breadcrumbs: BreadcrumbItem[] = [{ title: '休暇申請', href: route('shift-applications.index') }];
+const breadcrumbs: BreadcrumbItem[] = [{ title: '中抜け・休み申請', href: route('shift-applications.index') }];
 
 const SortableHeader = ({ children, sort_key, queryParams }: { children: ReactNode; sort_key: string; queryParams: any }) => {
     const currentSort = queryParams?.sort || 'id';
@@ -196,20 +196,20 @@ export default function Index({
             await axios.post(route('shifts.mark_break'), { user_id: authUser.id, date: dateStr });
             // update local leaves so UI reflects change without full reload
             setLocalUserLeaves((prev) => (prev.includes(dateStr) ? prev : [...prev, dateStr]));
-            setToast({ message: '休暇に変更しました。', type: 'success' });
+            setToast({ message: '休みに変更しました。', type: 'success' });
         } catch (err) {
             console.error(err);
-            setToast({ message: '休暇に変更できませんでした。', type: 'error' });
+            setToast({ message: '休みに変更できませんでした。', type: 'error' });
         }
     };
 
     return (
         <AppSidebarLayout breadcrumbs={breadcrumbs}>
-            <Head title="休暇申請" />
+            <Head title="休み申請" />
 
             <div className="p-4 sm:p-6 lg:p-8">
                 <div className="mb-6">
-                    <HeadingSmall title="休暇申請" description="" />
+                    <HeadingSmall title="休み申請" description="" />
                 </div>
 
                 <Card>
@@ -319,7 +319,7 @@ export default function Index({
                             </div>
                         </CardHeader>
                         <div className="sticky top-16 z-20 border-t bg-card px-6 pb-2 text-sm text-muted-foreground">
-                            残りの休暇:{' '}
+                            残りの休み:{' '}
                             {currentUserLeave ? (currentUserLeave.remaining === null ? '無制限' : `${currentUserLeave.remaining}日`) : '—'}
                         </div>
 
@@ -408,10 +408,10 @@ export default function Index({
                                                             try {
                                                                 await axios.post(route('shifts.unmark_break'), { user_id: authUser.id, date: iso });
                                                                 setLocalUserLeaves((prev) => prev.filter((x) => x !== iso));
-                                                                setToast({ message: '休暇をキャンセルしました。', type: 'success' });
+                                                                setToast({ message: '休みをキャンセルしました。', type: 'success' });
                                                             } catch (e) {
                                                                 console.error(e);
-                                                                setToast({ message: '休暇のキャンセルに失敗しました。', type: 'error' });
+                                                                setToast({ message: '休みのキャンセルに失敗しました。', type: 'error' });
                                                             }
                                                         }}
                                                     >
@@ -419,7 +419,7 @@ export default function Index({
                                                     </Button>
                                                 ) : immediate ? (
                                                     <Button size="sm" onClick={() => postImmediateLeave(iso)}>
-                                                        休暇登録
+                                                        休み登録
                                                     </Button>
                                                 ) : (
                                                     <Button
@@ -430,7 +430,7 @@ export default function Index({
                                                             setModalOpen(true);
                                                         }}
                                                     >
-                                                        休暇申請
+                                                        休み申請
                                                     </Button>
                                                 )}
                                             </div>

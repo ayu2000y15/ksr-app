@@ -9,7 +9,7 @@ import { Head, Link, usePage } from '@inertiajs/react';
 import { Edit, Plus, Trash } from 'lucide-react';
 import { useCallback, useEffect, useState, type MouseEvent } from 'react';
 
-const breadcrumbs: BreadcrumbItem[] = [{ title: '掲示板', href: route('posts.index') }];
+const breadcrumbs: BreadcrumbItem[] = [{ title: '掲示板・マニュアル', href: route('posts.index') }];
 
 const SortableHeader = ({ children, sort_key, queryParams }: { children: React.ReactNode; sort_key: string; queryParams: any }) => {
     const currentSort = queryParams?.sort || 'created_at';
@@ -195,11 +195,11 @@ export default function PostsIndex() {
 
     return (
         <AppSidebarLayout breadcrumbs={breadcrumbs}>
-            <Head title="掲示板" />
+            <Head title="掲示板・マニュアル" />
 
             <div className="p-4 sm:p-6 lg:p-8">
                 <div className="mb-6">
-                    <HeadingSmall title="掲示板" description="掲示板の投稿一覧・作成を行います。" />
+                    <HeadingSmall title="掲示板・マニュアル" description="掲示板の投稿一覧・作成を行います。" />
                 </div>
 
                 {activeTag && (

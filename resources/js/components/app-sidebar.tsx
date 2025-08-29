@@ -19,9 +19,9 @@ import { SidebarSettingsMenu } from './sidebar-settings-menu';
 // メインのナビゲーション項目を定義
 const mainNavItems: NavItem[] = [
     { title: 'ユーザー管理', href: '/users', icon: Users, permission: 'user.view' },
-    { title: '掲示板', href: '/posts', icon: MessageSquare, permission: '' },
+    { title: '掲示板・マニュアル', href: '/posts', icon: MessageSquare, permission: '' },
     { title: 'シフト管理', href: '/shifts', icon: Calendar, permission: 'shift.view' },
-    { title: '休暇申請', href: '/shift-applications', icon: CalendarCheck, permission: 'shift_application.view' },
+    { title: '中抜け・休み申請', href: '/shift-applications', icon: CalendarCheck, permission: 'shift_application.view' },
     { title: '在庫管理', href: '/inventory', icon: Package },
     { title: '破損在庫管理', href: '/inventory/damaged', icon: AlertTriangle, permission: 'damaged_inventory.view' },
     { title: '物件管理', href: '/properties', icon: Home, permission: 'properties.view' },
