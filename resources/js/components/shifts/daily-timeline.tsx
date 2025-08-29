@@ -274,6 +274,9 @@ export default function DailyTimeline(props: {
 
     // vertical scroll area sizing: compute available height so timeline area fits viewport
     const wrapperRef = useRef<HTMLDivElement | null>(null);
+    const leftColRef = useRef<HTMLDivElement | null>(null);
+    const attendanceRef = useRef<HTMLDivElement | null>(null);
+    const isSyncingRef = useRef(false);
     const [scrollAreaHeight, setScrollAreaHeight] = useState<number>(400);
     useEffect(() => {
         const compute = () => {
@@ -303,6 +306,51 @@ export default function DailyTimeline(props: {
             if (ro) ro.disconnect();
         };
     }, []);
+
+    // synchronize horizontal scroll between main timeline wrapper (wrapperRef) and attendance counts (attendanceRef) in break mode
+    useEffect(() => {
+        if (mode !== 'break') return;
+        const wr = wrapperRef.current;
+        const ar = attendanceRef.current;
+        const lc = leftColRef.current;
+        if (!wr || !ar || !lc) return;
+        const getLeftWidth = () => lc.getBoundingClientRect().width || lc.clientWidth || 0;
+        const onWrapperScroll = () => {
+            if (isSyncingRef.current) return;
+            isSyncingRef.current = true;
+            requestAnimationFrame(() => {
+                try {
+                    const leftW = getLeftWidth();
+                    ar.scrollLeft = Math.max(0, wr.scrollLeft - leftW);
+                } catch {}
+                isSyncingRef.current = false;
+            });
+        };
+        const onAttendanceScroll = () => {
+            if (isSyncingRef.current) return;
+            isSyncingRef.current = true;
+            requestAnimationFrame(() => {
+                try {
+                    const leftW = getLeftWidth();
+                    wr.scrollLeft = ar.scrollLeft + leftW;
+                } catch {}
+                isSyncingRef.current = false;
+            });
+        };
+        wr.addEventListener('scroll', onWrapperScroll);
+        ar.addEventListener('scroll', onAttendanceScroll);
+        // initialize attendance scroll position
+        try {
+            const leftW = getLeftWidth();
+            ar.scrollLeft = Math.max(0, wr.scrollLeft - leftW);
+        } catch {}
+        return () => {
+            try {
+                wr.removeEventListener('scroll', onWrapperScroll);
+                ar.removeEventListener('scroll', onAttendanceScroll);
+            } catch {}
+        };
+    }, [mode, timeSlots.length]);
 
     const addUserShift = async () => {
         if (!selectedUserId) return alert('ユーザーを選択してください');
@@ -481,7 +529,7 @@ export default function DailyTimeline(props: {
                 {mode === 'break' ? (
                     <div className="min-w-full">
                         <div className="flex items-stretch border-b">
-                            <div className="w-28 sm:w-48">
+                            <div ref={leftColRef} className="w-28 sm:w-48">
                                 <div className="flex h-10 items-center border-b">
                                     <span className="text-xs">欠席</span>
                                 </div>
@@ -858,7 +906,7 @@ export default function DailyTimeline(props: {
                         <div className="mt-2">
                             <div className="flex items-center">
                                 <div className="w-48" />
-                                <div className="flex-1 overflow-x-auto">
+                                <div ref={attendanceRef} className="flex-1 overflow-x-auto">
                                     <div style={{ minWidth: `${timeSlots.length * columnWidth}px` }}>
                                         <div className="grid" style={{ gridTemplateColumns: `repeat(${timeSlots.length}, ${columnWidth}px)` }}>
                                             {attendanceCounts.map((c, i) => (

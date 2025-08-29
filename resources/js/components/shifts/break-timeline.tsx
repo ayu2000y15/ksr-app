@@ -374,7 +374,7 @@ export default function BreakTimeline(props: {
 
     return (
         <div className="rounded border bg-white p-4">
-            <style>{`.labels-scroll::-webkit-scrollbar{display:none}.labels-scroll{-ms-overflow-style:none;scrollbar-width:none;} .footer-scroll::-webkit-scrollbar{display:none}.footer-scroll{-ms-overflow-style:none;scrollbar-width:none;}`}</style>
+            <style>{`.labels-scroll::-webkit-scrollbar{display:none}.labels-scroll{-ms-overflow-style:none;scrollbar-width:none;} .footer-scroll{-ms-overflow-style:auto;scrollbar-width:auto;} .gantt-scroll::-webkit-scrollbar{display:none}.gantt-scroll{-ms-overflow-style:none;scrollbar-width:none;}`}</style>
             <div className="mb-3 flex items-center justify-between">
                 <div className="text-lg font-medium">{date ? String(date).slice(0, 10).replace(/-/g, '/') : ''}</div>
                 <div className="flex items-center gap-3">
@@ -411,7 +411,7 @@ export default function BreakTimeline(props: {
                 <div
                     ref={ganttRef}
                     onScroll={() => syncScrollFromGantt()}
-                    className="flex-1"
+                    className="gantt-scroll flex-1"
                     style={{
                         overflowX: 'auto',
                         overflowY: areaHeight ? 'auto' : undefined,
@@ -683,7 +683,7 @@ export default function BreakTimeline(props: {
             {/* Attendance footer fixed below scroll area: left label + right horizontally-scrollable counts */}
             <div className="mt-1 flex items-center border-t bg-white">
                 <div className="w-28 flex-shrink-0 p-2 text-sm font-medium text-muted-foreground sm:w-48">出勤人数</div>
-                <div ref={footerRightRef} className="footer-scroll flex-1 overflow-x-auto">
+                <div ref={footerRightRef} className="footer-scroll flex-1 overflow-x-auto" style={{ overflowX: 'auto' }}>
                     <div
                         style={{
                             minWidth: `${totalPixelWidth}px`,
