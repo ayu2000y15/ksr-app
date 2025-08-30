@@ -53,7 +53,32 @@ class ShiftController extends Controller
         // load shift_details for the month with user relation
         $shiftDetails = ShiftDetail::with('user')
             ->whereBetween('date', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
-            ->get();
+            ->get()
+            ->map(function ($sd) {
+                $arr = $sd->toArray();
+                $attrs = $sd->getAttributes();
+                // override raw values
+                $arr['start_time'] = $attrs['start_time'] ?? null;
+                $arr['end_time'] = $attrs['end_time'] ?? null;
+                $arr['date'] = $attrs['date'] ?? ($arr['date'] ?? null);
+                // attach shift_type and step_out from shifts table for the same user/date
+                try {
+                    $rawDate = $attrs['date'] ?? ($arr['date'] ?? null);
+                    $shiftDate = $rawDate ? Carbon::parse($rawDate)->toDateString() : null;
+                    if ($shiftDate && isset($attrs['user_id'])) {
+                        $shiftRec = Shift::where('user_id', $attrs['user_id'])->whereRaw('date(date) = ?', [$shiftDate])->first();
+                        $arr['shift_type'] = $shiftRec ? $shiftRec->shift_type : null;
+                        $arr['step_out'] = $shiftRec ? ($shiftRec->step_out ?? 0) : 0;
+                    } else {
+                        $arr['shift_type'] = null;
+                        $arr['step_out'] = 0;
+                    }
+                } catch (\Exception $e) {
+                    $arr['shift_type'] = null;
+                    $arr['step_out'] = 0;
+                }
+                return $arr;
+            });
 
         return inertia('shifts/index', [
             'shifts' => $shifts,
@@ -122,18 +147,21 @@ class ShiftController extends Controller
             $arr['start_time'] = $attrs['start_time'] ?? null;
             $arr['end_time'] = $attrs['end_time'] ?? null;
             $arr['date'] = $attrs['date'] ?? ($arr['date'] ?? null);
-            // attach shift_type from shifts table for the same user/date (use DB-stored date)
+            // attach shift_type and step_out from shifts table for the same user/date
             try {
                 $rawDate = $attrs['date'] ?? ($arr['date'] ?? null);
                 $shiftDate = $rawDate ? Carbon::parse($rawDate)->toDateString() : null;
                 if ($shiftDate && isset($attrs['user_id'])) {
                     $shiftRec = Shift::where('user_id', $attrs['user_id'])->whereRaw('date(date) = ?', [$shiftDate])->first();
                     $arr['shift_type'] = $shiftRec ? $shiftRec->shift_type : null;
+                    $arr['step_out'] = $shiftRec ? ($shiftRec->step_out ?? 0) : 0;
                 } else {
                     $arr['shift_type'] = null;
+                    $arr['step_out'] = 0;
                 }
             } catch (\Exception $e) {
                 $arr['shift_type'] = null;
+                $arr['step_out'] = 0;
             }
             return $arr;
         });
@@ -244,6 +272,138 @@ class ShiftController extends Controller
         }
 
         return Redirect::back()->with('success', '休に変更しました。');
+    }
+
+    /**
+     * Mark a single user's date as step-out (中抜け) immediately.
+     * Creates or updates Shift to set step_out = 1. Does not change shift_type.
+     */
+    public function markStepOut(Request $request)
+    {
+        if (Auth::user()->hasRole('システム管理者')) {
+            // bypass
+        } else {
+            $this->authorize('create', Shift::class);
+        }
+
+        $data = $request->validate([
+            'user_id' => 'required|exists:users,id',
+            'date' => 'required|date',
+        ]);
+
+        $shift = Shift::where('user_id', $data['user_id'])->whereRaw('date(date) = ?', [$data['date']])->first();
+        if ($shift) {
+            $shift->update(['step_out' => 1]);
+        } else {
+            // create a shift record with default shift_type as 'day' if unknown, but keep step_out = 1
+            $shift = Shift::create(['user_id' => $data['user_id'], 'date' => $data['date'], 'shift_type' => 'day', 'step_out' => 1]);
+        }
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json(['message' => '中抜けに変更しました。'], 200);
+        }
+
+        return Redirect::back()->with('success', '中抜けに変更しました。');
+    }
+
+    /**
+     * Mark a single user's date as meal_ticket = 0 (食券不要)
+     */
+    public function markMealTicket(Request $request)
+    {
+        if (Auth::user()->hasRole('システム管理者')) {
+            // bypass
+        } else {
+            $this->authorize('update', Shift::class);
+        }
+
+        $data = $request->validate([
+            'user_id' => 'required|exists:users,id',
+            'date' => 'required|date',
+        ]);
+
+        $shift = Shift::where('user_id', $data['user_id'])->whereRaw('date(date) = ?', [$data['date']])->first();
+        if ($shift) {
+            $shift->update(['meal_ticket' => 0]);
+        } else {
+            // create a default day shift and set meal_ticket=0
+            $shift = Shift::create(['user_id' => $data['user_id'], 'date' => $data['date'], 'shift_type' => 'day', 'meal_ticket' => 0]);
+        }
+
+        // create a ShiftApplication record to record this change
+        try {
+            ShiftApplication::create([
+                'user_id' => $data['user_id'],
+                'date' => $data['date'],
+                'type' => 'meal_ticket',
+                'status' => 'approved',
+                'reason' => '食券不要',
+            ]);
+        } catch (\Exception $e) {
+            // ignore failures in application recording
+        }
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json(['message' => '食券不要に設定しました。'], 200);
+        }
+
+        return Redirect::back()->with('success', '食券不要に設定しました。');
+    }
+
+    /**
+     * Unmark meal_ticket (set back to 1)
+     */
+    public function unmarkMealTicket(Request $request)
+    {
+        if (Auth::user()->hasRole('システム管理者')) {
+            // bypass
+        } else {
+            $this->authorize('update', Shift::class);
+        }
+
+        $data = $request->validate([
+            'user_id' => 'required|exists:users,id',
+            'date' => 'required|date',
+        ]);
+
+        $shift = Shift::where('user_id', $data['user_id'])->whereRaw('date(date) = ?', [$data['date']])->first();
+        if ($shift) {
+            $shift->update(['meal_ticket' => 1]);
+        }
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json(['message' => '食券設定を解除しました。'], 200);
+        }
+
+        return Redirect::back()->with('success', '食券設定を解除しました。');
+    }
+
+    /**
+     * Cancel a previously marked step-out for a user/date.
+     */
+    public function unmarkStepOut(Request $request)
+    {
+        if (Auth::user()->hasRole('システム管理者')) {
+            // bypass
+        } else {
+            $this->authorize('create', Shift::class);
+        }
+
+        $data = $request->validate([
+            'user_id' => 'required|exists:users,id',
+            'date' => 'required|date',
+        ]);
+
+        $shift = Shift::where('user_id', $data['user_id'])->whereRaw('date(date) = ?', [$data['date']])->first();
+        if ($shift) {
+            $shift->update(['step_out' => 0]);
+        }
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json(['message' => '中抜けを解除しました。'], 200);
+        }
+
+        return Redirect::back()->with('success', '中抜けを解除しました。');
     }
 
     /**

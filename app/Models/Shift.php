@@ -13,10 +13,14 @@ class Shift extends Model
         'user_id',
         'date',
         'shift_type',
+        'step_out',
+        'meal_ticket',
     ];
 
     protected $casts = [
         'date' => 'date',
+        'step_out' => 'integer',
+        'meal_ticket' => 'integer',
     ];
 
     public function user()

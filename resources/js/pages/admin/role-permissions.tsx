@@ -77,7 +77,7 @@ export default function RolePermissionsPage() {
         role: 'ロール',
         permission: '権限',
         shift: 'シフト管理',
-        shift_application: '中抜け・休み申請',
+        shift_application: '中抜け・休暇申請',
         default_shift: 'デフォルトシフト',
         shift_detail: 'シフト詳細',
         user_shift_setting: 'ユーザー別休暇上限',

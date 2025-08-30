@@ -12,6 +12,7 @@ class ShiftApplication extends Model
     protected $fillable = [
         'user_id',
         'date',
+        'type',
         'status',
         'reason',
     ];

@@ -13,7 +13,7 @@ export default function LeaveApplicationModal({ open, onOpenChange, date }: { op
     const authUser = (page.props as any)?.auth?.user;
 
     // minimal payload expected by server: { user_id, date, reason }
-    const initial = { user_id: authUser?.id ?? null, date: date || '', reason: '' };
+    const initial = { user_id: authUser?.id ?? null, date: date || '', type: 'leave', reason: '' };
     const { data, setData, post, processing, errors, reset } = useForm<typeof initial>(initial);
 
     React.useEffect(() => {
@@ -30,6 +30,8 @@ export default function LeaveApplicationModal({ open, onOpenChange, date }: { op
         e.preventDefault();
         // ensure user_id is present
         if (!data.user_id && authUser && authUser.id) setData('user_id', authUser.id);
+        // ensure type defaults to 'leave'
+        if (!data.type) setData('type', 'leave');
         post(route('shift-applications.store'), {
             onSuccess: () => {
                 reset();

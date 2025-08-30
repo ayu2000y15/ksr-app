@@ -70,15 +70,37 @@ class ShiftApplicationController extends Controller
                 return Carbon::parse($d)->toDateString();
             })->toArray();
 
+        // collect any shift dates (any shift_type) for current user in the month so frontend can disable application where a shift already exists
+        $userShiftDates = Shift::where('user_id', $user->id)
+            ->whereBetween('date', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
+            ->pluck('date')
+            ->map(function ($d) {
+                return Carbon::parse($d)->toDateString();
+            })->toArray();
+
         // collect scheduled shift details for the month for the current user (used to display times on calendar)
         $shiftDetails = \App\Models\ShiftDetail::where('user_id', $user->id)
             ->whereBetween('date', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
             ->get(['date', 'start_time', 'end_time'])
-            ->map(function ($sd) {
+            ->map(function ($sd) use ($user) {
+                $dateStr = Carbon::parse($sd->date)->toDateString();
+                $attrs = $sd->getAttributes();
+                // find shift record for this user/date to expose shift_type and step_out
+                try {
+                    $shiftRec = \App\Models\Shift::where('user_id', $user->id)->whereRaw('date(date) = ?', [$dateStr])->first();
+                    $shiftType = $shiftRec ? $shiftRec->shift_type : null;
+                    $stepOut = $shiftRec ? ($shiftRec->step_out ?? 0) : 0;
+                } catch (\Exception $e) {
+                    $shiftType = null;
+                    $stepOut = 0;
+                }
+
                 return [
-                    'date' => Carbon::parse($sd->date)->toDateString(),
-                    'start_time' => $sd->start_time ? Carbon::parse($sd->start_time)->format('H:i:s') : null,
-                    'end_time' => $sd->end_time ? Carbon::parse($sd->end_time)->format('H:i:s') : null,
+                    'date' => $dateStr,
+                    'start_time' => $attrs['start_time'] ? Carbon::parse($attrs['start_time'])->format('H:i:s') : null,
+                    'end_time' => $attrs['end_time'] ? Carbon::parse($attrs['end_time'])->format('H:i:s') : null,
+                    'shift_type' => $shiftType,
+                    'step_out' => $stepOut,
                 ];
             })->toArray();
 
@@ -94,6 +116,7 @@ class ShiftApplicationController extends Controller
             ],
             'application_deadline_days' => $deadlineDays,
             'userLeaves' => $userLeaves,
+            'userShiftDates' => $userShiftDates,
             'shiftDetails' => $shiftDetails,
         ]);
     }
@@ -126,6 +149,7 @@ class ShiftApplicationController extends Controller
         $data = $request->validate([
             'user_id' => 'required|exists:users,id',
             'date' => 'required|date',
+            'type' => 'nullable|string',
             'reason' => 'nullable|string',
         ], $messages);
 
@@ -181,9 +205,40 @@ class ShiftApplicationController extends Controller
 
         $data = $request->validate([
             'status' => 'required|in:pending,approved,rejected',
+            'type' => 'nullable|string',
         ], $messages);
 
+        // capture old status to decide post-update actions
+        $oldStatus = $shiftApplication->status;
+
         $shiftApplication->update($data);
+
+        // If application became approved and is type 'leave', create/update Shift record
+        $newStatus = $data['status'] ?? $shiftApplication->status;
+        $newType = $data['type'] ?? $shiftApplication->type;
+
+        try {
+            if ($oldStatus !== 'approved' && $newStatus === 'approved' && $newType === 'leave') {
+                // create or update a Shift to 'leave' for the user/date
+                \App\Models\Shift::updateOrCreate(
+                    ['user_id' => $shiftApplication->user_id, 'date' => $shiftApplication->date],
+                    ['shift_type' => 'leave']
+                );
+                // remove any shift_details for that user/date to reflect leave
+                \App\Models\ShiftDetail::where('user_id', $shiftApplication->user_id)->whereRaw('date(date) = ?', [Carbon::parse($shiftApplication->date)->toDateString()])->delete();
+            }
+
+            // If it was approved before and now is not approved, and it was a leave, remove the Shift record
+            if ($oldStatus === 'approved' && $newStatus !== 'approved' && ($shiftApplication->type ?? $newType) === 'leave') {
+                $shift = \App\Models\Shift::where('user_id', $shiftApplication->user_id)->whereRaw('date(date) = ?', [Carbon::parse($shiftApplication->date)->toDateString()])->first();
+                if ($shift && $shift->shift_type === 'leave') {
+                    $shift->delete();
+                }
+            }
+        } catch (\Exception $e) {
+            // avoid breaking update flow; log for diagnosis
+            logger()->error('ShiftApplication post-update hook failed: ' . $e->getMessage());
+        }
 
         return Redirect::route('shift-applications.index')->with('success', '休暇申請を更新しました。');
     }

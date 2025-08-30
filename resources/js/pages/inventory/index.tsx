@@ -183,23 +183,18 @@ export default function Index({ items: initial }: any) {
         }
         try {
             const form = new FormData();
-            // use indices that map to server-side expectation; we will include item id to update
+            // Only send item id and stocks to avoid touching other fields (like sort_order)
             rows.forEach((r, i) => {
                 if (!r.id) return; // skip unsaved items
                 form.append(`items[${i}][id]`, String(r.id));
-                // include required fields from existing item so validation passes
+                // include minimal required keys so server-side validation passes (name and category_id)
                 const orig = items.find((it: any) => it.id === r.id);
                 if (orig) {
                     form.append(`items[${i}][name]`, orig.name || '');
-                    form.append(`items[${i}][category_id]`, String(orig.category_id || orig.category?.id || ''));
-                    // optionally include other fields to be safe
-                    form.append(`items[${i}][catalog_name]`, orig.catalog_name || '');
-                    form.append(`items[${i}][size]`, orig.size || '');
-                    form.append(`items[${i}][unit]`, orig.unit || '');
-                    form.append(`items[${i}][supplier_text]`, orig.supplier_text || '');
-                    form.append(`items[${i}][memo]`, orig.memo || '');
+                    const catId = orig.category_id ?? (orig.category && orig.category.id) ?? '';
+                    form.append(`items[${i}][category_id]`, String(catId));
                 }
-                // append stocks per location
+                // append only stocks per location; server should merge stocks and leave other item fields untouched
                 let si = 0;
                 Object.keys(r.quantities).forEach((loc) => {
                     form.append(`items[${i}][stocks][${si}][storage_location]`, loc);

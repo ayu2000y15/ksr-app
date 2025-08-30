@@ -94,7 +94,37 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
 
     const page = usePage();
     const { permissions } = page.props as any;
-    const upcomingApplications = (page.props as any).upcomingApplications || [];
+    const upcomingApplications = useMemo(() => {
+        try {
+            return ((page.props as any).upcomingApplications as any[]) || [];
+        } catch (e) {
+            return [];
+        }
+    }, [page.props]);
+    // baseline for "today" used in upcoming filter (midnight)
+    const todayStart = useMemo(() => {
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        return d;
+    }, []);
+    // only future leave applications
+    const upcomingLeaveApplications = useMemo(() => {
+        try {
+            return (upcomingApplications || []).filter((a: any) => {
+                if (!a) return false;
+                // only show applications explicitly marked as leave
+                if (a.type !== 'leave') return false;
+                if (!a.date) return false;
+                try {
+                    return new Date(a.date) > todayStart;
+                } catch (e) {
+                    return false;
+                }
+            });
+        } catch (e) {
+            return [];
+        }
+    }, [upcomingApplications, todayStart]);
     const queryDate = (page.props as any).queryParams?.date ?? null;
 
     const timelineShiftDetails = useMemo(() => {
@@ -201,34 +231,30 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
 
             <div className="p-4 sm:p-6 lg:p-8">
                 {/* Upcoming leave applications (future only) */}
-                {upcomingApplications.length > 0 && (
+                {upcomingLeaveApplications.length > 0 && (
                     <div className="mb-6">
                         <div className="mb-2 text-sm font-medium">休暇申請一覧（今後）</div>
                         <div className="rounded-md border border-sky-100 bg-sky-50 p-3">
                             <ul className="space-y-2">
-                                {upcomingApplications
-                                    .filter((a: any) => new Date(a.date) > new Date(new Date().setHours(0, 0, 0, 0)))
-                                    .map((a: any) => (
-                                        <li key={a.id} className="flex items-center gap-4 border-b border-sky-100 py-2 last:border-b-0">
-                                            <div className="flex-1 font-medium">{a.user ? a.user.name : '—'}</div>
-                                            <div className="flex-1 text-sm">
-                                                {(() => {
-                                                    try {
-                                                        const d = new Date(a.date);
-                                                        const m = d.getMonth() + 1;
-                                                        const dd = d.getDate();
-                                                        const jp = ['日', '月', '火', '水', '木', '金', '土'];
-                                                        return `${m}/${dd} (${jp[d.getDay()]})`;
-                                                    } catch (e) {
-                                                        return a.date || '—';
-                                                    }
-                                                })()}
-                                            </div>
-                                            <div className="flex-1 text-sm break-words whitespace-pre-line text-muted-foreground">
-                                                {a.reason || '—'}
-                                            </div>
-                                        </li>
-                                    ))}
+                                {upcomingLeaveApplications.map((a: any) => (
+                                    <li key={a.id} className="flex items-center gap-4 border-b border-sky-100 py-2 last:border-b-0">
+                                        <div className="flex-1 font-medium">{a.user ? a.user.name : '—'}</div>
+                                        <div className="flex-1 text-sm">
+                                            {(() => {
+                                                try {
+                                                    const d = new Date(a.date);
+                                                    const m = d.getMonth() + 1;
+                                                    const dd = d.getDate();
+                                                    const jp = ['日', '月', '火', '水', '木', '金', '土'];
+                                                    return `${m}/${dd} (${jp[d.getDay()]})`;
+                                                } catch (e) {
+                                                    return a.date || '—';
+                                                }
+                                            })()}
+                                        </div>
+                                        <div className="flex-1 text-sm break-words whitespace-pre-line text-muted-foreground">{a.reason || '—'}</div>
+                                    </li>
+                                ))}
                             </ul>
                         </div>
                     </div>

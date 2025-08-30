@@ -63,7 +63,8 @@ class InventoryController extends Controller
                         // update existing
                         $item = InventoryItem::find($it['id']);
                         if ($item) {
-                            $item->update([
+                            // build update array but only include sort_order when explicitly provided
+                            $updateData = [
                                 'name' => $name,
                                 'category_id' => $it['category_id'] ?? null,
                                 'catalog_name' => $it['catalog_name'] ?? null,
@@ -71,8 +72,13 @@ class InventoryController extends Controller
                                 'size' => $it['size'] ?? null,
                                 'unit' => $it['unit'] ?? null,
                                 'memo' => $it['memo'] ?? null,
-                                'sort_order' => isset($it['sort_order']) ? intval($it['sort_order']) : null,
-                            ]);
+                            ];
+                            if (array_key_exists('sort_order', $it)) {
+                                // allow explicit null or numeric value from client
+                                $updateData['sort_order'] = $it['sort_order'] === null || $it['sort_order'] === '' ? null : intval($it['sort_order']);
+                            }
+
+                            $item->update($updateData);
                             // load existing stocks keyed by storage_location for update-reuse
                             $existingStocks = InventoryStock::where('inventory_item_id', $item->id)->get()->keyBy(function ($s) {
                                 return ($s->storage_location ?? '未設定');

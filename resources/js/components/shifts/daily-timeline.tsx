@@ -202,18 +202,33 @@ export default function DailyTimeline(props: {
     const counts = useMemo(() => {
         const day = new Set<number>();
         const night = new Set<number>();
+        const mealDay = new Set<number>();
+        const mealNight = new Set<number>();
         (items || []).forEach((it: Item) => {
             const t = String(it.shift_type ?? it.type ?? '');
             const uid = Number(it.user_id ?? (it.user && (it.user as { id?: number }).id) ?? NaN);
             if (!Number.isFinite(uid)) return;
             // exclude shifts currently marked absent (absentMap keyed by shift id)
             if (absentMap && it.id !== undefined && absentMap[Number(it.id)]) return;
-            if (t === 'day') day.add(uid);
-            else if (t === 'night') night.add(uid);
+            if (t === 'day') {
+                day.add(uid);
+                // meal_ticket: treat missing as 1 (default) so only explicit 0 means no ticket
+                const mt = (it as any).meal_ticket;
+                if (mt === undefined || mt === 1 || mt === '1') mealDay.add(uid);
+            } else if (t === 'night') {
+                night.add(uid);
+                const mt = (it as any).meal_ticket;
+                if (mt === undefined || mt === 1 || mt === '1') mealNight.add(uid);
+            }
         });
 
-        // simple counts: just sizes of day/night sets (no break subtraction)
-        return { dayCount: day.size, nightCount: night.size };
+        // simple counts: sizes of day/night sets and meal-ticket-required sets
+        return {
+            dayCount: day.size,
+            nightCount: night.size,
+            mealTicketDayCount: mealDay.size,
+            mealTicketNightCount: mealNight.size,
+        };
     }, [items, absentMap]);
 
     // per-slot attendance counts = number of work shifts covering the slot minus any breaks overlapping the slot
@@ -603,6 +618,33 @@ export default function DailyTimeline(props: {
                                         <span className={`truncate ${absentMap[Number(it.id ?? 0)] ? 'text-gray-600 line-through opacity-60' : ''}`}>
                                             {it.user ? it.user.name : '—'}
                                         </span>
+                                        {/* show a small badge when this shift is marked step_out (中抜け)
+                                            step_out may be included either at top-level or nested under `shift` (from backend),
+                                            so check both locations. treat '1' or 1 as true. */}
+                                        {(() => {
+                                            const sVal = (it as any).step_out ?? ((it as any).shift && (it as any).shift.step_out);
+                                            if (!(sVal === 1 || sVal === '1')) return null;
+                                            const op = absentMap[Number(it.id ?? 0)] ? 'opacity-60' : '';
+                                            return (
+                                                <>
+                                                    {/* full badge on md and larger */}
+                                                    <span
+                                                        className={`ml-2 hidden items-center rounded bg-orange-100 px-1 text-xs text-orange-700 md:inline-flex ${op}`}
+                                                        title="中抜け"
+                                                    >
+                                                        中抜け
+                                                    </span>
+                                                    {/* compact circle icon on small screens */}
+                                                    <span
+                                                        className={`ml-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-xs text-orange-700 md:hidden ${op}`}
+                                                        title="中抜け"
+                                                        aria-label="中抜け"
+                                                    >
+                                                        ○
+                                                    </span>
+                                                </>
+                                            );
+                                        })()}
                                     </div>
 
                                     <div className="relative h-10 flex-1">
@@ -826,11 +868,21 @@ export default function DailyTimeline(props: {
                         </div>
                         <div>
                             <span className="text-xs text-muted-foreground">昼 </span>
-                            <span className="ml-1 font-medium text-yellow-800">{counts.dayCount}人</span>
+                            <span className="ml-1 font-medium text-yellow-800">
+                                {counts.dayCount}人
+                                {typeof counts.mealTicketDayCount !== 'undefined' && (
+                                    <span className="ml-2 text-sm text-muted-foreground">（食券 {counts.mealTicketDayCount}）</span>
+                                )}
+                            </span>
                         </div>
                         <div>
                             <span className="text-xs text-muted-foreground">夜 </span>
-                            <span className="ml-1 font-medium text-indigo-700">{counts.nightCount}人</span>
+                            <span className="ml-1 font-medium text-indigo-700">
+                                {counts.nightCount}人
+                                {typeof counts.mealTicketNightCount !== 'undefined' && (
+                                    <span className="ml-2 text-sm text-muted-foreground">（食券 {counts.mealTicketNightCount}）</span>
+                                )}
+                            </span>
                         </div>
                     </div>
 

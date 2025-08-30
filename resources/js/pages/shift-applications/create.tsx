@@ -18,6 +18,7 @@ export default function Create() {
     const { data, setData, post, processing, errors, reset } = useForm({
         start_at: '',
         end_at: '',
+        type: 'leave',
         reason: '',
     });
 

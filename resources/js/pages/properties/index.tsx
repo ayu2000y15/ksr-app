@@ -1017,17 +1017,12 @@ export default function Index({ properties }: any) {
                                                                                 isSmallScreen ? 'h-6 text-xs' : 'h-8'
                                                                             }`}
                                                                             onClick={() => {
-                                                                                // If touch device, toggle tooltip on tap instead of opening edit form
-                                                                                if (isTouch) {
-                                                                                    setOpenTooltipId((prev) => (prev === o.id ? null : o.id));
-                                                                                    return;
-                                                                                }
-                                                                                // block opening edit form if user lacks edit permission
+                                                                                // Always open edit form on click/tap when user has permission.
+                                                                                // Mobile (touch) devices will now enter edit mode on single tap as on desktop.
                                                                                 if (!canEdit) {
                                                                                     alert('権限がありません');
                                                                                     return;
                                                                                 }
-                                                                                // open edit form populated with this occupancy
                                                                                 setShowMoveInForm(true);
                                                                                 const uids = Array.isArray(o.user_ids)
                                                                                     ? o.user_ids

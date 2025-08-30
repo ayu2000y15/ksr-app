@@ -404,6 +404,29 @@ export default function BreakTimeline(props: {
                             <div key={`label-${it.id}`} className="flex h-10 items-center border-b bg-white pr-2">
                                 <span className="mr-2 w-6 text-right font-mono text-sm">{it.user_id ?? (it.user && it.user.id) ?? '—'}</span>
                                 <span className="truncate">{it.user ? it.user.name : '—'}</span>
+                                {(() => {
+                                    // step_out may be present on the shiftDetail or nested under `shift`
+                                    const sVal = (it as any).step_out ?? ((it as any).shift && (it as any).shift.step_out);
+                                    if (!(sVal === 1 || sVal === '1')) return null;
+                                    const op = it.id !== undefined && externalAbsentMap && externalAbsentMap[Number(it.id)] ? 'opacity-60' : '';
+                                    return (
+                                        <>
+                                            <span
+                                                className={`ml-2 hidden items-center rounded bg-orange-100 px-1 text-xs text-orange-700 md:inline-flex ${op}`}
+                                                title="中抜け"
+                                            >
+                                                中抜け
+                                            </span>
+                                            <span
+                                                className={`ml-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-xs text-orange-700 md:hidden ${op}`}
+                                                title="中抜け"
+                                                aria-label="中抜け"
+                                            >
+                                                ○
+                                            </span>
+                                        </>
+                                    );
+                                })()}
                             </div>
                         ))}
                     </div>

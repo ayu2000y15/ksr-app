@@ -105,6 +105,12 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
     Route::post('/shifts/mark-break', [App\Http\Controllers\ShiftController::class, 'markBreak'])->name('shifts.mark_break');
     // 既に休がある日を解除する（休のキャンセル）
     Route::post('/shifts/unmark-break', [App\Http\Controllers\ShiftController::class, 'unmarkBreak'])->name('shifts.unmark_break');
+    // 中抜けをマーク/解除する（step_outフラグ）
+    Route::post('/shifts/mark-step-out', [App\Http\Controllers\ShiftController::class, 'markStepOut'])->name('shifts.mark_step_out');
+    Route::post('/shifts/unmark-step-out', [App\Http\Controllers\ShiftController::class, 'unmarkStepOut'])->name('shifts.unmark_step_out');
+    // 食券不要をマーク/解除
+    Route::post('/shifts/mark-meal-ticket', [App\Http\Controllers\ShiftController::class, 'markMealTicket'])->name('shifts.mark_meal_ticket');
+    Route::post('/shifts/unmark-meal-ticket', [App\Http\Controllers\ShiftController::class, 'unmarkMealTicket'])->name('shifts.unmark_meal_ticket');
 
     // Toggle confirm/unconfirm for all scheduled work ShiftDetails on a date
     Route::post('/shifts/toggle-confirm-date', [App\Http\Controllers\ShiftController::class, 'toggleConfirmDate'])->name('shifts.toggle_confirm_date');
