@@ -62,9 +62,9 @@ Route::middleware(['web', 'auth'])->group(function () {
         if (in_array('status', (new \ReflectionClass(User::class))->getDefaultProperties() ?: [])) {
             // If model has default properties, still attempt status filter — keep simple: try where status = 'active'
         }
-        $users = User::where('status', 'active')->orderBy('id')->get(['id', 'name']);
+        $users = User::where('status', 'active')->orderBy('id')->get();
         if ($users->count() === 0) {
-            $users = User::orderBy('id')->get(['id', 'name']);
+            $users = User::orderBy('id')->get();
         }
         return ['users' => $users];
     });
@@ -196,5 +196,108 @@ Route::middleware(['web', 'auth'])->group(function () {
         } catch (\Exception $e) {
             return response()->json(['message' => '削除に失敗しました'], 500);
         }
+    });
+
+    // 送迎申請 API（簡易実装） - driver_ids は複数保持
+    // List transport requests (optional date filter)
+    Route::get('/transport-requests', function (\Illuminate\Http\Request $request) {
+        $date = $request->query('date');
+        $q = \App\Models\TransportRequest::query();
+        if (!empty($date)) {
+            // expect YYYY-MM-DD
+            try {
+                $d = new DateTime($date);
+                $q->whereDate('date', $d->format('Y-m-d'));
+            } catch (Exception $e) {
+                // ignore parse errors and return empty set
+                return response()->json(['transport_requests' => []], 200);
+            }
+        }
+        $trs = $q->orderBy('date', 'desc')->get();
+        return response()->json(['transport_requests' => $trs], 200);
+    });
+
+    Route::post('/transport-requests', function (\Illuminate\Http\Request $request) {
+        $baseRules = [
+            'date' => 'required|date',
+            'direction' => 'required|in:to,from',
+            'driver_ids' => 'required|array|min:1',
+            'driver_ids.*' => 'required|exists:users,id',
+        ];
+
+        $rules = array_merge($baseRules, ['id' => 'nullable|exists:transport_requests,id']);
+
+        $data = $request->validate($rules);
+
+        // Authorization: require that the requester has a car (simple check) or a permission
+        try {
+            $user = $request->user();
+            if (!($user && ($user->has_car === 1 || $user->has_car === true))) {
+                // fallback to permission check
+                \Illuminate\Support\Facades\Gate::forUser($user)->authorize('create', \App\Models\TransportRequest::class);
+            }
+        } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
+            return response()->json(['message' => '権限がありません'], 403);
+        }
+
+        if (!empty($data['id'])) {
+            $tr = \App\Models\TransportRequest::find($data['id']);
+            if (!$tr) return response()->json(['message' => '指定の送迎申請が見つかりません'], 404);
+            $tr->date = $data['date'];
+            $tr->direction = $data['direction'];
+            // check duplicates: ensure none of the selected driver_ids are already used in another transport_request on same date
+            $conflicts = [];
+            foreach ($data['driver_ids'] as $did) {
+                $existing = \App\Models\TransportRequest::whereRaw("DATE(date) = ?", [$data['date']])
+                    ->where('direction', $data['direction'])
+                    ->whereJsonContains('driver_ids', $did)
+                    ->where('id', '!=', $tr->id)
+                    ->first();
+                if ($existing) {
+                    $driver = \App\Models\User::find($did);
+                    $creator = $existing->creator ?? \App\Models\User::find($existing->created_by);
+                    $driverName = $driver ? ($driver->name ?? "#{$did}") : "#{$did}";
+                    $creatorName = $creator ? ($creator->name ?? (is_object($creator) && isset($creator->id) ? '#' . $creator->id : '')) : '';
+                    $existingDirection = isset($existing->direction) ? $existing->direction : ($data['direction'] ?? 'to');
+                    $dirLabel = $existingDirection === 'to' ? '行き' : '帰り';
+                    $conflicts[] = "{$driverName} さんは、{$creatorName} さんが {$dirLabel} の送迎申請をしているので選択できません。\n";
+                }
+            }
+            if (!empty($conflicts)) {
+                return response()->json(['message' => implode(' ', $conflicts)], 422);
+            }
+            $tr->driver_ids = $data['driver_ids'];
+            $tr->save();
+            return response()->json(['message' => '送迎申請を更新しました', 'transport_request' => $tr], 200);
+        }
+        // create: ensure none of selected driver_ids are already used in any transport_request on same date
+        $conflicts = [];
+        foreach ($data['driver_ids'] as $did) {
+            $existing = \App\Models\TransportRequest::whereRaw("DATE(date) = ?", [$data['date']])
+                ->where('direction', $data['direction'])
+                ->whereJsonContains('driver_ids', $did)
+                ->first();
+            if ($existing) {
+                $driver = \App\Models\User::find($did);
+                $creator = $existing->creator ?? \App\Models\User::find($existing->created_by);
+                $driverName = $driver ? ($driver->name ?? "#{$did}") : "#{$did}";
+                $creatorName = $creator ? ($creator->name ?? (is_object($creator) && isset($creator->id) ? '#' . $creator->id : '')) : '';
+                $existingDirection = isset($existing->direction) ? $existing->direction : ($data['direction'] ?? 'to');
+                $dirLabel = $existingDirection === 'to' ? '行き' : '帰り';
+                $conflicts[] = "{$driverName} さんは、{$creatorName} さんが {$dirLabel} の送迎申請をしているので選択できません。\n";
+            }
+        }
+        if (!empty($conflicts)) {
+            return response()->json(['message' => implode(' ', $conflicts)], 422);
+        }
+
+        $tr = \App\Models\TransportRequest::create([
+            'date' => $data['date'],
+            'direction' => $data['direction'],
+            'driver_ids' => $data['driver_ids'],
+            'created_by' => $request->user() ? $request->user()->id : null,
+        ]);
+
+        return response()->json(['message' => '送迎申請を作成しました', 'transport_request' => $tr], 201);
     });
 });

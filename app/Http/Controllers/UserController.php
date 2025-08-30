@@ -468,6 +468,8 @@ class UserController extends Controller
                     'scheduled_work_minutes' => 0,
                     'scheduled_break_minutes' => 0,
                     'absent_count' => 0,
+                    'transport_requests_to_count' => 0,
+                    'transport_requests_from_count' => 0,
                 ];
             }
         }
@@ -538,6 +540,32 @@ class UserController extends Controller
                     $stats[$u->id][$m]['minutes'] = max(0, $work - $br);
                 }
             }
+        }
+
+        // Count transport requests per creator per month within the same date range
+        try {
+            $transportRequests = \App\Models\TransportRequest::whereBetween('date', [$earliest->toDateString(), $latest->toDateString()])->get();
+            foreach ($transportRequests as $tr) {
+                try {
+                    $creatorId = $tr->created_by ?? null;
+                    if (!$creatorId) continue;
+                    $d = $tr->date ? Carbon::parse($tr->date) : null;
+                    if (!$d) continue;
+                    $mk = $d->format('Y-m');
+                    if (isset($stats[$creatorId]) && isset($stats[$creatorId][$mk])) {
+                        $dir = isset($tr->direction) ? (string)$tr->direction : 'to';
+                        if ($dir === 'to') {
+                            $stats[$creatorId][$mk]['transport_requests_to_count'] = ($stats[$creatorId][$mk]['transport_requests_to_count'] ?? 0) + 1;
+                        } else {
+                            $stats[$creatorId][$mk]['transport_requests_from_count'] = ($stats[$creatorId][$mk]['transport_requests_from_count'] ?? 0) + 1;
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    // ignore per-row parse errors
+                }
+            }
+        } catch (\Throwable $e) {
+            // ignore transport request aggregation errors
         }
 
         // Debug log: aggregate totals across all users/months for quick inspection

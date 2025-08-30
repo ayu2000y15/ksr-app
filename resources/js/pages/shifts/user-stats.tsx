@@ -106,6 +106,12 @@ export default function UserStats(props: any) {
 
                                                                 <div className="text-muted-foreground">欠席</div>
                                                                 <div className="text-right font-medium">{s.absent_count ?? 0}回</div>
+
+                                                                <div className="text-muted-foreground">送迎（行き）</div>
+                                                                <div className="text-right font-medium">{s.transport_requests_to_count ?? 0}回</div>
+
+                                                                <div className="text-muted-foreground">送迎（帰り）</div>
+                                                                <div className="text-right font-medium">{s.transport_requests_from_count ?? 0}回</div>
                                                             </div>
                                                         </TableCell>
                                                     );
@@ -164,6 +170,14 @@ export default function UserStats(props: any) {
                                                             </div>
                                                             <div className="text-xs text-muted-foreground">
                                                                 欠席: <span className="font-medium">{s.absent_count ?? 0}回</span>
+                                                            </div>
+                                                            <div className="text-xs text-muted-foreground">
+                                                                送迎（行き）:{' '}
+                                                                <span className="font-medium">{s.transport_requests_to_count ?? 0}件</span>
+                                                            </div>
+                                                            <div className="text-xs text-muted-foreground">
+                                                                送迎（帰り）:{' '}
+                                                                <span className="font-medium">{s.transport_requests_from_count ?? 0}件</span>
                                                             </div>
                                                         </div>
                                                     </div>

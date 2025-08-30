@@ -1,15 +1,17 @@
+import TransportRequestModal from '@/components/transport-request-modal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import Toast from '@/components/ui/toast';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, router, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { ja } from 'date-fns/locale';
-import { CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { CalendarIcon, Car, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 // パンくずリストの定義
@@ -256,6 +258,7 @@ function GanttBar({
 export default function Dashboard() {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [shifts, setShifts] = useState<any[]>([]);
+    const [hasTransportRequestForDate, setHasTransportRequestForDate] = useState(false);
     const [ganttWidth, setGanttWidth] = useState(900);
     const [ganttOffset, setGanttOffset] = useState(300);
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
@@ -287,6 +290,39 @@ export default function Dashboard() {
     const leftMobileRef = useRef<HTMLDivElement | null>(null);
     const rightMobileRef = useRef<HTMLDivElement | null>(null);
     const [rowsHeight, setRowsHeight] = useState<number>(360);
+    // has_car flag fallback: if server didn't include has_car on auth.user, fetch active users and resolve
+    const [hasCarFlag, setHasCarFlag] = useState<boolean | null>(() => {
+        try {
+            const v =
+                auth && auth.user && typeof auth.user.has_car !== 'undefined' ? Boolean(auth.user.has_car === 1 || auth.user.has_car === true) : null;
+            return v;
+        } catch {
+            return null;
+        }
+    });
+    // toast shown on dashboard (used by child components; modal will call onSuccess after closing)
+    type ToastState = { message: string; type: 'success' | 'error' } | null;
+    const [toast, setToast] = useState<ToastState>(null);
+
+    useEffect(() => {
+        if (hasCarFlag !== null) return; // already known
+        (async () => {
+            try {
+                const res = await axios.get('/api/active-users');
+                const list = (res.data && res.data.users) || res.data || [];
+                if (Array.isArray(list) && auth && auth.user && auth.user.id != null) {
+                    const me = list.find((u: any) => Number(u.id) === Number(auth.user.id));
+                    if (me && typeof me.has_car !== 'undefined') {
+                        setHasCarFlag(Boolean(me.has_car === 1 || me.has_car === true));
+                        return;
+                    }
+                }
+            } catch {
+                // ignore
+            }
+            setHasCarFlag(false);
+        })();
+    }, [hasCarFlag, auth]);
 
     useEffect(() => {
         const compute = () => {
@@ -467,11 +503,37 @@ export default function Dashboard() {
                 }
 
                 setShifts(annotatedWorks);
+                // check transport requests for this date (per current user)
+                const both = await fetchTransportBothForDate(currentDate);
+                setHasTransportRequestForDate(Boolean(both));
             } catch {
                 setShifts([]);
+                setHasTransportRequestForDate(false);
             }
         })();
-    }, [currentDate]);
+    }, [currentDate, auth?.user?.id]);
+
+    // helper: returns true if current logged-in user has BOTH to and from transport requests on date d
+    const fetchTransportBothForDate = useCallback(
+        async (d: Date) => {
+            try {
+                const pad = (n: number) => String(n).padStart(2, '0');
+                const key = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+                const res2 = await axios.get('/api/transport-requests', { params: { date: key } });
+                const trs = (res2.data && res2.data.transport_requests) || [];
+                const userId = auth?.user?.id;
+                if (!userId) return false;
+                type TR = { created_by?: number | string; direction?: string };
+                const my = Array.isArray(trs) ? (trs as TR[]).filter((t) => Number(t.created_by) === Number(userId)) : [];
+                const hasTo = my.some((t) => String(t.direction) === 'to');
+                const hasFrom = my.some((t) => String(t.direction) === 'from');
+                return Boolean(hasTo && hasFrom);
+            } catch {
+                return false;
+            }
+        },
+        [auth?.user?.id],
+    );
 
     const goToPreviousDay = () => {
         const newDate = new Date(currentDate);
@@ -511,6 +573,15 @@ export default function Dashboard() {
         formattedDate = new Intl.DateTimeFormat('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' }).format(currentDate);
     }
 
+    // transport request visibility window: only from (today - 2 days) up to today (future dates excluded)
+    const todayOnly = new Date();
+    todayOnly.setHours(0, 0, 0, 0);
+    const limitDate = new Date(todayOnly);
+    limitDate.setDate(limitDate.getDate() - 2);
+    const currentOnly = new Date(currentDate);
+    currentOnly.setHours(0, 0, 0, 0);
+    const withinTransportWindow = currentOnly.getTime() >= limitDate.getTime() && currentOnly.getTime() <= todayOnly.getTime();
+
     // 昼/夜の出勤人数を計算（欠勤はカウントしない）
     let dayCount = 0;
     let nightCount = 0;
@@ -534,6 +605,7 @@ export default function Dashboard() {
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="ダッシュボード" />
             <div className="p-4 sm:p-6 lg:p-8">
+                <style>{`.hide-scrollbar::-webkit-scrollbar{display:none}.hide-scrollbar{-ms-overflow-style:none;scrollbar-width:none;}`}</style>
                 <div className="mb-6">
                     <Card>
                         <CardHeader>
@@ -552,28 +624,66 @@ export default function Dashboard() {
                             <div className="flex items-center gap-2">
                                 <CardTitle className="text-ms sm:text-xl">{formattedDate}</CardTitle>
                                 {canViewShifts && (
-                                    <Button
-                                        onClick={() => {
-                                            const d = new Date();
-                                            const pad = (n: number) => String(n).padStart(2, '0');
-                                            const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-                                            // navigate to daily timeline for today
-                                            try {
-                                                router.get(
-                                                    route('shifts.daily'),
-                                                    { date: iso },
-                                                    { preserveState: true, only: ['shiftDetails', 'queryParams'] },
-                                                );
-                                            } catch {
-                                                // fallback: direct link navigation
-                                                window.location.href = route('shifts.daily', { date: iso });
-                                            }
-                                        }}
-                                    >
-                                        今日のシフト
-                                    </Button>
+                                    <>
+                                        <Button
+                                            onClick={() => {
+                                                const d = new Date(currentDate);
+                                                const pad = (n: number) => String(n).padStart(2, '0');
+                                                const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+                                                // navigate to daily timeline for the currently displayed date
+                                                try {
+                                                    router.get(
+                                                        route('shifts.daily'),
+                                                        { date: iso },
+                                                        { preserveState: true, only: ['shiftDetails', 'queryParams'] },
+                                                    );
+                                                } catch {
+                                                    // fallback: direct link navigation
+                                                    window.location.href = route('shifts.daily', { date: iso });
+                                                }
+                                            }}
+                                        >
+                                            {currentDate.getFullYear() === new Date().getFullYear() &&
+                                            currentDate.getMonth() === new Date().getMonth() &&
+                                            currentDate.getDate() === new Date().getDate()
+                                                ? '本日のシフト'
+                                                : `${currentDate.getMonth() + 1}/${currentDate.getDate()} のシフト`}
+                                        </Button>
+
+                                        {/* 送迎申請モーダルを開く（ユーザーが has_car の場合のみ表示） */}
+                                        {(() => {
+                                            const canActAsDriver =
+                                                (auth && auth.user && (auth.user.has_car === 1 || auth.user.has_car === true)) || hasCarFlag;
+                                            const showTransportControl = Boolean(canActAsDriver && withinTransportWindow);
+                                            if (!showTransportControl) return null;
+                                            return (
+                                                <>
+                                                    {hasTransportRequestForDate ? (
+                                                        <Badge variant="outline">送迎申請済</Badge>
+                                                    ) : (
+                                                        <TransportRequestModal
+                                                            dateIso={`${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(
+                                                                currentDate.getDate(),
+                                                            ).padStart(2, '0')}`}
+                                                            trigger={<Button variant="outline">送迎申請</Button>}
+                                                            onSuccess={(m) => {
+                                                                setToast({ message: m, type: 'success' });
+                                                                setTimeout(() => setToast(null), 3500);
+                                                                // re-fetch to determine if both directions are now requested by current user
+                                                                (async () => {
+                                                                    const both = await fetchTransportBothForDate(currentDate);
+                                                                    setHasTransportRequestForDate(Boolean(both));
+                                                                })();
+                                                            }}
+                                                        />
+                                                    )}
+                                                </>
+                                            );
+                                        })()}
+                                    </>
                                 )}
                             </div>
+
                             <div className="flex flex-wrap items-center gap-2">
                                 <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
                                     <PopoverTrigger asChild>
@@ -598,6 +708,15 @@ export default function Dashboard() {
                             </div>
                         </CardHeader>
                         <CardContent>
+                            {/* 注意書き：送迎申請ボタンが表示されている場合にのみ案内を表示 */}
+                            {((auth && auth.user && (auth.user.has_car === 1 || auth.user.has_car === true)) || hasCarFlag) &&
+                                withinTransportWindow && (
+                                    <div className="mb-4 ml-3 text-xs text-muted-foreground">
+                                        ※送迎申請は車を所持しているユーザーが行ってください。
+                                        <br />
+                                        ※2日前までの申請が可能です。
+                                    </div>
+                                )}
                             {shifts.length === 0 ? (
                                 <div className="text-sm text-muted-foreground">この日のシフトはありません</div>
                             ) : (
@@ -606,7 +725,7 @@ export default function Dashboard() {
                                     <div>
                                         <div className="flex">
                                             {/* left fixed column outside horizontal scroller */}
-                                            <div className="w-28 flex-shrink-0 text-xs md:w-40">
+                                            <div className="w-28 flex-shrink-0 text-xs md:w-44">
                                                 <div className="flex h-8 items-center gap-2 border-b border-gray-200 px-2 text-xs">
                                                     <Badge variant="default" className="border-transparent bg-yellow-100 text-yellow-800">
                                                         昼 {`(${dayCount})`}
@@ -620,7 +739,14 @@ export default function Dashboard() {
                                                         leftRowsRef.current = el;
                                                         leftDesktopRef.current = el;
                                                     }}
-                                                    style={{ maxHeight: 'calc(100vh - 220px)', overflowY: 'auto', overflowX: 'hidden' }}
+                                                    className="hide-scrollbar"
+                                                    style={{
+                                                        maxHeight: 'calc(100vh - 220px)',
+                                                        overflowY: 'auto',
+                                                        overflowX: 'hidden',
+                                                        msOverflowStyle: 'none',
+                                                        scrollbarWidth: 'none',
+                                                    }}
                                                 >
                                                     <div className="flex flex-col">
                                                         {shifts.map((s) => {
@@ -635,16 +761,32 @@ export default function Dashboard() {
                                                             return (
                                                                 <div
                                                                     key={s.id}
-                                                                    className={`flex h-10 items-center truncate border-b px-2 text-xs font-medium md:text-sm ${isCurrentUser ? 'bg-blue-50' : 'bg-white'}`}
+                                                                    className={`flex h-10 items-center truncate border-b px-2 text-[10px] md:text-sm md:font-medium ${isCurrentUser ? 'bg-blue-50' : 'bg-white'}`}
                                                                 >
                                                                     <span
-                                                                        className={`mr-2 inline-block w-12 text-right font-mono ${absent ? 'text-gray-500 line-through' : ''}`}
+                                                                        className={`mr-2 inline-block text-right font-mono md:w-12 ${absent ? 'text-gray-500 line-through' : ''}`}
                                                                     >
                                                                         {String(s.user?.id ?? s.user_id)}
                                                                     </span>
-                                                                    <span className={absent ? 'truncate text-gray-500 line-through' : 'truncate'}>
-                                                                        {s.user?.name ?? '—'}
-                                                                    </span>
+                                                                    <div className="flex min-w-0 items-center">
+                                                                        <span
+                                                                            className={
+                                                                                (absent ? 'text-gray-500 line-through ' : '') +
+                                                                                'min-w-0 flex-1 truncate'
+                                                                            }
+                                                                        >
+                                                                            {s.user?.name ?? '—'}
+                                                                        </span>
+                                                                        {((s.user && (s.user.has_car === 1 || s.user.has_car === true)) ||
+                                                                            s.has_car === 1 ||
+                                                                            s.has_car === true) && (
+                                                                            <Car
+                                                                                className="ml-2 h-4 w-4 flex-shrink-0 text-gray-600"
+                                                                                aria-label="車あり"
+                                                                                aria-hidden={false}
+                                                                            />
+                                                                        )}
+                                                                    </div>
                                                                 </div>
                                                             );
                                                         })}
@@ -707,6 +849,7 @@ export default function Dashboard() {
                     </Card>
                 </div>
             </div>
+            {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
         </AppLayout>
     );
 }
