@@ -109,6 +109,35 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
     const page = usePage();
     const { permissions } = page.props as any;
 
+    // helper to ensure time is shown as HH:MM (minutes included)
+    const formatTime = (t: any) => {
+        if (!t && t !== 0) return '—';
+        try {
+            const s = String(t).trim();
+            // if already hh:mm or hh:mm:ss
+            if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(s)) {
+                const parts = s.split(':');
+                const hh = parts[0].padStart(2, '0');
+                const mm = parts[1] || '00';
+                return `${hh}:${mm}`;
+            }
+            // if only hour number like '9' or '09'
+            if (/^\d{1,2}$/.test(s)) {
+                return `${s.padStart(2, '0')}:00`;
+            }
+            // try Date parse fallback
+            const d = new Date(s);
+            if (!isNaN(d.getTime())) {
+                const hh = String(d.getHours()).padStart(2, '0');
+                const mm = String(d.getMinutes()).padStart(2, '0');
+                return `${hh}:${mm}`;
+            }
+            return s;
+        } catch {
+            return String(t);
+        }
+    };
+
     // 詳細は別ページへ遷移します
 
     // 権限チェック関数
@@ -198,9 +227,11 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                             </div>
                                             <div>通勤方法: {user.commute_method || '—'}</div>
                                             <div>
-                                                基本出勤時間: {user.default_start_time || '—'} 〜 {user.default_end_time || '—'}
+                                                基本出勤時間: {formatTime(user.default_start_time)} 〜 {formatTime(user.default_end_time)}
                                             </div>
-                                            <div>週休希望日数: {user.preferred_week_days_count ?? '—'}</div>
+                                            <div>
+                                                週休希望日数: {user.preferred_week_days_count != null ? `${user.preferred_week_days_count}日` : '—'}
+                                            </div>
                                             <div>
                                                 固定休希望:{' '}
                                                 {(Array.isArray(user.preferred_week_days)
@@ -358,9 +389,13 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                                             </div>
                                                             <div>通勤方法: {user.commute_method || '—'}</div>
                                                             <div>
-                                                                基本出勤時間: {user.default_start_time || '—'} 〜 {user.default_end_time || '—'}
+                                                                基本出勤時間: {formatTime(user.default_start_time)} 〜{' '}
+                                                                {formatTime(user.default_end_time)}
                                                             </div>
-                                                            <div>週休希望日数: {user.preferred_week_days_count ?? '—'}</div>
+                                                            <div>
+                                                                週休希望日数:{' '}
+                                                                {user.preferred_week_days_count != null ? `${user.preferred_week_days_count}日` : '—'}
+                                                            </div>
                                                             <div>
                                                                 固定休希望:{' '}
                                                                 {(Array.isArray(user.preferred_week_days)
