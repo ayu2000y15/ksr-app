@@ -8,7 +8,7 @@ import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 // types are intentionally typed as any in this file to avoid strict type dependency
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { Car, Edit, Eye, LoaderCircle, Plus, Trash } from 'lucide-react';
-import { ReactNode, useEffect, useState } from 'react';
+import { Fragment, ReactNode, useEffect, useState } from 'react';
 // dialog modal removed: details now open on a separate page
 
 // パンくずリストの定義
@@ -217,66 +217,86 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                     </div>
                                     {expandedIds.includes(user.id) && (
                                         <div className="mt-3 space-y-1 text-sm text-muted-foreground">
-                                            <div>
-                                                採用条件:{' '}
-                                                {user.employment_condition === 'dormitory'
-                                                    ? '寮'
-                                                    : user.employment_condition === 'commute'
-                                                      ? '通勤'
-                                                      : '—'}
-                                            </div>
-                                            <div>通勤方法: {user.commute_method || '—'}</div>
-                                            <div>
-                                                基本出勤時間: {formatTime(user.default_start_time)} 〜 {formatTime(user.default_end_time)}
-                                            </div>
-                                            <div>
-                                                週休希望日数: {user.preferred_week_days_count != null ? `${user.preferred_week_days_count}日` : '—'}
-                                            </div>
-                                            <div>
-                                                固定休希望:{' '}
-                                                {(Array.isArray(user.preferred_week_days)
-                                                    ? user.preferred_week_days
-                                                    : user.preferred_week_days
-                                                      ? JSON.parse(user.preferred_week_days)
-                                                      : []
-                                                )
-                                                    .map(
-                                                        (d: string) =>
-                                                            ({ Mon: '月', Tue: '火', Wed: '水', Thu: '木', Fri: '金', Sat: '土', Sun: '日' })[d] || d,
-                                                    )
-                                                    .join(' ') || '—'}
-                                            </div>
-                                            <div>勤務期間: {user.employment_period || '—'}</div>
-                                            <div>
-                                                <div>勤務備考:</div>
-                                                <div className="whitespace-pre-line">{user.employment_notes || '—'}</div>
-                                            </div>
-                                            <div>
-                                                <div>メモ:</div>
-                                                <div className="whitespace-pre-line">{user.memo || '—'}</div>
-                                            </div>
-                                            <div className="mt-2 flex gap-2">
-                                                {canViewUsers && (
-                                                    <Link href={route('users.show', user.id)} onClick={(e: any) => e.stopPropagation()}>
-                                                        <Button size="sm" variant="outline" className="p-2">
-                                                            <Eye className="mr-0 h-4 w-4 sm:mr-2" />
-                                                            <span className="hidden sm:inline">詳細</span>
+                                            <div className="grid gap-2">
+                                                <div className="flex">
+                                                    <div className="w-36 text-sm text-muted-foreground">採用条件</div>
+                                                    <div className="flex-1">
+                                                        {user.employment_condition === 'dormitory'
+                                                            ? '寮'
+                                                            : user.employment_condition === 'commute'
+                                                              ? '通勤'
+                                                              : '—'}
+                                                    </div>
+                                                </div>
+                                                <div className="flex">
+                                                    <div className="w-36 text-sm text-muted-foreground">通勤方法</div>
+                                                    <div className="flex-1">{user.commute_method || '—'}</div>
+                                                </div>
+                                                <div className="flex">
+                                                    <div className="w-36 text-sm text-muted-foreground">基本出勤時間</div>
+                                                    <div className="flex-1">
+                                                        {formatTime(user.default_start_time)} 〜 {formatTime(user.default_end_time)}
+                                                    </div>
+                                                </div>
+                                                <div className="flex">
+                                                    <div className="w-36 text-sm text-muted-foreground">週休希望日数</div>
+                                                    <div className="flex-1">
+                                                        {user.preferred_week_days_count != null ? `${user.preferred_week_days_count}日` : '—'}
+                                                    </div>
+                                                </div>
+                                                <div className="flex">
+                                                    <div className="w-36 text-sm text-muted-foreground">固定休希望</div>
+                                                    <div className="flex-1">
+                                                        {(Array.isArray(user.preferred_week_days)
+                                                            ? user.preferred_week_days
+                                                            : user.preferred_week_days
+                                                              ? JSON.parse(user.preferred_week_days)
+                                                              : []
+                                                        )
+                                                            .map(
+                                                                (d: string) =>
+                                                                    ({ Mon: '月', Tue: '火', Wed: '水', Thu: '木', Fri: '金', Sat: '土', Sun: '日' })[
+                                                                        d
+                                                                    ] || d,
+                                                            )
+                                                            .join(' ') || '—'}
+                                                    </div>
+                                                </div>
+                                                <div className="flex">
+                                                    <div className="w-36 text-sm text-muted-foreground">勤務期間</div>
+                                                    <div className="flex-1">{user.employment_period || '—'}</div>
+                                                </div>
+                                                <div className="flex">
+                                                    <div className="w-36 text-sm text-muted-foreground">勤務備考</div>
+                                                    <div className="flex-1 whitespace-pre-line">{user.employment_notes || '—'}</div>
+                                                </div>
+                                                <div className="flex">
+                                                    <div className="w-36 text-sm text-muted-foreground">メモ</div>
+                                                    <div className="flex-1 whitespace-pre-line">{user.memo || '—'}</div>
+                                                </div>
+                                                <div className="mt-2 flex gap-2">
+                                                    {canViewUsers && (
+                                                        <Link href={route('users.show', user.id)} onClick={(e: any) => e.stopPropagation()}>
+                                                            <Button size="sm" variant="outline" className="p-2">
+                                                                <Eye className="mr-0 h-4 w-4 sm:mr-2" />
+                                                                <span className="hidden sm:inline">詳細</span>
+                                                            </Button>
+                                                        </Link>
+                                                    )}
+                                                    {canUpdateUsers && (
+                                                        <Link href={route('users.edit', user.id)} onClick={(e: any) => e.stopPropagation()}>
+                                                            <Button variant="outline" size="sm" className="p-2">
+                                                                <Edit className="mr-0 h-4 w-4 sm:mr-2" />
+                                                                <span className="hidden sm:inline">編集</span>
+                                                            </Button>
+                                                        </Link>
+                                                    )}
+                                                    {canDeleteUsers && (
+                                                        <Button variant="destructive" size="sm" onClick={() => confirmAndDelete(user)}>
+                                                            削除
                                                         </Button>
-                                                    </Link>
-                                                )}
-                                                {canUpdateUsers && (
-                                                    <Link href={route('users.edit', user.id)} onClick={(e: any) => e.stopPropagation()}>
-                                                        <Button variant="outline" size="sm" className="p-2">
-                                                            <Edit className="mr-0 h-4 w-4 sm:mr-2" />
-                                                            <span className="hidden sm:inline">編集</span>
-                                                        </Button>
-                                                    </Link>
-                                                )}
-                                                {canDeleteUsers && (
-                                                    <Button variant="destructive" size="sm" onClick={() => confirmAndDelete(user)}>
-                                                        削除
-                                                    </Button>
-                                                )}
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     )}
@@ -317,13 +337,13 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {users.map((user) => (
-                                        <>
+                                    {users.map((user: any) => (
+                                        <Fragment key={`user-${user.id}`}>
                                             <TableRow key={user.id} className="cursor-pointer hover:bg-gray-50" onClick={() => toggleExpand(user.id)}>
                                                 <TableCell>{user.id}</TableCell>
                                                 <TableCell>
                                                     <div className="flex w-full items-center gap-3">
-                                                        <div className="flex items-center gap-3">
+                                                        <div className={`flex items-center gap-3`}>
                                                             <span
                                                                 className={`${user.gender === 'male' ? 'text-blue-600' : user.gender === 'female' ? 'text-red-600' : ''}`}
                                                             >
@@ -378,60 +398,85 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                             {expandedIds.includes(user.id) && (
                                                 <TableRow key={`expanded-${user.id}`}>
                                                     <TableCell colSpan={6} className="bg-gray-50">
-                                                        <div className="grid grid-cols-1 gap-2 p-3 text-sm text-muted-foreground md:grid-cols-2">
-                                                            <div>
-                                                                採用条件:{' '}
-                                                                {user.employment_condition === 'dormitory'
-                                                                    ? '寮'
-                                                                    : user.employment_condition === 'commute'
-                                                                      ? '通勤'
-                                                                      : '—'}
-                                                            </div>
-                                                            <div>通勤方法: {user.commute_method || '—'}</div>
-                                                            <div>
-                                                                基本出勤時間: {formatTime(user.default_start_time)} 〜{' '}
-                                                                {formatTime(user.default_end_time)}
-                                                            </div>
-                                                            <div>
-                                                                週休希望日数:{' '}
-                                                                {user.preferred_week_days_count != null ? `${user.preferred_week_days_count}日` : '—'}
-                                                            </div>
-                                                            <div>
-                                                                固定休希望:{' '}
-                                                                {(Array.isArray(user.preferred_week_days)
-                                                                    ? user.preferred_week_days
-                                                                    : user.preferred_week_days
-                                                                      ? JSON.parse(user.preferred_week_days)
-                                                                      : []
-                                                                )
-                                                                    .map(
-                                                                        (d: string) =>
-                                                                            ({
-                                                                                Mon: '月',
-                                                                                Tue: '火',
-                                                                                Wed: '水',
-                                                                                Thu: '木',
-                                                                                Fri: '金',
-                                                                                Sat: '土',
-                                                                                Sun: '日',
-                                                                            })[d] || d,
-                                                                    )
-                                                                    .join(' ') || '—'}
-                                                            </div>
-                                                            <div>勤務期間: {user.employment_period || '—'}</div>
-                                                            <div className="col-span-2">
-                                                                <div>勤務備考:</div>
-                                                                <div className="whitespace-pre-line">{user.employment_notes || '—'}</div>
-                                                            </div>
-                                                            <div className="col-span-2">
-                                                                <div>メモ:</div>
-                                                                <div className="whitespace-pre-line">{user.memo || '—'}</div>
+                                                        <div className="p-3 text-sm text-muted-foreground">
+                                                            <div className="grid gap-2">
+                                                                <div className="flex">
+                                                                    <div className="w-36 text-sm text-muted-foreground">採用条件</div>
+                                                                    <div className="flex-1">
+                                                                        {user.employment_condition === 'dormitory'
+                                                                            ? '寮'
+                                                                            : user.employment_condition === 'commute'
+                                                                              ? '通勤'
+                                                                              : '—'}
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="flex">
+                                                                    <div className="w-36 text-sm text-muted-foreground">通勤方法</div>
+                                                                    <div className="flex-1">{user.commute_method || '—'}</div>
+                                                                </div>
+
+                                                                <div className="flex">
+                                                                    <div className="w-36 text-sm text-muted-foreground">基本出勤時間</div>
+                                                                    <div className="flex-1">
+                                                                        {formatTime(user.default_start_time)} 〜 {formatTime(user.default_end_time)}
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="flex">
+                                                                    <div className="w-36 text-sm text-muted-foreground">週休希望日数</div>
+                                                                    <div className="flex-1">
+                                                                        {user.preferred_week_days_count != null
+                                                                            ? `${user.preferred_week_days_count}日`
+                                                                            : '—'}
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="flex">
+                                                                    <div className="w-36 text-sm text-muted-foreground">固定休希望</div>
+                                                                    <div className="flex-1">
+                                                                        {(Array.isArray(user.preferred_week_days)
+                                                                            ? user.preferred_week_days
+                                                                            : user.preferred_week_days
+                                                                              ? JSON.parse(user.preferred_week_days)
+                                                                              : []
+                                                                        )
+                                                                            .map(
+                                                                                (d: string) =>
+                                                                                    ({
+                                                                                        Mon: '月',
+                                                                                        Tue: '火',
+                                                                                        Wed: '水',
+                                                                                        Thu: '木',
+                                                                                        Fri: '金',
+                                                                                        Sat: '土',
+                                                                                        Sun: '日',
+                                                                                    })[d] || d,
+                                                                            )
+                                                                            .join(' ') || '—'}
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="flex">
+                                                                    <div className="w-36 text-sm text-muted-foreground">勤務期間</div>
+                                                                    <div className="flex-1">{user.employment_period || '—'}</div>
+                                                                </div>
+
+                                                                <div className="flex">
+                                                                    <div className="w-36 text-sm text-muted-foreground">勤務備考</div>
+                                                                    <div className="flex-1 whitespace-pre-line">{user.employment_notes || '—'}</div>
+                                                                </div>
+
+                                                                <div className="flex">
+                                                                    <div className="w-36 text-sm text-muted-foreground">メモ</div>
+                                                                    <div className="flex-1 whitespace-pre-line">{user.memo || '—'}</div>
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     </TableCell>
                                                 </TableRow>
                                             )}
-                                        </>
+                                        </Fragment>
                                     ))}
                                 </TableBody>
                             </Table>

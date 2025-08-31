@@ -308,7 +308,6 @@ export default function DamagedIndexPage() {
 
         useEffect(() => {
             if (!stats) return;
-            const statsJson = JSON.stringify(stats);
             // re-init when stats changes
             const mo: Record<string, boolean> = {};
             const co: Record<string, Record<string, boolean>> = {};
@@ -1202,143 +1201,159 @@ export default function DamagedIndexPage() {
                                                     </div>
 
                                                     {expandedId === it.id && (
-                                                        <div className="mt-3 text-sm text-gray-700">
-                                                            <div className="mb-2">
-                                                                <span className="text-gray-600">破損状態: </span>
-                                                                {it.damage_condition?.condition || '—'}
-                                                            </div>
-                                                            <div className="mb-2">
-                                                                <span className="text-gray-600">破損個所: </span>
-                                                                {it.damaged_area || '—'}
-                                                            </div>
+                                                        <div className="mt-3 text-sm text-muted-foreground">
+                                                            <div className="grid gap-2">
+                                                                <div className="flex">
+                                                                    <div className="w-36 text-sm text-muted-foreground">破損状態</div>
+                                                                    <div className="flex-1">{it.damage_condition?.condition || '—'}</div>
+                                                                </div>
+                                                                <div className="flex">
+                                                                    <div className="w-36 text-sm text-muted-foreground">破損個所</div>
+                                                                    <div className="flex-1">{it.damaged_area || '—'}</div>
+                                                                </div>
 
-                                                            <div className="mb-2">
-                                                                <span className="text-gray-600">顧客名: </span>
-                                                                {it.customer_name || '—'}
-                                                            </div>
+                                                                <div className="flex">
+                                                                    <div className="w-36 text-sm text-muted-foreground">顧客名</div>
+                                                                    <div className="flex-1">{it.customer_name || '—'}</div>
+                                                                </div>
 
-                                                            <div className="mb-2">
-                                                                <span className="text-gray-600">顧客電話番号: </span>
-                                                                {it.customer_phone || '—'}
-                                                            </div>
+                                                                <div className="flex">
+                                                                    <div className="w-36 text-sm text-muted-foreground">顧客電話番号</div>
+                                                                    <div className="flex-1">{it.customer_phone || '—'}</div>
+                                                                </div>
 
-                                                            <div className="mb-2">
-                                                                <span className="text-gray-600">弁済金額: </span>
-                                                                {it.compensation_amount || it.compensation_amount === 0
-                                                                    ? `¥${new Intl.NumberFormat('ja-JP').format(Number(it.compensation_amount))}`
-                                                                    : '—'}
-                                                            </div>
-
-                                                            <div className="mb-2">
-                                                                <span className="text-gray-600">支払い方法: </span>
-                                                                {it.payment_method === 'cash'
-                                                                    ? '現金'
-                                                                    : it.payment_method === 'card'
-                                                                      ? 'クレジットカード'
-                                                                      : it.payment_method === 'paypay'
-                                                                        ? 'PayPay'
-                                                                        : '—'}
-                                                            </div>
-
-                                                            <div className="mb-2">
-                                                                <span className="text-gray-600">レシート番号: </span>
-                                                                {it.receipt_number || '—'}
-                                                            </div>
-
-                                                            <div className="mb-2">
-                                                                <span className="text-gray-600">メモ: </span>
-                                                                <div className="whitespace-pre-wrap">{it.memo || '—'}</div>
-                                                            </div>
-
-                                                            <div className="mt-3">
-                                                                <div className="text-sm text-gray-600">顧客身分証</div>
-                                                                {it.customer_id_image_path ? (
-                                                                    <div className="mt-2 flex items-center gap-3">
-                                                                        <img
-                                                                            src={`/storage/${it.customer_id_image_path}`}
-                                                                            alt="customer-id"
-                                                                            className="h-24 w-24 cursor-pointer rounded object-cover"
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                const imgs = [`/storage/${it.customer_id_image_path}`];
-                                                                                setListModalImages(imgs);
-                                                                                setListModalStartIndex(0);
-                                                                                setListModalOpen(true);
-                                                                            }}
-                                                                        />
+                                                                <div className="flex">
+                                                                    <div className="w-36 text-sm text-muted-foreground">弁済金額</div>
+                                                                    <div className="flex-1">
+                                                                        {it.compensation_amount || it.compensation_amount === 0
+                                                                            ? `¥${new Intl.NumberFormat('ja-JP').format(Number(it.compensation_amount))}`
+                                                                            : '—'}
                                                                     </div>
-                                                                ) : (
-                                                                    <div className="text-sm">—</div>
-                                                                )}
-                                                            </div>
+                                                                </div>
 
-                                                            <div className="mt-3">
-                                                                <div className="text-sm text-gray-600">レシート</div>
-                                                                {it.receipt_image_path ? (
-                                                                    <div className="mt-2 flex items-center gap-3">
-                                                                        <img
-                                                                            src={`/storage/${it.receipt_image_path}`}
-                                                                            alt="receipt"
-                                                                            className="h-24 w-24 cursor-pointer rounded object-cover"
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                const imgs = [
-                                                                                    ...(it.customer_id_image_path
-                                                                                        ? [`/storage/${it.customer_id_image_path}`]
-                                                                                        : []),
-                                                                                    `/storage/${it.receipt_image_path}`,
-                                                                                    ...(it.attachments || [])
-                                                                                        .filter((a: Att) => a && a.file_path)
-                                                                                        .map((a: Att) => `/storage/${a.file_path}`),
-                                                                                ];
-                                                                                setListModalImages(imgs);
-                                                                                setListModalStartIndex(it.customer_id_image_path ? 0 : 0);
-                                                                                setListModalOpen(true);
-                                                                            }}
-                                                                        />
+                                                                <div className="flex">
+                                                                    <div className="w-36 text-sm text-muted-foreground">支払い方法</div>
+                                                                    <div className="flex-1">
+                                                                        {it.payment_method === 'cash'
+                                                                            ? '現金'
+                                                                            : it.payment_method === 'card'
+                                                                              ? 'クレジットカード'
+                                                                              : it.payment_method === 'paypay'
+                                                                                ? 'PayPay'
+                                                                                : '—'}
                                                                     </div>
-                                                                ) : (
-                                                                    <div className="text-sm">—</div>
-                                                                )}
-                                                            </div>
+                                                                </div>
 
-                                                            <div className="mt-3">
-                                                                <div className="text-sm text-gray-600">破損個所（写真）</div>
-                                                                <div className="mt-2 flex flex-wrap items-start gap-3">
-                                                                    {(() => {
-                                                                        const valid = (it.attachments || []).filter((a: Att) => a && a.file_path);
-                                                                        if (valid.length === 0) return <div className="text-sm">—</div>;
-                                                                        return valid.map((a: Att, idx: number) => {
-                                                                            const url = `/storage/${a.file_path}`;
-                                                                            return (
-                                                                                <div
-                                                                                    key={`m-att-${it.id}-${idx}`}
-                                                                                    className="relative h-20 w-20 overflow-hidden rounded bg-gray-50"
-                                                                                >
-                                                                                    <img
-                                                                                        src={url}
-                                                                                        alt={`att-${idx}`}
-                                                                                        className="h-full w-full cursor-pointer object-cover"
-                                                                                        onClick={(e) => {
-                                                                                            e.stopPropagation();
-                                                                                            const imgs = valid.map(
-                                                                                                (x: Att) => `/storage/${x.file_path}`,
-                                                                                            );
-                                                                                            const allImgs = (
-                                                                                                it.customer_id_image_path
-                                                                                                    ? [`/storage/${it.customer_id_image_path}`]
-                                                                                                    : []
-                                                                                            ).concat(imgs);
-                                                                                            const start = allImgs.indexOf(url);
-                                                                                            setListModalImages(allImgs);
-                                                                                            setListModalStartIndex(start >= 0 ? start : 0);
-                                                                                            setListModalOpen(true);
-                                                                                        }}
-                                                                                    />
-                                                                                </div>
-                                                                            );
-                                                                        });
-                                                                    })()}
+                                                                <div className="flex">
+                                                                    <div className="w-36 text-sm text-muted-foreground">レシート番号</div>
+                                                                    <div className="flex-1">{it.receipt_number || '—'}</div>
+                                                                </div>
+
+                                                                <div className="flex">
+                                                                    <div className="w-36 text-sm text-muted-foreground">メモ</div>
+                                                                    <div className="flex-1 whitespace-pre-line">{it.memo || '—'}</div>
+                                                                </div>
+
+                                                                <div className="flex">
+                                                                    <div className="w-36 text-sm text-muted-foreground">顧客身分証</div>
+                                                                    <div className="flex-1">
+                                                                        {it.customer_id_image_path ? (
+                                                                            <div className="mt-2 flex items-center gap-3">
+                                                                                <img
+                                                                                    src={`/storage/${it.customer_id_image_path}`}
+                                                                                    alt="customer-id"
+                                                                                    className="h-24 w-24 cursor-pointer rounded object-cover"
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        const imgs = [`/storage/${it.customer_id_image_path}`];
+                                                                                        setListModalImages(imgs);
+                                                                                        setListModalStartIndex(0);
+                                                                                        setListModalOpen(true);
+                                                                                    }}
+                                                                                />
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="text-sm">—</div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="flex">
+                                                                    <div className="w-36 text-sm text-muted-foreground">レシート</div>
+                                                                    <div className="flex-1">
+                                                                        {it.receipt_image_path ? (
+                                                                            <div className="mt-2 flex items-center gap-3">
+                                                                                <img
+                                                                                    src={`/storage/${it.receipt_image_path}`}
+                                                                                    alt="receipt"
+                                                                                    className="h-24 w-24 cursor-pointer rounded object-cover"
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        const imgs = [
+                                                                                            ...(it.customer_id_image_path
+                                                                                                ? [`/storage/${it.customer_id_image_path}`]
+                                                                                                : []),
+                                                                                            `/storage/${it.receipt_image_path}`,
+                                                                                            ...(it.attachments || [])
+                                                                                                .filter((a: Att) => a && a.file_path)
+                                                                                                .map((a: Att) => `/storage/${a.file_path}`),
+                                                                                        ];
+                                                                                        setListModalImages(imgs);
+                                                                                        setListModalStartIndex(it.customer_id_image_path ? 0 : 0);
+                                                                                        setListModalOpen(true);
+                                                                                    }}
+                                                                                />
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="text-sm">—</div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="flex">
+                                                                    <div className="w-36 text-sm text-muted-foreground">破損個所（写真）</div>
+                                                                    <div className="flex-1">
+                                                                        <div className="mt-2 flex flex-wrap items-start gap-3">
+                                                                            {(() => {
+                                                                                const valid = (it.attachments || []).filter(
+                                                                                    (a: Att) => a && a.file_path,
+                                                                                );
+                                                                                if (valid.length === 0) return <div className="text-sm">—</div>;
+                                                                                return valid.map((a: Att, idx: number) => {
+                                                                                    const url = `/storage/${a.file_path}`;
+                                                                                    return (
+                                                                                        <div
+                                                                                            key={`m-att-${it.id}-${idx}`}
+                                                                                            className="relative h-20 w-20 overflow-hidden rounded bg-gray-50"
+                                                                                        >
+                                                                                            <img
+                                                                                                src={url}
+                                                                                                alt={`att-${idx}`}
+                                                                                                className="h-full w-full cursor-pointer object-cover"
+                                                                                                onClick={(e) => {
+                                                                                                    e.stopPropagation();
+                                                                                                    const imgs = valid.map(
+                                                                                                        (x: Att) => `/storage/${x.file_path}`,
+                                                                                                    );
+                                                                                                    const allImgs = (
+                                                                                                        it.customer_id_image_path
+                                                                                                            ? [
+                                                                                                                  `/storage/${it.customer_id_image_path}`,
+                                                                                                              ]
+                                                                                                            : []
+                                                                                                    ).concat(imgs);
+                                                                                                    const start = allImgs.indexOf(url);
+                                                                                                    setListModalImages(allImgs);
+                                                                                                    setListModalStartIndex(start >= 0 ? start : 0);
+                                                                                                    setListModalOpen(true);
+                                                                                                }}
+                                                                                            />
+                                                                                        </div>
+                                                                                    );
+                                                                                });
+                                                                            })()}
+                                                                        </div>
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                         </div>
