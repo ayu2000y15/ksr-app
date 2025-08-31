@@ -47,6 +47,8 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
     Route::get('/users', [UserController::class, 'index'])->name('users.index');
     Route::get('/users/create', [UserController::class, 'create'])->name('users.create');
     Route::post('/users', [UserController::class, 'store'])->name('users.store');
+    // ユーザー詳細ページ（モーダルではなく別ページ）
+    Route::get('/users/{user}', [UserController::class, 'show'])->name('users.show');
     // 作成後に表示する認証情報ページ
     Route::get('/users/credentials', [UserController::class, 'credentials'])->name('users.credentials');
     // POST route for sending temporary credentials via email (used by frontend fetch)

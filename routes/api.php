@@ -55,6 +55,62 @@ Route::middleware(['web', 'auth'])->group(function () {
         return User::with('roles')->where('status', 'active')->orderBy('id')->get();
     });
 
+    // ユーザー詳細（入寮している物件情報を含む）
+    Route::get('/users/{id}/details', function (\Illuminate\Http\Request $request, $id) {
+        $user = User::find($id);
+        if (! $user) {
+            return response()->json(['message' => 'ユーザーが見つかりません'], 404);
+        }
+
+        // Gather properties that have room_occupancies referencing this user id in user_ids JSON column
+        $matches = [];
+        $properties = \App\Models\Property::with('roomOccupancies')->orderBy('order_column')->orderBy('name')->get();
+        foreach ($properties as $p) {
+            $relevantOccs = [];
+            foreach ($p->roomOccupancies as $occ) {
+                if (!empty($occ->user_ids) && is_array($occ->user_ids) && in_array((int)$id, array_map('intval', $occ->user_ids))) {
+                    $relevantOccs[] = $occ->toArray();
+                }
+            }
+            if (count($relevantOccs) > 0) {
+                $agent = null;
+                if (!empty($p->real_estate_agent_id)) {
+                    $agent = \App\Models\RealEstateAgent::find($p->real_estate_agent_id);
+                }
+                $matches[] = [
+                    'property' => [
+                        'id' => $p->id,
+                        'name' => $p->name,
+                        'postcode' => $p->postal_code ?? null,
+                        'address' => $p->address ?? null,
+                        'has_parking' => $p->has_parking ?? null,
+                        'real_estate_agent' => $agent ? ['id' => $agent->id, 'name' => $agent->name] : null,
+                    ],
+                    'occupancies' => array_map(function ($o) {
+                        return $o;
+                    }, $relevantOccs),
+                ];
+            }
+        }
+
+        return response()->json([
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'employment_condition' => $user->employment_condition,
+                'commute_method' => $user->commute_method,
+                'default_start_time' => $user->default_start_time,
+                'default_end_time' => $user->default_end_time,
+                'preferred_week_days' => $user->preferred_week_days,
+                'preferred_week_days_count' => $user->preferred_week_days_count,
+                'employment_period' => $user->employment_period,
+                'employment_notes' => $user->employment_notes,
+                'memo' => $user->memo,
+            ],
+            'properties' => $matches,
+        ], 200);
+    });
+
     // アプリ内のアクティブユーザー一覧（入寮・退寮フォーム用）
     Route::get('/active-users', function () {
         // try status == 'active' first, fallback to all users

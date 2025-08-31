@@ -19,6 +19,14 @@ export default function Create() {
         phone_number: '',
         line_name: '',
         memo: '',
+        employment_condition: '',
+        commute_method: '',
+        default_start_time: '',
+        default_end_time: '',
+        preferred_week_days: [] as string[],
+        preferred_week_days_count: '',
+        employment_period: '',
+        employment_notes: '',
     });
 
     const submit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -40,7 +48,7 @@ export default function Create() {
             <Head title="ユーザー新規作成" />
 
             <div className="py-12">
-                <div className="mx-auto max-w-2xl sm:px-6 lg:px-8">
+                <div className="mx-auto max-w-4xl sm:px-6 lg:px-8">
                     <form onSubmit={submit}>
                         <Card>
                             <CardHeader>
@@ -179,7 +187,124 @@ export default function Create() {
                                 </div>
 
                                 <div>
-                                    <Label htmlFor="memo">メモ</Label>
+                                    <Label>採用条件</Label>
+                                    <div className="mt-2 flex items-center gap-6">
+                                        <label className="flex items-center gap-2">
+                                            <input
+                                                type="radio"
+                                                name="employment_condition"
+                                                value="dormitory"
+                                                checked={data.employment_condition === 'dormitory'}
+                                                onChange={() => setData('employment_condition', 'dormitory')}
+                                            />
+                                            <span>寮</span>
+                                        </label>
+                                        <label className="flex items-center gap-2">
+                                            <input
+                                                type="radio"
+                                                name="employment_condition"
+                                                value="commute"
+                                                checked={data.employment_condition === 'commute'}
+                                                onChange={() => setData('employment_condition', 'commute')}
+                                            />
+                                            <span>通勤</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <Label htmlFor="commute_method">通勤方法</Label>
+                                    <Input
+                                        id="commute_method"
+                                        value={data.commute_method}
+                                        onChange={(e) => setData('commute_method', e.target.value)}
+                                    />
+                                </div>
+
+                                <div className="flex gap-4">
+                                    <div>
+                                        <Label htmlFor="default_start_time">基本出勤開始時間</Label>
+                                        <Input
+                                            id="default_start_time"
+                                            type="time"
+                                            value={data.default_start_time}
+                                            onChange={(e) => setData('default_start_time', e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label htmlFor="default_end_time">基本出勤終了時間</Label>
+                                        <Input
+                                            id="default_end_time"
+                                            type="time"
+                                            value={data.default_end_time}
+                                            onChange={(e) => setData('default_end_time', e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <Label htmlFor="preferred_week_days_count">週休希望日数</Label>
+                                    <Input
+                                        id="preferred_week_days_count"
+                                        type="number"
+                                        value={data.preferred_week_days_count}
+                                        onChange={(e) => setData('preferred_week_days_count', e.target.value)}
+                                    />
+                                </div>
+
+                                <div>
+                                    <Label>固定休希望（あれば）</Label>
+                                    <div className="mt-2 grid grid-cols-4 gap-2">
+                                        {[
+                                            { value: 'Mon', label: '月' },
+                                            { value: 'Tue', label: '火' },
+                                            { value: 'Wed', label: '水' },
+                                            { value: 'Thu', label: '木' },
+                                            { value: 'Fri', label: '金' },
+                                            { value: 'Sat', label: '土' },
+                                            { value: 'Sun', label: '日' },
+                                        ].map((d) => (
+                                            <label key={d.value} className="flex items-center gap-2">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={Array.isArray(data.preferred_week_days) && data.preferred_week_days.includes(d.value)}
+                                                    onChange={(e) => {
+                                                        const arr = Array.isArray(data.preferred_week_days) ? [...data.preferred_week_days] : [];
+                                                        if (e.currentTarget.checked) arr.push(d.value);
+                                                        else {
+                                                            const idx = arr.indexOf(d.value);
+                                                            if (idx >= 0) arr.splice(idx, 1);
+                                                        }
+                                                        setData('preferred_week_days', arr);
+                                                    }}
+                                                />
+                                                <span className="text-xs">{d.label}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <Label htmlFor="employment_period">勤務期間</Label>
+                                    <Input
+                                        id="employment_period"
+                                        value={data.employment_period}
+                                        onChange={(e) => setData('employment_period', e.target.value)}
+                                    />
+                                </div>
+
+                                <div>
+                                    <Label htmlFor="employment_notes">勤務備考欄</Label>
+                                    <Textarea
+                                        id="employment_notes"
+                                        rows={3}
+                                        value={data.employment_notes}
+                                        onChange={(e) => setData('employment_notes', e.target.value)}
+                                    />
+                                </div>
+
+                                <div>
+                                    <Label htmlFor="memo">その他メモ</Label>
                                     <Textarea id="memo" value={data.memo} onChange={(e) => setData('memo', e.target.value)} />
                                     <InputError message={errors.memo} className="mt-2" />
                                 </div>

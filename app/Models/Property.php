@@ -28,4 +28,9 @@ class Property extends Model
     {
         return $this->hasMany(\App\Models\RoomOccupancy::class);
     }
+
+    public function realEstateAgent()
+    {
+        return $this->belongsTo(\App\Models\RealEstateAgent::class, 'real_estate_agent_id');
+    }
 }

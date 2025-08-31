@@ -519,7 +519,13 @@ export default function MonthEditor({
                                     <div key={`user-${u.id}`} className="flex h-12 items-center border-b bg-white p-2" style={{ maxWidth: '12rem' }}>
                                         <span className="truncate text-sm">
                                             <span className="mr-2 inline-block w-8 text-right font-mono text-sm">{u.id}</span>
-                                            <span className="truncate">{u.name} </span>
+                                            <Link
+                                                href={route('users.show', { user: u.id })}
+                                                className="truncate text-sm text-blue-600 hover:underline"
+                                                title={`ユーザー詳細: ${u.name}`}
+                                            >
+                                                {u.name}
+                                            </Link>
                                             <span className="ml-2 text-xs text-muted-foreground">({String(getAttendanceCount(u))})</span>
                                         </span>
                                     </div>

@@ -7,8 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import Toast from '@/components/ui/toast';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
-import { User } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
+import type { FormEvent } from 'react';
 import { useEffect, useState } from 'react';
 
 // パンくずリスト
@@ -18,9 +18,9 @@ const breadcrumbs = [
 ];
 
 export default function EditUserPage() {
-    const pageProps: any = usePage().props;
+    const pageProps = usePage().props as unknown as { flash?: any; user: any; credentials?: any };
     const flash = pageProps.flash || null;
-    const user: User = pageProps.user;
+    const user: any = pageProps.user;
     const credentials = pageProps.credentials || (flash && flash.credentials) || null;
 
     const { data, setData, post, patch, processing, errors } = useForm({
@@ -32,17 +32,28 @@ export default function EditUserPage() {
         phone_number: user.phone_number || '',
         line_name: user.line_name || '',
         memo: user.memo || '',
+        employment_condition: user.employment_condition || '',
+        commute_method: user.commute_method || '',
+        default_start_time: user.default_start_time || '',
+        default_end_time: user.default_end_time || '',
+        preferred_week_days: Array.isArray(user.preferred_week_days)
+            ? user.preferred_week_days
+            : user.preferred_week_days
+              ? JSON.parse(user.preferred_week_days)
+              : [],
+        preferred_week_days_count: user.preferred_week_days_count ?? '',
+        employment_period: user.employment_period || '',
+        employment_notes: user.employment_notes || '',
     });
 
-    const submit = (e: any) => {
+    const submit = (e: FormEvent) => {
         e.preventDefault();
         // users.update route expects PATCH
         if (typeof patch === 'function') {
             patch(route('users.update', user.id));
-        } else {
-            // fallback to post with method override by including _method in payload
-            // cast to any to satisfy useForm typings
-            post(route('users.update', user.id), { data: { ...data, _method: 'PATCH' } } as any);
+        } else if (typeof post === 'function') {
+            // fallback: use post with method override
+            post(route('users.update', user.id), { _method: 'PATCH', ...data });
         }
     };
 
@@ -167,12 +178,12 @@ export default function EditUserPage() {
             <Head title="ユーザー編集" />
 
             <div className="py-12">
-                <div className="mx-auto max-w-2xl sm:px-6 lg:px-8">
+                <div className="mx-auto max-w-4xl sm:px-6 lg:px-8">
                     {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
                     <form onSubmit={submit}>
                         <Card>
                             <CardHeader>
-                                <CardTitle>ユーザー情報を編集してください</CardTitle>
+                                <CardTitle>ユーザー情報編集</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-6">
                                 <div>
@@ -307,7 +318,125 @@ export default function EditUserPage() {
                                 </div>
 
                                 <div>
-                                    <Label htmlFor="memo">メモ</Label>
+                                    <Label>採用条件</Label>
+                                    <div className="mt-2 flex items-center gap-6">
+                                        <label className="flex items-center gap-2">
+                                            <input
+                                                type="radio"
+                                                name="employment_condition"
+                                                value="dormitory"
+                                                checked={data.employment_condition === 'dormitory'}
+                                                onChange={() => setData('employment_condition', 'dormitory')}
+                                            />
+                                            <span>寮</span>
+                                        </label>
+                                        <label className="flex items-center gap-2">
+                                            <input
+                                                type="radio"
+                                                name="employment_condition"
+                                                value="commute"
+                                                checked={data.employment_condition === 'commute'}
+                                                onChange={() => setData('employment_condition', 'commute')}
+                                            />
+                                            <span>通勤</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <Label htmlFor="commute_method">通勤方法</Label>
+                                    <Input
+                                        id="commute_method"
+                                        value={data.commute_method}
+                                        onChange={(e) => setData('commute_method', e.target.value)}
+                                    />
+                                </div>
+
+                                <div className="flex gap-4">
+                                    <div>
+                                        <Label htmlFor="default_start_time">基本出勤開始時間</Label>
+                                        <Input
+                                            id="default_start_time"
+                                            type="time"
+                                            value={data.default_start_time}
+                                            onChange={(e) => setData('default_start_time', e.target.value)}
+                                        />
+                                    </div>
+                                    ~
+                                    <div>
+                                        <Label htmlFor="default_end_time">基本出勤終了時間</Label>
+                                        <Input
+                                            id="default_end_time"
+                                            type="time"
+                                            value={data.default_end_time}
+                                            onChange={(e) => setData('default_end_time', e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <Label htmlFor="preferred_week_days_count">週休希望日数</Label>
+                                    <Input
+                                        id="preferred_week_days_count"
+                                        type="number"
+                                        value={data.preferred_week_days_count}
+                                        onChange={(e) => setData('preferred_week_days_count', e.target.value)}
+                                    />
+                                </div>
+
+                                <div>
+                                    <Label>固定休希望（あれば）</Label>
+                                    <div className="mt-2 grid grid-cols-4 gap-2">
+                                        {[
+                                            { value: 'Mon', label: '月' },
+                                            { value: 'Tue', label: '火' },
+                                            { value: 'Wed', label: '水' },
+                                            { value: 'Thu', label: '木' },
+                                            { value: 'Fri', label: '金' },
+                                            { value: 'Sat', label: '土' },
+                                            { value: 'Sun', label: '日' },
+                                        ].map((d) => (
+                                            <label key={d.value} className="flex items-center gap-2">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={Array.isArray(data.preferred_week_days) && data.preferred_week_days.includes(d.value)}
+                                                    onChange={(e) => {
+                                                        const arr = Array.isArray(data.preferred_week_days) ? [...data.preferred_week_days] : [];
+                                                        if (e.currentTarget.checked) arr.push(d.value);
+                                                        else {
+                                                            const idx = arr.indexOf(d.value);
+                                                            if (idx >= 0) arr.splice(idx, 1);
+                                                        }
+                                                        setData('preferred_week_days', arr);
+                                                    }}
+                                                />
+                                                <span className="text-xs">{d.label}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <Label htmlFor="employment_period">勤務期間</Label>
+                                    <Input
+                                        id="employment_period"
+                                        value={data.employment_period}
+                                        onChange={(e) => setData('employment_period', e.target.value)}
+                                    />
+                                </div>
+
+                                <div>
+                                    <Label htmlFor="employment_notes">勤務備考欄</Label>
+                                    <Textarea
+                                        id="employment_notes"
+                                        rows={3}
+                                        value={data.employment_notes}
+                                        onChange={(e) => setData('employment_notes', e.target.value)}
+                                    />
+                                </div>
+
+                                <div>
+                                    <Label htmlFor="memo">その他メモ</Label>
                                     <Textarea id="memo" value={data.memo} onChange={(e) => setData('memo', e.target.value)} />
                                     <InputError message={errors.memo} className="mt-2" />
                                 </div>

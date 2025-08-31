@@ -29,6 +29,14 @@ class User extends Authenticatable
         'status',
         'memo',
         'must_change_password',
+        'employment_condition',
+        'commute_method',
+        'default_start_time',
+        'default_end_time',
+        'preferred_week_days',
+        'employment_period',
+        'employment_notes',
+        'preferred_week_days_count',
     ];
 
     /**
@@ -46,16 +54,15 @@ class User extends Authenticatable
      *
      * @return array<string, string>
      */
-    protected function casts(): array
-    {
-        return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
-            'temporary_password_expires_at' => 'datetime',
-            'must_change_password' => 'boolean',
-            'has_car' => 'boolean',
-        ];
-    }
+    protected $casts = [
+        'email_verified_at' => 'datetime',
+        'password' => 'hashed',
+        'temporary_password_expires_at' => 'datetime',
+        'must_change_password' => 'boolean',
+        'has_car' => 'boolean',
+        'preferred_week_days' => 'array',
+        'preferred_week_days_count' => 'int',
+    ];
 
 
     /**

@@ -184,6 +184,96 @@ class UserController extends Controller
     }
 
     /**
+     * ユーザー詳細ページ（Inertia）を表示します。
+     */
+    public function show(User $user)
+    {
+        if (Auth::user()->hasRole('システム管理者')) {
+            // bypass
+        } else {
+            $this->authorize('view', $user);
+        }
+
+        // Build properties array similar to existing API endpoint
+        $properties = [];
+        $allProps = \App\Models\Property::with(['roomOccupancies', 'realEstateAgent'])->get();
+        foreach ($allProps as $p) {
+            $matched = [];
+            foreach ($p->roomOccupancies as $occ) {
+                $uids = [];
+                if (is_array($occ->user_ids)) {
+                    $uids = $occ->user_ids;
+                } elseif ($occ->user_ids) {
+                    try {
+                        $uids = json_decode($occ->user_ids, true) ?: [];
+                    } catch (\Throwable $e) {
+                        $uids = [];
+                    }
+                }
+                if (!empty($uids) && in_array(intval($user->id), array_map('intval', $uids), true)) {
+                    $matched[] = $occ;
+                }
+            }
+            if (count($matched) > 0) {
+                // Build occupancy arrays with cohabitants (other users in the same occupancy)
+                $occupancyRows = [];
+                foreach ($matched as $occ) {
+                    $uids = [];
+                    if (is_array($occ->user_ids)) {
+                        $uids = $occ->user_ids;
+                    } elseif ($occ->user_ids) {
+                        try {
+                            $uids = json_decode($occ->user_ids, true) ?: [];
+                        } catch (\Throwable $e) {
+                            $uids = [];
+                        }
+                    }
+                    // Find cohabitants excluding the current user
+                    $cohabitantUsers = [];
+                    if (!empty($uids)) {
+                        $ids = array_map('intval', $uids);
+                        // fetch users except the current user
+                        $cohabitants = \App\Models\User::whereIn('id', $ids)->where('id', '!=', intval($user->id))->get(['id', 'name', 'has_car']);
+                        foreach ($cohabitants as $c) {
+                            $cohabitantUsers[] = ['id' => $c->id, 'name' => $c->name, 'has_car' => (bool)($c->has_car ?? false)];
+                        }
+                    }
+
+                    $occupancyRows[] = [
+                        'id' => $occ->id,
+                        'move_in_date' => $occ->move_in_date ?? null,
+                        'move_out_date' => $occ->move_out_date ?? null,
+                        'checkout_user_id' => $occ->checkout_user_id ?? null,
+                        'user_ids' => $uids,
+                        'cohabitants' => $cohabitantUsers,
+                    ];
+                }
+
+                $prop = [
+                    'property' => [
+                        'id' => $p->id,
+                        'name' => $p->name,
+                        'postcode' => $p->postal_code ?? null,
+                        'address' => $p->address ?? null,
+                        'has_parking' => $p->has_parking ?? false,
+                    ],
+                    'occupancies' => $occupancyRows,
+                ];
+                if ($p->real_estate_agent_id) {
+                    $agent = $p->realEstateAgent ? ['id' => $p->realEstateAgent->id, 'name' => $p->realEstateAgent->name] : null;
+                    $prop['property']['real_estate_agent'] = $agent;
+                }
+                $properties[] = $prop;
+            }
+        }
+
+        return Inertia::render('users/show', [
+            'user' => $user,
+            'properties' => $properties,
+        ]);
+    }
+
+    /**
      * 新しいユーザーを作成し、保存します。
      */
     public function store(Request $request)
@@ -224,6 +314,16 @@ class UserController extends Controller
             'memo' => 'nullable|string',
             'gender' => 'required|in:male,female,other',
             'has_car' => 'required|boolean',
+            // new optional employment fields
+            'employment_condition' => 'nullable|in:dormitory,commute',
+            'commute_method' => 'nullable|string|max:255',
+            'default_start_time' => 'nullable|date_format:H:i',
+            'default_end_time' => 'nullable|date_format:H:i',
+            'preferred_week_days' => 'nullable|array',
+            'preferred_week_days.*' => 'in:Mon,Tue,Wed,Thu,Fri,Sat,Sun',
+            'preferred_week_days_count' => 'nullable|integer|min:0|max:7',
+            'employment_period' => 'nullable|string|max:255',
+            'employment_notes' => 'nullable|string',
         ], $messages);
 
         // 仮パスワードを生成
@@ -238,6 +338,15 @@ class UserController extends Controller
             'phone_number' => $request->phone_number,
             'line_name' => $request->line_name,
             'memo' => $request->memo,
+            // optional employment fields
+            'employment_condition' => $request->employment_condition,
+            'commute_method' => $request->commute_method,
+            'default_start_time' => $request->default_start_time,
+            'default_end_time' => $request->default_end_time,
+            'preferred_week_days' => $request->preferred_week_days ? json_encode($request->preferred_week_days) : null,
+            'preferred_week_days_count' => $request->preferred_week_days_count ? intval($request->preferred_week_days_count) : null,
+            'employment_period' => $request->employment_period,
+            'employment_notes' => $request->employment_notes,
             'password' => Hash::make($temporaryPassword),
             'must_change_password' => true,
         ]);
@@ -304,7 +413,36 @@ class UserController extends Controller
             'has_car' => 'required|boolean',
         ], $messages);
 
-        $user->update($request->only(['name', 'email', 'status', 'gender', 'has_car', 'phone_number', 'line_name', 'memo']));
+        $user->update($request->only([
+            'name',
+            'email',
+            'status',
+            'gender',
+            'has_car',
+            'phone_number',
+            'line_name',
+            'memo',
+            'employment_condition',
+            'commute_method',
+            'default_start_time',
+            'default_end_time',
+            'preferred_week_days',
+            'preferred_week_days_count',
+            'employment_period',
+            'employment_notes'
+        ]));
+
+        // Ensure preferred_week_days and preferred_week_days_count stored correctly
+        $dirty = false;
+        if ($request->has('preferred_week_days')) {
+            $user->preferred_week_days = $request->preferred_week_days ? json_encode($request->preferred_week_days) : null;
+            $dirty = true;
+        }
+        if ($request->has('preferred_week_days_count')) {
+            $user->preferred_week_days_count = $request->preferred_week_days_count !== null && $request->preferred_week_days_count !== '' ? intval($request->preferred_week_days_count) : null;
+            $dirty = true;
+        }
+        if ($dirty) $user->save();
 
         return Redirect::route('users.index')->with('success', 'ユーザー情報を更新しました。');
     }
