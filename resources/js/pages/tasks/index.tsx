@@ -296,36 +296,68 @@ export default function TasksIndexPage() {
         return `${month}/${day} ${hour}:${minute}`;
     };
 
-    const getDeadlineBadge = (raw?: string | null) => {
-        if (!raw) {
-            return <span className="inline-block rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700">終了日なし</span>;
-        }
-        const d = parseDbDate(raw);
-        if (!d) {
-            return <span className="inline-block rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700">終了日不明</span>;
-        }
+    // If endRaw is provided, compute relative to end; otherwise compute relative to startRaw.
+    // Color rules: remaining <= 24h -> yellow, remaining > 24h -> blue, passed -> red.
+    const getDeadlineBadge = (endRaw?: string | null, startRaw?: string | null) => {
         const now = new Date();
-        const diffMs = d.getTime() - now.getTime();
-        const abs = Math.abs(diffMs);
         const dayMs = 1000 * 60 * 60 * 24;
         const hourMs = 1000 * 60 * 60;
         const minuteMs = 1000 * 60;
 
-        if (diffMs > 0) {
+        const makeBadge = (text: string, tone: 'blue' | 'yellow' | 'red') => {
+            if (tone === 'blue') return <span className="inline-block rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-800">{text}</span>;
+            if (tone === 'yellow') return <span className="inline-block rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">{text}</span>;
+            return <span className="inline-block rounded bg-red-100 px-2 py-0.5 text-xs text-red-800">{text}</span>;
+        };
+
+        if (!endRaw) {
+            if (!startRaw) return <span className="inline-block rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700">終了日なし</span>;
+            const s = parseDbDate(startRaw);
+            if (!s) return <span className="inline-block rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700">終了日不明</span>;
+            const diffMs = s.getTime() - now.getTime();
+            if (diffMs <= 0) {
+                // passed
+                const abs = Math.abs(diffMs);
+                const daysPast = Math.floor(abs / dayMs);
+                if (daysPast >= 1) return makeBadge(`${daysPast}日前`, 'red');
+                const hoursPast = Math.floor(abs / hourMs);
+                if (hoursPast >= 1) return makeBadge(`${hoursPast}時間前`, 'red');
+                const minutesPast = Math.floor(abs / minuteMs);
+                return makeBadge(`${minutesPast}分前`, 'red');
+            }
+            // future or today
+            if (diffMs <= 24 * hourMs) {
+                // within 24 hours -> yellow
+                const hours = Math.floor(diffMs / hourMs);
+                if (hours >= 1) return makeBadge(`あと${hours}時間`, 'yellow');
+                const minutes = Math.floor(diffMs / minuteMs);
+                return makeBadge(`あと${minutes}分`, 'yellow');
+            }
+            // more than 24 hours -> blue, show days
             const days = Math.floor(diffMs / dayMs);
-            if (days >= 1) return <span className="inline-block rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-800">{`あと${days}日`}</span>;
-            const hours = Math.floor(diffMs / hourMs);
-            if (hours >= 1) return <span className="inline-block rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-800">{`あと${hours}時間`}</span>;
-            const minutes = Math.floor(diffMs / minuteMs);
-            return <span className="inline-block rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-800">{`あと${minutes}分`}</span>;
+            return makeBadge(`あと${days}日`, 'blue');
         }
 
-        const daysPast = Math.floor(abs / dayMs);
-        if (daysPast >= 1) return <span className="inline-block rounded bg-red-100 px-2 py-0.5 text-xs text-red-800">{`${daysPast}日前`}</span>;
-        const hoursPast = Math.floor(abs / hourMs);
-        if (hoursPast >= 1) return <span className="inline-block rounded bg-red-100 px-2 py-0.5 text-xs text-red-800">{`${hoursPast}時間前`}</span>;
-        const minutesPast = Math.floor(abs / minuteMs);
-        return <span className="inline-block rounded bg-red-100 px-2 py-0.5 text-xs text-red-800">{`${minutesPast}分前`}</span>;
+        const d = parseDbDate(endRaw);
+        if (!d) return <span className="inline-block rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700">終了日不明</span>;
+        const diffMs = d.getTime() - now.getTime();
+        if (diffMs <= 0) {
+            const abs = Math.abs(diffMs);
+            const daysPast = Math.floor(abs / dayMs);
+            if (daysPast >= 1) return makeBadge(`${daysPast}日前`, 'red');
+            const hoursPast = Math.floor(abs / hourMs);
+            if (hoursPast >= 1) return makeBadge(`${hoursPast}時間前`, 'red');
+            const minutesPast = Math.floor(abs / minuteMs);
+            return makeBadge(`${minutesPast}分前`, 'red');
+        }
+        if (diffMs <= 24 * hourMs) {
+            const hours = Math.floor(diffMs / hourMs);
+            if (hours >= 1) return makeBadge(`あと${hours}時間`, 'yellow');
+            const minutes = Math.floor(diffMs / minuteMs);
+            return makeBadge(`あと${minutes}分`, 'yellow');
+        }
+        const days = Math.floor(diffMs / dayMs);
+        return makeBadge(`あと${days}日`, 'blue');
     };
 
     const parseDbDate = (raw?: string | null): Date | null => {
@@ -419,11 +451,11 @@ export default function TasksIndexPage() {
         <AppSidebarLayout breadcrumbs={breadcrumbs}>
             <Head title="タスク・予定" />
             <div className="p-4 sm:p-6 lg:p-8">
-                <div className="mb-4 flex items-start justify-between">
+                <div className="mb-4 flex flex-wrap items-start justify-between">
                     <div>
                         <Heading title="タスク・予定" description="タスクの一覧・作成を行います。" />
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="mt-2 flex flex-wrap items-center gap-2 sm:mt-0">
                         <Link href={route('tasks.calendar')}>
                             <Button variant="ghost">カレンダー</Button>
                         </Link>
@@ -640,7 +672,9 @@ export default function TasksIndexPage() {
                                                                 <div>
                                                                     {formatDateTime(t.start_at)}～{formatDateTime(t.end_at)}
                                                                 </div>
-                                                                <div className="text-xs text-gray-500">{getDeadlineBadge(t.end_at)}</div>
+                                                                <div className="text-xs text-gray-500">
+                                                                    {t.status === '完了' ? null : getDeadlineBadge(t.end_at, t.start_at)}
+                                                                </div>
                                                             </div>
                                                             <div className="mt-1 text-sm">
                                                                 {t.assignees && t.assignees.length > 0 ? (
@@ -774,7 +808,9 @@ export default function TasksIndexPage() {
                                                                     <div>
                                                                         {formatDateTime(t.start_at)}～{formatDateTime(t.end_at)}
                                                                     </div>
-                                                                    <div className="text-xs text-gray-500">{getDeadlineBadge(t.end_at)}</div>
+                                                                    <div className="text-xs text-gray-500">
+                                                                        {t.status === '完了' ? null : getDeadlineBadge(t.end_at, t.start_at)}
+                                                                    </div>
                                                                 </div>
                                                             </td>
                                                             <td className="p-2 align-middle text-sm">

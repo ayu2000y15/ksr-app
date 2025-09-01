@@ -235,7 +235,7 @@ export default function Index({ properties }: any) {
             });
         } catch (err) {
             // don't wipe out existing SSR-provided map on network/auth errors
-            // eslint-disable-next-line no-console
+             
             console.warn('fetchAllUsersMap failed, keeping existing allUsersMap', err);
         }
     };
@@ -624,7 +624,7 @@ export default function Index({ properties }: any) {
                                                                 resetForm();
                                                             } catch (err) {
                                                                 // surface error for debugging and avoid unused variable lint
-                                                                // eslint-disable-next-line no-console
+                                                                 
                                                                 console.error(err);
                                                                 setToast({ message: '削除に失敗しました', type: 'error' });
                                                             }

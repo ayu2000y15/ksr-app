@@ -126,7 +126,7 @@ export default function Show({ user, properties }: { user: any; properties: any[
                                                             <div className="text-sm text-muted-foreground">同居ユーザー</div>
                                                             <div className="mt-1 flex flex-wrap gap-2">
                                                                 {occ.cohabitants.map((c: any) => (
-                                                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                                                     
                                                                     <Badge
                                                                         key={c.id}
                                                                         className="inline-flex items-center gap-2 bg-gray-200 text-black"

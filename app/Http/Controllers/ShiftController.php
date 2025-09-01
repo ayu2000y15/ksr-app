@@ -455,11 +455,38 @@ class ShiftController extends Controller
 
         // find default shifts for weekday and shift_type
         $defaults = DefaultShift::where('day_of_week', $weekday)->where('shift_type', $shiftType)->get();
-        // If no defaults exist, create a placeholder scheduled work ShiftDetail from 00:00 to 00:00
-        if ($defaults->isEmpty()) {
-            // remove existing details for that user/date to avoid duplicates (delete all types: work, break, etc.)
-            ShiftDetail::where('user_id', $userId)->whereRaw('date(date) = ?', [$date])->delete();
+        // remove existing details for that user/date to avoid duplicates (delete all types: work, break, etc.)
+        ShiftDetail::where('user_id', $userId)->whereRaw('date(date) = ?', [$date])->delete();
 
+        // If the user has default start/end times configured, prefer those and create a single work detail
+        try {
+            $user = User::find($userId);
+            $uStart = $user && !empty($user->default_start_time) ? $user->default_start_time : null;
+            $uEnd = $user && !empty($user->default_end_time) ? $user->default_end_time : null;
+            if ($uStart && $uEnd) {
+                $start = Carbon::parse($date . ' ' . $uStart);
+                $end = Carbon::parse($date . ' ' . $uEnd);
+                if ($end->lessThanOrEqualTo($start)) {
+                    $end->addDay();
+                }
+
+                ShiftDetail::create([
+                    'user_id' => $userId,
+                    'date' => $date,
+                    'type' => 'work',
+                    'start_time' => $start->toDateTimeString(),
+                    'end_time' => $end->toDateTimeString(),
+                    'status' => 'scheduled',
+                ]);
+
+                return;
+            }
+        } catch (\Exception $e) {
+            // ignore and fall back to default pattern behavior below
+        }
+
+        // If no user defaults, fall back to default shift patterns. If none exist, create a zero-length placeholder.
+        if ($defaults->isEmpty()) {
             $zero = Carbon::parse($date . ' 00:00:00')->toDateTimeString();
             ShiftDetail::create([
                 'user_id' => $userId,
@@ -472,9 +499,6 @@ class ShiftController extends Controller
 
             return;
         }
-
-        // remove existing details for that user/date to avoid duplicates (delete all types: work, break, etc.)
-        ShiftDetail::where('user_id', $userId)->whereRaw('date(date) = ?', [$date])->delete();
 
         foreach ($defaults as $df) {
             // build datetime for start/end using the date and default's time (HH:MM)
@@ -662,5 +686,129 @@ class ShiftController extends Controller
         });
 
         return response()->json(['message' => $targetStatus === 'actual' ? '勤務を確定しました。' : '勤務の確定を解除しました。', 'confirmed' => $targetStatus === 'actual'], 200);
+    }
+
+    /**
+     * Apply users' preferred weekly holidays for a given month.
+     * Expects POST param: month=YYYY-MM-01 (first day of month recommended)
+     * For each active user with preferred_week_days (array of 0..6), create or update Shift to 'leave'
+     */
+    public function applyPreferredHolidays(Request $request)
+    {
+        if (Auth::user()->hasRole('システム管理者')) {
+            // bypass
+        } else {
+            $this->authorize('create', Shift::class);
+        }
+
+        $data = $request->validate([
+            'month' => 'required|date',
+        ]);
+
+        try {
+            $month = Carbon::parse($data['month'])->startOfMonth();
+        } catch (\Exception $e) {
+            return response()->json(['message' => '無効な月です。'], 400);
+        }
+
+        $start = $month->copy()->startOfMonth();
+        $end = $month->copy()->endOfMonth();
+
+        $users = User::where('status', 'active')->get();
+
+        $created = 0;
+        $updated = 0;
+
+        \DB::transaction(function () use ($users, $start, $end, &$created, &$updated) {
+            // iterate days of month
+            $period = new \DatePeriod(new \DateTime($start->toDateString()), new \DateInterval('P1D'), (new \DateTime($end->toDateString()))->modify('+1 day'));
+            // Prebuild list of dates grouped by weekday for efficiency
+            $datesByWeekday = [];
+            foreach ($period as $dt) {
+                $ymd = $dt->format('Y-m-d');
+                $wk = (int) $dt->format('w'); // 0 (Sun) - 6 (Sat)
+                $datesByWeekday[$wk][] = $ymd;
+            }
+
+            foreach ($users as $u) {
+                $prefsRaw = $u->preferred_week_days ?? [];
+
+                // normalize to array: if stored as JSON string, decode it
+                if (!is_array($prefsRaw) && is_string($prefsRaw)) {
+                    $decoded = json_decode($prefsRaw, true);
+                    if (is_array($decoded)) {
+                        $prefs = $decoded;
+                    } else {
+                        // fallback: treat single string as one element
+                        $prefs = [$prefsRaw];
+                    }
+                } elseif (is_array($prefsRaw)) {
+                    $prefs = $prefsRaw;
+                } else {
+                    $prefs = (array) $prefsRaw;
+                }
+
+                if (empty($prefs)) continue;
+
+                foreach ($prefs as $wk) {
+                    $wkInt = null;
+                    if (is_numeric($wk)) {
+                        $wkInt = (int) $wk;
+                    } else {
+                        $s = strtolower(trim((string) $wk));
+                        // accept English short/full names and Japanese short names
+                        $map = [
+                            'sun' => 0,
+                            'sunday' => 0,
+                            '日' => 0,
+                            'mon' => 1,
+                            'monday' => 1,
+                            '月' => 1,
+                            'tue' => 2,
+                            'tues' => 2,
+                            'tuesday' => 2,
+                            '火' => 2,
+                            'wed' => 3,
+                            'wednesday' => 3,
+                            '水' => 3,
+                            'thu' => 4,
+                            'thurs' => 4,
+                            'thursday' => 4,
+                            '木' => 4,
+                            'fri' => 5,
+                            'friday' => 5,
+                            '金' => 5,
+                            'sat' => 6,
+                            'saturday' => 6,
+                            '土' => 6,
+                        ];
+                        if (isset($map[$s])) $wkInt = $map[$s];
+                    }
+
+                    if ($wkInt === null) continue;
+
+                    $dates = $datesByWeekday[$wkInt] ?? [];
+                    foreach ($dates as $d) {
+                        // create or update shift to 'leave'
+                        $shift = Shift::where('user_id', $u->id)->whereRaw('date(date) = ?', [$d])->first();
+                        if ($shift) {
+                            if ($shift->shift_type !== 'leave') {
+                                // delete existing details and set to leave
+                                ShiftDetail::where('user_id', $u->id)->whereRaw('date(date) = ?', [$d])->delete();
+                                $shift->update(['shift_type' => 'leave']);
+                                $updated++;
+                            }
+                        } else {
+                            Shift::create(['user_id' => $u->id, 'date' => $d, 'shift_type' => 'leave']);
+                            // remove any details just in case
+                            ShiftDetail::where('user_id', $u->id)->whereRaw('date(date) = ?', [$d])->delete();
+                            $created++;
+                        }
+                    }
+                }
+            }
+        });
+
+        return response()->json(['message' => "完了しました。作成: {$created} 件、更新: {$updated} 件"], 200);
     }
 }

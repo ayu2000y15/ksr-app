@@ -444,6 +444,44 @@ export default function MonthEditor({
                         </Button>
                     </div>
                     <div className="flex items-center gap-2">
+                        <Button
+                            size="sm"
+                            aria-label="規定休日登録"
+                            onClick={async () => {
+                                try {
+                                    // confirm action
+                                    const ok = window.confirm(
+                                        'この操作は当該月の全ユーザーの希望週休を一括登録します。\nすでに登録済みのシフトがある場合は、上書きされる可能性があります。\nよろしいですか？',
+                                    );
+                                    if (!ok) return;
+                                    setSaving(true);
+                                    const monthParam = `${currentYear}-${pad(currentMonth + 1)}-01`;
+                                    const res = await axios.post(route('shifts.apply_preferred_holidays'), { month: monthParam });
+                                    const msg = res?.data?.message ?? '処理が完了しました。';
+                                    setToast({ message: msg, type: 'success' });
+                                    // refresh current month view
+                                    if (onMonthChange) {
+                                        onMonthChange(monthParam);
+                                    } else {
+                                        router.get(route('shifts.index', { month: monthParam }), {}, { preserveState: true, preserveScroll: true });
+                                    }
+                                } catch (err: unknown) {
+                                    let msg = '規定休日の登録に失敗しました';
+                                    try {
+                                        const j = err as { response?: { data?: { message?: string } } };
+                                        if (j?.response?.data?.message) msg = j.response.data.message;
+                                    } catch {
+                                        void 0;
+                                    }
+                                    setToast({ message: msg, type: 'error' });
+                                } finally {
+                                    setSaving(false);
+                                }
+                            }}
+                            disabled={saving}
+                        >
+                            規定休日登録
+                        </Button>
                         <Button size="sm" onClick={bulkSetSelectedToDay} disabled={selectedDates.size === 0} aria-label="選択日を昼に">
                             選択日を昼に
                         </Button>
@@ -457,13 +495,21 @@ export default function MonthEditor({
                         <Info className="h-5 w-5 flex-shrink-0 text-yellow-700" />
                         <div className="leading-tight">
                             <div>
-                                ・<strong>確定ボタン</strong>:
+                                ・<strong> 「確定」ボタン</strong>:
                                 過去日にのみ表示されます。確定ボタンを押せば勤務時間と休憩時間が確定され、統計情報が正しく計算されます。
                             </div>
-                            <div>
+                            <div className="mt-1">
+                                ・<strong> 「選択日を昼に」ボタン</strong>: すでに登録済みの予定は変更せずに、空欄のユーザーを全て昼に設定します。
+                            </div>
+                            <div className="mt-1">
+                                ・<strong> 「規定休日登録」ボタン</strong>:
+                                ユーザーによって固定希望休日がある場合に、その月の休日をまとめて登録します。
+                            </div>
+                            <div className="mt-1">
                                 ・<strong>日別の詳細シフト</strong>:
                                 日付を選択すると、その日の詳細シフトを編集できます。休憩登録や欠席の登録は日別の詳細から行ってください。
                             </div>
+                            <div className="mt-1">・規定のシフト時間があるユーザーは自動で時間が変更されます。</div>
                         </div>
                     </div>
                 </div>

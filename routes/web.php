@@ -117,6 +117,9 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
     // Toggle confirm/unconfirm for all scheduled work ShiftDetails on a date
     Route::post('/shifts/toggle-confirm-date', [App\Http\Controllers\ShiftController::class, 'toggleConfirmDate'])->name('shifts.toggle_confirm_date');
 
+    // Apply preferred weekly holidays for a month: create 'leave' shifts on users' preferred_week_days
+    Route::post('/shifts/apply-preferred-holidays', [App\Http\Controllers\ShiftController::class, 'applyPreferredHolidays'])->name('shifts.apply_preferred_holidays');
+
     // ShiftDetail 単体更新（開始/終了時刻の編集）
     Route::patch('/shift-details/{shift_detail}', [App\Http\Controllers\ShiftDetailController::class, 'update'])->name('shift-details.update');
     // ShiftDetail 作成（休憩などの勤務詳細を追加）

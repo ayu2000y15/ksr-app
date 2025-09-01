@@ -1,7 +1,7 @@
 import { BreadcrumbItem } from '@/types';
 import { Head, usePage } from '@inertiajs/react';
 import axios from 'axios';
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -58,6 +58,7 @@ type PlacedEvent = {
     category_name?: string | null;
     user_id?: number | null;
     status?: string | null;
+    originalEndMissing?: boolean;
 };
 
 export default function TasksCalendarPage() {
@@ -106,7 +107,59 @@ export default function TasksCalendarPage() {
         return () => clearTimeout(id);
     }, [toast]);
 
-    const fetchAll = async () => {
+    const fetchHolidaysForMonth = useCallback(
+        async (monthDate: Date) => {
+            try {
+                const ssrHolidays = (page.props as unknown as { holidays?: any[] }).holidays;
+                if (Array.isArray(ssrHolidays) && ssrHolidays.length > 0) {
+                    if (typeof ssrHolidays[0] === 'string') {
+                        try {
+                            const mParam = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, '0')}-01`;
+                            const hres = await axios.get('/api/holidays', { params: { month: mParam } });
+                            const list = hres.data.holidays || [];
+                            const map: Record<string, string> = {};
+                            for (const it of list) {
+                                if (it && it.date) map[String(it.date)] = it.name || '';
+                            }
+                            setHolidaysMap(map);
+                            return;
+                        } catch {
+                            const map: Record<string, string> = {};
+                            for (const d of ssrHolidays) map[String(d)] = '';
+                            setHolidaysMap(map);
+                            return;
+                        }
+                    }
+                    const year = String(monthDate.getFullYear());
+                    const month = String(monthDate.getMonth() + 1).padStart(2, '0');
+                    const prefix = `${year}-${month}`;
+                    const monthItems = ssrHolidays.filter((it: any) => it && it.date && String(it.date).startsWith(prefix));
+                    if (monthItems.length > 0) {
+                        const map: Record<string, string> = {};
+                        for (const it of monthItems) {
+                            map[String(it.date)] = it.name || '';
+                        }
+                        setHolidaysMap(map);
+                        return;
+                    }
+                }
+
+                const mParam = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, '0')}-01`;
+                const hres = await axios.get('/api/holidays', { params: { month: mParam } });
+                const list = hres.data.holidays || [];
+                const map: Record<string, string> = {};
+                for (const it of list) {
+                    if (it && it.date) map[String(it.date)] = it.name || '';
+                }
+                setHolidaysMap(map);
+            } catch {
+                // ignore
+            }
+        },
+        [page.props],
+    );
+
+    const fetchAll = useCallback(async () => {
         try {
             const res = await axios.get('/api/tasks');
             const tasks = res.data.tasks || [];
@@ -142,62 +195,28 @@ export default function TasksCalendarPage() {
         } catch (e) {
             console.error(e);
         }
-    };
+    }, [fetchHolidaysForMonth, currentMonth]);
 
-    // fetch holidays for a specific month (monthDate is a Date where month is the target)
-    const fetchHolidaysForMonth = async (monthDate: Date) => {
-        try {
-            const ssrHolidays = (page.props as any).holidays;
-            if (Array.isArray(ssrHolidays) && ssrHolidays.length > 0) {
-                // two possible shapes: array of date strings ['YYYY-MM-DD', ...] OR array of {date,name}
-                if (typeof ssrHolidays[0] === 'string') {
-                    // SSR provided only date strings; fetch names for the shown month
-                    try {
-                        const mParam = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, '0')}-01`;
-                        const hres = await axios.get('/api/holidays', { params: { month: mParam } });
-                        const list = hres.data.holidays || [];
-                        const map: Record<string, string> = {};
-                        for (const it of list) {
-                            if (it && it.date) map[String(it.date)] = it.name || '';
-                        }
-                        setHolidaysMap(map);
-                        return;
-                    } catch {
-                        const map: Record<string, string> = {};
-                        for (const d of ssrHolidays) map[String(d)] = '';
-                        setHolidaysMap(map);
-                        return;
-                    }
-                }
-                // SSR provided full objects - try to use only those in the requested month
-                const year = String(monthDate.getFullYear());
-                const month = String(monthDate.getMonth() + 1).padStart(2, '0');
-                const prefix = `${year}-${month}`;
-                const monthItems = ssrHolidays.filter((it: any) => it && it.date && String(it.date).startsWith(prefix));
-                if (monthItems.length > 0) {
-                    const map: Record<string, string> = {};
-                    for (const it of monthItems) {
-                        map[String(it.date)] = it.name || '';
-                    }
-                    setHolidaysMap(map);
-                    return;
-                }
-                // if SSR objects don't include the requested month, fall back to API
-            }
-
-            // fallback: call API for the requested month
-            const mParam = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, '0')}-01`;
-            const hres = await axios.get('/api/holidays', { params: { month: mParam } });
-            const list = hres.data.holidays || [];
-            const map: Record<string, string> = {};
-            for (const it of list) {
-                if (it && it.date) map[String(it.date)] = it.name || '';
-            }
-            setHolidaysMap(map);
-        } catch {
-            // ignore errors; leave holidaysMap as-is or empty
+    // helper: parse DB date formats used across tasks pages
+    const parseDbDate = (raw?: string | null): Date | null => {
+        if (!raw) return null;
+        const dbSpaceFormat = /^\s*(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?\s*$/;
+        const m = String(raw).match(dbSpaceFormat);
+        if (m) {
+            const year = Number(m[1]);
+            const month = Number(m[2]);
+            const day = Number(m[3]);
+            const hour = Number(m[4]);
+            const minute = Number(m[5]);
+            const second = m[6] ? Number(m[6]) : 0;
+            return new Date(year, month - 1, day, hour, minute, second);
         }
+        const iso = new Date(raw as string);
+        if (!isNaN(iso.getTime())) return iso;
+        return null;
     };
+
+    // (fetchHolidaysForMonth is defined above as a useCallback)
 
     const translateValidationErrors = (raw: Record<string, string[]>) => {
         const labels: Record<string, string> = {
@@ -210,7 +229,7 @@ export default function TasksCalendarPage() {
         };
         const out: Record<string, string[]> = {};
         for (const k of Object.keys(raw || {})) {
-            const arr = (raw as any)[k] as string[];
+            const arr = (raw as Record<string, string[]>)[k] as string[];
             const label = labels[k] || k;
             out[k] = arr.map((m) => {
                 const low = String(m).toLowerCase();
@@ -224,29 +243,8 @@ export default function TasksCalendarPage() {
         return out;
     };
 
-    useEffect(() => {
-        fetchAll();
-    }, []);
-
-    // when the visible month changes, refresh holidays for that month
-    useEffect(() => {
-        void fetchHolidaysForMonth(currentMonth);
-    }, [currentMonth]);
-
-    const parseDbDate = (raw?: string | null): Date | null => {
-        if (!raw) return null;
-        const m = String(raw).match(/^\s*(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?\s*$/);
-        if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]));
-        const iso = new Date(raw as string);
-        if (!isNaN(iso.getTime())) return iso;
-        return null;
-    };
-
-    const monthStart = useMemo(() => {
-        const d = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
-        d.setHours(0, 0, 0, 0);
-        return d;
-    }, [currentMonth]);
+    // compute the first day of the shown month and the calendar weeks
+    const monthStart = useMemo(() => new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1), [currentMonth]);
 
     const weeks = useMemo(() => {
         const firstDayOfMonth = new Date(monthStart);
@@ -267,6 +265,16 @@ export default function TasksCalendarPage() {
         return weeksArr;
     }, [monthStart]);
 
+    // initial data load
+    useEffect(() => {
+        void fetchAll();
+    }, [fetchAll]);
+
+    // when the current month changes, refresh holidays for that month
+    useEffect(() => {
+        void fetchHolidaysForMonth(currentMonth);
+    }, [fetchHolidaysForMonth, currentMonth]);
+
     const calendarData = useMemo(() => {
         const parsed = events
             .map((e: TaskEvent) => {
@@ -282,6 +290,8 @@ export default function TasksCalendarPage() {
                         title: e.title,
                         start: sd,
                         end: ed,
+                        // mark that original end was missing so UI can adjust badges/labels
+                        originalEndMissing: true,
                         color: e.category_color ?? null,
                         description: e.description ?? null,
                         assignees: e.assignees ?? [],
@@ -295,6 +305,7 @@ export default function TasksCalendarPage() {
                     title: e.title,
                     start: s,
                     end: en,
+                    originalEndMissing: false,
                     color: e.category_color ?? null,
                     description: e.description ?? null,
                     assignees: e.assignees ?? [],
@@ -677,6 +688,13 @@ export default function TasksCalendarPage() {
                                                         return '#fff';
                                                     }
                                                 })();
+                                                const isSameDay =
+                                                    ev.start.getFullYear() === ev.end.getFullYear() &&
+                                                    ev.start.getMonth() === ev.end.getMonth() &&
+                                                    ev.start.getDate() === ev.end.getDate();
+                                                const dateLabel = isSameDay
+                                                    ? `${ev.start.getMonth() + 1}/${ev.start.getDate()}`
+                                                    : `${ev.start.getMonth() + 1}/${ev.start.getDate()}~${ev.end.getMonth() + 1}/${ev.end.getDate()}`;
                                                 return (
                                                     <div
                                                         key={`span-${ev.id}-${wi}`}
@@ -692,13 +710,12 @@ export default function TasksCalendarPage() {
                                                             color: textColor,
                                                             border: '1px solid rgba(0,0,0,0.08)',
                                                         }}
-                                                        title={`${ev.title} (${new Date(ev.start).toLocaleDateString()} - ${new Date(ev.end).toLocaleDateString()})`}
+                                                        title={`${ev.title} (${new Date(ev.start).toLocaleDateString()}${isSameDay ? '' : ` - ${new Date(ev.end).toLocaleDateString()}`})`}
                                                     >
                                                         <div className="flex items-center truncate font-semibold">
                                                             {getStatusIcon(ev.status)}
                                                             <span>
-                                                                {ev.title} ({ev.start.getMonth() + 1}/{ev.start.getDate()}~{ev.end.getMonth() + 1}/
-                                                                {ev.end.getDate()})
+                                                                {ev.title} ({dateLabel})
                                                             </span>
                                                         </div>
                                                     </div>
@@ -742,7 +759,7 @@ export default function TasksCalendarPage() {
 
             {/* ===== ここからが詳細表示ダイアログの追加箇所です ===== */}
             <Dialog open={!!selectedEvent} onOpenChange={(isOpen) => !isOpen && setSelectedEvent(null)}>
-                <DialogContent>
+                <DialogContent className="max-h-[80vh] overflow-auto">
                     <DialogHeader>
                         <DialogTitle>{selectedEvent?.title}</DialogTitle>
                         {selectedEvent?.category_name ? (
@@ -761,7 +778,14 @@ export default function TasksCalendarPage() {
                             <div className="flex items-center gap-2">
                                 <span className="text-sm text-muted-foreground">期間:</span>
                                 <span className="text-sm">
-                                    {formatEventDate(selectedEvent.start)} 〜 {formatEventDate(selectedEvent.end)}
+                                    {(() => {
+                                        if (!selectedEvent) return '';
+                                        const s = selectedEvent.start;
+                                        const e = selectedEvent.end;
+                                        const sameDay =
+                                            s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth() && s.getDate() === e.getDate();
+                                        return sameDay ? formatEventDate(s) : `${formatEventDate(s)} 〜 ${formatEventDate(e)}`;
+                                    })()}
                                 </span>
                             </div>
 
@@ -903,7 +927,7 @@ export default function TasksCalendarPage() {
 
             {/* 新規登録用ダイアログ */}
             <Dialog open={createOpen} onOpenChange={(open) => !open && setCreateOpen(false)}>
-                <DialogContent>
+                <DialogContent className="max-h-[80vh] overflow-auto">
                     <DialogHeader>
                         <DialogTitle>新規タスク登録</DialogTitle>
                         <DialogDescription>新しいタスクを登録します。</DialogDescription>
@@ -1057,7 +1081,7 @@ export default function TasksCalendarPage() {
 
             {/* 他N件の一覧を表示するダイアログ */}
             <Dialog open={moreDialogOpen} onOpenChange={(open) => !open && setMoreDialogOpen(false)}>
-                <DialogContent>
+                <DialogContent className="max-h-[80vh] overflow-auto">
                     <DialogHeader>
                         <DialogTitle>他{moreList ? moreList.length : 0}件</DialogTitle>
                         <DialogDescription className="text-sm text-muted-foreground">表示したい予定を選択してください</DialogDescription>
