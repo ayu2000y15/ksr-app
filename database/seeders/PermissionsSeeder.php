@@ -73,6 +73,12 @@ class PermissionsSeeder extends Seeder
             'default_shift.update',
             'default_shift.delete',
 
+            // holiday management (休日登録)
+            'holiday.view',
+            'holiday.create',
+            'holiday.update',
+            'holiday.delete',
+
             // per-user shift settings (ユーザー別休暇上限設定)
             'user_shift_setting.view',
             'user_shift_setting.create',
