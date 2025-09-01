@@ -303,7 +303,7 @@ export default function Index({ items: initial }: any) {
             <div className="p-4 sm:p-6 lg:p-8">
                 <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
-                        <HeadingSmall title="在庫管理" description="カテゴリごとに在庫を表示。" />
+                        <HeadingSmall title="在庫管理" description="カテゴリごとに在庫を表示" />
                     </div>
                     <div className="flex items-center justify-start gap-2 sm:justify-end">
                         {/* 在庫ログ: show if user can view logs */}

@@ -138,6 +138,18 @@ Route::middleware(['web', 'auth'])->group(function () {
 
     // 掲示板・投稿 API
     Route::apiResource('posts', \App\Http\Controllers\PostController::class);
+    // 日報 API
+    Route::apiResource('daily-reports', \App\Http\Controllers\DailyReportController::class)->only(['index', 'store', 'show', 'destroy']);
+    // daily notes (shared daily sheet with multiple attachments and comments)
+    Route::get('daily-notes', [\App\Http\Controllers\DailyNoteController::class, 'index']);
+    Route::post('daily-notes', [\App\Http\Controllers\DailyNoteController::class, 'store']);
+    // allow POST /api/daily-notes/{id} to update an existing note (frontend posts for save)
+    Route::post('daily-notes/{id}', [\App\Http\Controllers\DailyNoteController::class, 'update']);
+    Route::delete('daily-notes/{id}', [\App\Http\Controllers\DailyNoteController::class, 'destroy']);
+    Route::post('daily-note-comments', [\App\Http\Controllers\DailyNoteCommentController::class, 'store']);
+    Route::delete('daily-note-comments/{id}', [\App\Http\Controllers\DailyNoteCommentController::class, 'destroy']);
+    // allow POST /api/daily-reports/{id} to update an existing report (frontend posts for save)
+    Route::post('/daily-reports/{id}', [\App\Http\Controllers\DailyReportController::class, 'update']);
     // 在庫管理 API
     Route::apiResource('inventory', \App\Http\Controllers\Api\InventoryController::class);
     Route::post('inventory/{inventory}/adjust', [\App\Http\Controllers\Api\InventoryController::class, 'adjustStock']);

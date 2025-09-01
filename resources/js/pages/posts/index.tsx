@@ -199,7 +199,7 @@ export default function PostsIndex() {
 
             <div className="p-4 sm:p-6 lg:p-8">
                 <div className="mb-6">
-                    <HeadingSmall title="掲示板・マニュアル" description="掲示板の投稿一覧・作成を行います。" />
+                    <HeadingSmall title="掲示板・マニュアル" description="掲示板の投稿一覧・作成" />
                 </div>
 
                 {activeTag && (

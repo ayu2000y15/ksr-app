@@ -92,11 +92,6 @@ export default function Index({
     const page = usePage();
     const props = page.props as any;
     // debug: log relevant server props to verify they're sent on month change
-    console.log('shift-applications props:', {
-        shiftDetails: props?.shiftDetails,
-        userLeaves: props?.userLeaves,
-        userShiftDates: props?.userShiftDates,
-    });
     const { permissions } = props;
     const authUser = props?.auth?.user;
 
@@ -299,7 +294,7 @@ export default function Index({
 
             <div className="p-4 sm:p-6 lg:p-8">
                 <div className="mb-6">
-                    <HeadingSmall title="各種申請" description="中抜け・休暇・食券不要の申請が行えます。" />
+                    <HeadingSmall title="各種申請" description="中抜け・休暇・食券不要の申請" />
                 </div>
 
                 <Card>

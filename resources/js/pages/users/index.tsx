@@ -152,7 +152,7 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
 
             <div className="p-4 sm:p-6 lg:p-8">
                 <div className="mb-6">
-                    <HeadingSmall title="ユーザー管理" description="ユーザーの一覧・編集・削除を行う。" />
+                    <HeadingSmall title="ユーザー管理" description="ユーザーの一覧・編集・削除" />
                 </div>
                 <Card>
                     <CardHeader className="flex-row items-center justify-between">

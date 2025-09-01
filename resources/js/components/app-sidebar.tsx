@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/sidebar';
 import type { NavItem, SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { AlertTriangle, Calendar, CalendarCheck, CheckSquare, Home, MessageSquare, Package, Users, Wrench } from 'lucide-react';
+import { AlertTriangle, Calendar, CalendarCheck, CheckSquare, FileText, Home, MessageSquare, Package, Users, Wrench } from 'lucide-react';
 import * as React from 'react';
 import { AppLogo } from './app-logo';
 import { SidebarSettingsMenu } from './sidebar-settings-menu';
@@ -20,8 +20,9 @@ import { SidebarSettingsMenu } from './sidebar-settings-menu';
 const mainNavItems: NavItem[] = [
     { title: 'ユーザー管理', href: '/users', icon: Users, permission: 'user.view' },
     { title: '各種申請', href: '/shift-applications', icon: CalendarCheck, permission: 'shift_application.view' },
-    { title: '掲示板・マニュアル', href: '/posts', icon: MessageSquare, permission: '' },
+    { title: '日次ノート', href: '/daily-notes', icon: FileText, permission: '' },
     { title: 'タスク・予定', href: '/tasks', icon: CheckSquare, permission: 'task.view' },
+    { title: '掲示板・マニュアル', href: '/posts', icon: MessageSquare, permission: '' },
     { title: 'シフト管理', href: '/shifts', icon: Calendar, permission: 'shift.view' },
     { title: '在庫管理', href: '/inventory', icon: Package },
     { title: '破損在庫管理', href: '/inventory/damaged', icon: AlertTriangle, permission: 'damaged_inventory.view' },

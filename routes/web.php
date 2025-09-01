@@ -208,6 +208,11 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
 
     // --- 管理: 休日登録 ---
     Route::inertia('/admin/holidays', 'admin/holidays')->name('admin.holidays');
+
+    // 日報ページ（Inertia）
+    Route::get('/daily-reports', [App\Http\Controllers\DailyReportController::class, 'indexPage'])->name('daily_reports.index');
+    // 日次ノート（Inertia） — 1日1シートの共有ノート
+    Route::inertia('/daily-notes', 'daily-notes/index')->name('daily_notes.index');
 });
 
 require __DIR__ . '/auth.php';

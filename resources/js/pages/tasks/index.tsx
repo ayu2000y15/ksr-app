@@ -525,7 +525,7 @@ export default function TasksIndexPage() {
             <div className="p-4 sm:p-6 lg:p-8">
                 <div className="mb-4 flex flex-wrap items-start justify-between">
                     <div>
-                        <Heading title="タスク・予定" description="タスクの一覧・作成を行います。" />
+                        <Heading title="タスク・予定" description="タスクの一覧・作成" />
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2 sm:mt-0">
                         <Link href={route('tasks.calendar')}>

@@ -4,10 +4,13 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\User;
 
 class DailyReport extends Model
 {
     use HasFactory;
+
+    protected $table = 'daily_reports';
 
     protected $fillable = [
         'user_id',
@@ -17,13 +20,10 @@ class DailyReport extends Model
         'is_public',
     ];
 
-    protected function casts(): array
-    {
-        return [
-            'date' => 'date',
-            'is_public' => 'boolean',
-        ];
-    }
+    protected $casts = [
+        'is_public' => 'boolean',
+        'date' => 'date',
+    ];
 
     public function user()
     {
@@ -33,5 +33,10 @@ class DailyReport extends Model
     public function attachments()
     {
         return $this->morphMany(Attachment::class, 'attachable');
+    }
+
+    public function tags()
+    {
+        return $this->belongsToMany(Tag::class, 'daily_report_tag');
     }
 }
