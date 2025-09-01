@@ -235,7 +235,7 @@ export default function Index({ properties }: any) {
             });
         } catch (err) {
             // don't wipe out existing SSR-provided map on network/auth errors
-             
+
             console.warn('fetchAllUsersMap failed, keeping existing allUsersMap', err);
         }
     };
@@ -624,7 +624,7 @@ export default function Index({ properties }: any) {
                                                                 resetForm();
                                                             } catch (err) {
                                                                 // surface error for debugging and avoid unused variable lint
-                                                                 
+
                                                                 console.error(err);
                                                                 setToast({ message: '削除に失敗しました', type: 'error' });
                                                             }
@@ -1056,6 +1056,12 @@ export default function Index({ properties }: any) {
                                                                     </TooltipTrigger>
                                                                     <TooltipContent side="top" align="center">
                                                                         <div className="text-left whitespace-nowrap">
+                                                                            {/* show assigned users like confirm tooltip */}
+                                                                            {usersFragment && usersFragment.length > 0 ? (
+                                                                                <div className="mb-1">
+                                                                                    <div className="mt-1">【{usersFragment}】</div>
+                                                                                </div>
+                                                                            ) : null}
                                                                             <div className="font-medium">{propertyLabel}</div>
                                                                             <div>{label}</div>
                                                                         </div>
