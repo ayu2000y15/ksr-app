@@ -460,7 +460,13 @@ export default function EditUserPage() {
                                     <CardTitle>登録完了 - ログイン情報（未パスワード変更）</CardTitle>
                                 </CardHeader>
                                 <CardContent>
-                                    <p className="mb-2">このアカウントは初回ログイン時にパスワード変更が必要です。</p>
+                                    <p className="mb-2">
+                                        このアカウントは初回ログイン時にパスワード変更が必要です。
+                                        <br />
+                                        招待メールを送信する場合は、送信ボタンを押してください。
+                                        <br />
+                                        仮パスワードが表示されない場合、再作成を行ってから送信してください。
+                                    </p>
                                     <div className="space-y-2">
                                         <div>
                                             <div className="mb-2">
@@ -548,6 +554,13 @@ export default function EditUserPage() {
                                             aria-busy={sending}
                                             onClick={async () => {
                                                 if (sending || sent || regenerating) return;
+                                                // confirm before sending to avoid accidental sends
+                                                try {
+                                                    const confirmed = window.confirm(`${displayEmail}に招待メールを送信してよろしいですか？`);
+                                                    if (!confirmed) return;
+                                                } catch {
+                                                    // if confirm is not available, proceed as before
+                                                }
                                                 setSending(true);
                                                 try {
                                                     const metaToken =

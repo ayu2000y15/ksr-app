@@ -107,7 +107,13 @@ export default function CredentialsPage() {
                             <CardTitle>登録完了 - ログイン情報</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <p className="mb-2">以下の情報でログインできます。初回ログイン時にパスワードの変更が必要です。</p>
+                            <p className="mb-2">
+                                以下の情報でログインできます。
+                                <br />
+                                初回ログイン時にパスワードの変更が必要です。
+                                <br />
+                                招待メールを送信する場合は、送信ボタンを押してください。
+                            </p>
                             <div className="space-y-2">
                                 <div>
                                     <Label>名前</Label>
@@ -132,6 +138,13 @@ export default function CredentialsPage() {
                                 aria-busy={sending}
                                 onClick={async () => {
                                     if (sending || sent) return;
+                                    // confirm before sending to avoid accidental sends
+                                    try {
+                                        const confirmed = window.confirm(`${credentials.email}に招待メールを送信してよろしいですか？`);
+                                        if (!confirmed) return;
+                                    } catch {
+                                        // ignore and proceed if confirm unavailable
+                                    }
                                     setSending(true);
                                     try {
                                         // include both meta CSRF token and XSRF-TOKEN cookie value
