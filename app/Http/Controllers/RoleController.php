@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Auth\Access\AuthorizationException;
 use Spatie\Permission\Models\Role;
 
 class RoleController extends Controller
@@ -18,7 +19,11 @@ class RoleController extends Controller
             return Role::with('permissions')->orderBy('id')->get();
         }
 
-        $this->authorize('viewAny', Role::class);
+        try {
+            $this->authorize('viewAny', Role::class);
+        } catch (AuthorizationException $e) {
+            // ignore: we'll fall back to permission checks and returning only user's roles
+        }
 
         // 要件: 次のいずれかの権限を持つ閲覧者は、自分のロールだけでなく全てのロールを閲覧できるようにする。
         // チェックする権限キー（合理的な推定）:

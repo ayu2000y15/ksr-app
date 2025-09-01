@@ -106,7 +106,7 @@ export default function RolePermissionsPage() {
         shift_application: '中抜け・休暇申請',
         default_shift: 'デフォルトシフト',
         shift_detail: 'シフト詳細',
-    holiday: '休日管理',
+        holiday: '休日管理',
         user_shift_setting: 'ユーザー別休暇上限',
         inventory: '在庫管理',
         damaged_inventory: '破損在庫管理',
@@ -151,11 +151,11 @@ export default function RolePermissionsPage() {
         'shift_application.create': '休暇申請作成',
         'shift_application.update': '休暇申請編集',
         'shift_application.delete': '休暇申請削除',
-    // holiday
-    'holiday.view': '休日閲覧',
-    'holiday.create': '休日登録',
-    'holiday.update': '休日編集',
-    'holiday.delete': '休日削除',
+        // holiday
+        'holiday.view': '休日閲覧',
+        'holiday.create': '休日登録',
+        'holiday.update': '休日編集',
+        'holiday.delete': '休日削除',
         // default shifts
         'default_shift.view': 'デフォルトシフト閲覧',
         'default_shift.create': 'デフォルトシフト作成',

@@ -20,6 +20,7 @@ class Task extends Model
         'start_at',
         'end_at',
         'is_public',
+        'audience',
     ];
 
     protected $casts = [
@@ -27,6 +28,7 @@ class Task extends Model
         'start_at' => 'datetime',
         'end_at' => 'datetime',
         'is_public' => 'boolean',
+        'audience' => 'string',
     ];
 
     public function category()
@@ -37,6 +39,11 @@ class Task extends Model
     public function assignees()
     {
         return $this->belongsToMany(User::class, 'task_assignees');
+    }
+
+    public function roles()
+    {
+        return $this->belongsToMany(\Spatie\Permission\Models\Role::class, 'task_role');
     }
 
     public function attachments()

@@ -65,6 +65,48 @@ class TaskController
             $q->orderBy('id', 'desc');
         }
 
+        // enforce visibility: always show audience='all'; for audience='restricted' only show if
+        // the current user belongs to at least one of the task's roles
+        $user = $request->user();
+        $userRoleIds = [];
+        if ($user) {
+            try {
+                $userRoleIds = $user->roles()->pluck('id')->toArray();
+            } catch (\Exception $e) {
+                $userRoleIds = [];
+            }
+        }
+
+        $q->where(function ($qq) use ($userRoleIds, $user) {
+            $qq->where('audience', 'all');
+
+            // task owner should always see their tasks
+            if ($user) {
+                $qq->orWhere('user_id', $user->id);
+            }
+
+            if (!empty($userRoleIds)) {
+                $qq->orWhere(function ($q2) use ($userRoleIds) {
+                    $q2->where('audience', 'restricted')
+                        ->whereHas('roles', function ($qr) use ($userRoleIds) {
+                            $qr->whereIn('roles.id', $userRoleIds);
+                        });
+                });
+            }
+        });
+
+        // optional: filter by role when provided as query param ?role=rolename or ?role=id
+        $roleParam = $request->query('role');
+        if (!empty($roleParam)) {
+            $q->whereHas('roles', function ($qr) use ($roleParam) {
+                if (is_numeric($roleParam)) {
+                    $qr->where('roles.id', intval($roleParam));
+                } else {
+                    $qr->where('roles.name', $roleParam);
+                }
+            });
+        }
+
         $tasks = $q->get();
 
         // enrich with assignee user basic info
@@ -76,6 +118,11 @@ class TaskController
             $arr = $t->toArray();
             $arr['assignees'] = $assignees;
             $arr['category'] = $t->category ? ['id' => $t->category->id, 'name' => $t->category->name, 'color' => $t->category->color ?? null] : null;
+            // include audience and roles for frontend editing
+            $arr['audience'] = $t->audience ?? 'all';
+            $arr['roles'] = $t->roles()->get()->map(function ($r) {
+                return ['id' => $r->id, 'name' => $r->name];
+            })->toArray();
             return $arr;
         });
 
@@ -95,6 +142,10 @@ class TaskController
         $out = $t->toArray();
         $out['assignees'] = $assignees;
         $out['category'] = $t->category ? ['id' => $t->category->id, 'name' => $t->category->name, 'color' => $t->category->color ?? null] : null;
+        $out['audience'] = $t->audience ?? 'all';
+        $out['roles'] = $t->roles()->get()->map(function ($r) {
+            return ['id' => $r->id, 'name' => $r->name];
+        })->toArray();
         return response()->json(['task' => $out], 200);
     }
 
@@ -106,6 +157,9 @@ class TaskController
             'start_at' => 'required|date',
             'end_at' => 'nullable|date|after_or_equal:start_at',
             'is_public' => 'boolean',
+            'audience' => 'nullable|in:all,restricted',
+            'roles' => 'nullable|array',
+            'roles.*' => 'nullable|exists:roles,id',
             'user_ids' => 'nullable|array',
             'user_ids.*' => 'required|exists:users,id',
             'task_category_id' => 'nullable|exists:task_categories,id',
@@ -143,6 +197,17 @@ class TaskController
             if (array_key_exists('user_ids', $data)) {
                 $t->user_ids = $data['user_ids'];
             }
+            // audience and roles sync
+            if (isset($data['audience'])) {
+                $t->audience = $data['audience'];
+            }
+            if (isset($data['roles'])) {
+                // sync pivot
+                $t->roles()->sync($data['roles']);
+            } elseif (isset($data['audience']) && $data['audience'] === 'restricted' && !isset($data['roles'])) {
+                // if audience set to restricted but no roles provided, clear existing
+                $t->roles()->sync([]);
+            }
             $t->save();
             return response()->json(['message' => 'タスクを更新しました', 'task' => $t], 200);
         }
@@ -160,7 +225,13 @@ class TaskController
             'task_category_id' => $data['task_category_id'] ?? null,
             'status' => $data['status'] ?? '未着手',
             'is_public' => $data['is_public'] ?? false,
+            'audience' => $data['audience'] ?? 'all',
         ]);
+
+        // attach roles if restricted
+        if (!empty($data['audience']) && $data['audience'] === 'restricted' && !empty($data['roles']) && is_array($data['roles'])) {
+            $t->roles()->sync($data['roles']);
+        }
 
         return response()->json(['message' => 'タスクを作成しました', 'task' => $t], 201);
     }

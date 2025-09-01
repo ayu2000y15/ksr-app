@@ -29,6 +29,7 @@ type Task = {
     status?: string | null;
 };
 
+// Extended task shape when API enriches with audience/roles
 type FormState = {
     title: string;
     description: string;
@@ -76,6 +77,11 @@ export default function TasksIndexPage() {
     const [form, setForm] = useState<FormState>({ title: '', description: '', start_at: '', end_at: '', user_ids: [] });
     const [users, setUsers] = useState<Assignee[]>([]);
     const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
+    const [availableRoles, setAvailableRoles] = useState<{ id: number; name: string }[]>([]);
+    const [selectedRoles, setSelectedRoles] = useState<number[]>([]);
+    const [activeRole, setActiveRole] = useState<string | null>(null);
+    const [activeAudience, setActiveAudience] = useState<string | null>(null);
+    const [audience, setAudience] = useState<'all' | 'restricted'>('all');
     const [editingId, setEditingId] = useState<number | null>(null);
     const [expanded, setExpanded] = useState<number[]>([]);
     const [filterCategoryId, setFilterCategoryId] = useState<number | null>(null);
@@ -84,8 +90,9 @@ export default function TasksIndexPage() {
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
     const [errors, setErrors] = useState<Record<string, string[]>>({});
     const [formError, setFormError] = useState<string | null>(null);
-    const page = usePage<any>();
-    const taskPerm = (page.props as any)?.permissions?.task ?? { view: false, create: false, update: false, delete: false };
+    const page = usePage<Record<string, unknown>>();
+    const taskPerm = (page.props as unknown as { permissions?: { task?: { view: boolean; create: boolean; update: boolean; delete: boolean } } })
+        ?.permissions?.task ?? { view: false, create: false, update: false, delete: false };
 
     const handleDelete = async (id: number) => {
         if (!taskPerm.delete) return;
@@ -100,6 +107,7 @@ export default function TasksIndexPage() {
         }
     };
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => {
         (async () => {
             try {
@@ -107,6 +115,48 @@ export default function TasksIndexPage() {
                 setUsers(ures.data.users || []);
                 const cres = await axios.get('/api/task-categories');
                 setCategories(cres.data.categories || []);
+                const rres = await axios.get('/api/roles');
+                const roles = rres.data?.roles ?? (Array.isArray(rres.data) ? rres.data : []);
+                // keep a raw roles list for mapping ?role= (id -> name) like posts index
+                try {
+                    // (keep local roles variable for mapping below)
+                    const params = new URLSearchParams(window.location.search);
+                    const rparam = params.get('role');
+                    if (rparam) {
+                        if (/^\d+$/.test(rparam)) {
+                            const found = (roles as Array<{ id?: number; name?: string }>).find((it) => String(it.id) === rparam);
+                            if (found && found.name) setActiveRole(found.name);
+                        } else {
+                            setActiveRole(rparam);
+                        }
+                    }
+                } catch {
+                    // ignore
+                }
+                // simple filter similar to posts: if user has sysadmin role show all, else only user's roles
+                try {
+                    const currentUser =
+                        (page.props as unknown as { auth?: { user?: { roles?: Array<{ id?: number; name?: string }> } } })?.auth?.user || null;
+                    // If server didn't include roles on the shared auth.user, fall back to showing all roles
+                    if (!Array.isArray(currentUser?.roles)) {
+                        setAvailableRoles(roles as Array<{ id: number; name: string }>);
+                    } else {
+                        const currentRoleNames = currentUser.roles.map((rr) => rr.name);
+                        if (currentRoleNames.includes('システム管理者')) {
+                            setAvailableRoles(roles as Array<{ id: number; name: string }>);
+                        } else {
+                            const currentRoleIds = currentUser.roles.map((rr) => rr.id);
+                            setAvailableRoles(
+                                (roles as Array<{ id?: number; name?: string }>).filter((r) => currentRoleIds.includes(r.id)) as Array<{
+                                    id: number;
+                                    name: string;
+                                }>,
+                            );
+                        }
+                    }
+                } catch {
+                    setAvailableRoles(roles);
+                }
             } catch {
                 // ignore
             }
@@ -123,8 +173,12 @@ export default function TasksIndexPage() {
             const d = urlParams.get('direction');
             if (s) params.sort = s;
             if (d) params.direction = d;
+            // use component state for role/audience filters so we don't modify the URL
+            if (activeRole) params.role = activeRole;
+            if (activeAudience) params.audience = activeAudience;
             const res = await axios.get('/api/tasks', { params });
             let fetched = res.data.tasks || [];
+            // note: activeAudience/activeRole are driven by component state elsewhere
             if (filterCategoryId) {
                 fetched = fetched.filter((t: Task) => (t.category ? t.category.id === filterCategoryId : false));
             }
@@ -135,11 +189,18 @@ export default function TasksIndexPage() {
         } catch (e) {
             console.error(e);
         }
-    }, [filterAssigneeId, filterCategoryId, filterStatus]);
+    }, [filterAssigneeId, filterCategoryId, filterStatus, activeRole, activeAudience]);
 
     useEffect(() => {
         fetchTasks();
     }, [fetchTasks]);
+
+    // initialize activeAudience from URL on mount
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const a = params.get('audience');
+        if (a) setActiveAudience(a);
+    }, []);
 
     // Re-fetch when Inertia page URL changes (so ?sort=... updates list)
     useEffect(() => {
@@ -222,6 +283,12 @@ export default function TasksIndexPage() {
             task_category_id: t.category ? t.category.id : null,
             status: t.status || '未着手',
         });
+        // set roles/audience when editing if present in payload
+        try {
+            const anyt = t as any;
+            setAudience(anyt.audience || 'all');
+            setSelectedRoles(Array.isArray(anyt.roles) ? anyt.roles.map((r: any) => Number(r.id || r)) : []);
+        } catch {}
         setShowForm(true);
         setTimeout(() => {
             try {
@@ -397,6 +464,11 @@ export default function TasksIndexPage() {
         try {
             const payload: Partial<FormState> & { id?: number } = { ...form };
             if (editingId) payload.id = editingId;
+            // include audience and roles similar to posts
+            (payload as any).audience = audience;
+            if (audience === 'restricted') {
+                (payload as any).roles = selectedRoles;
+            }
             // If no assignees selected, explicitly send null so server clears assignments.
             if (!payload.user_ids || payload.user_ids.length === 0) {
                 (payload as any).user_ids = null;
@@ -573,6 +645,43 @@ export default function TasksIndexPage() {
                                             </select>
                                         </div>
 
+                                        <div>
+                                            <Label>公開範囲</Label>
+                                            <div className="flex items-center gap-4">
+                                                <label className="inline-flex items-center gap-2">
+                                                    <input
+                                                        type="radio"
+                                                        name="audience"
+                                                        value="all"
+                                                        checked={audience === 'all'}
+                                                        onChange={() => setAudience('all')}
+                                                    />
+                                                    <span className="text-sm">全員に公開</span>
+                                                </label>
+                                                <label className="inline-flex items-center gap-2">
+                                                    <input
+                                                        type="radio"
+                                                        name="audience"
+                                                        value="restricted"
+                                                        checked={audience === 'restricted'}
+                                                        onChange={() => setAudience('restricted')}
+                                                    />
+                                                    <span className="text-sm">特定のロールのみ</span>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        {audience === 'restricted' && (
+                                            <div>
+                                                <Label>公開するロール</Label>
+                                                <MultiSelectCombobox
+                                                    options={availableRoles.map((r) => ({ value: r.id, label: r.name }))}
+                                                    selected={selectedRoles}
+                                                    onChange={(vals) => setSelectedRoles(vals)}
+                                                />
+                                            </div>
+                                        )}
+
                                         <div className="flex items-center justify-end gap-2">
                                             <Button type="submit">{editingId ? '更新' : '登録'}</Button>
                                         </div>
@@ -600,6 +709,43 @@ export default function TasksIndexPage() {
                                                 カテゴリ: {categories.find((c) => c.id === filterCategoryId)?.name}
                                             </span>
                                             <button className="text-xs text-gray-500" onClick={() => setFilterCategoryId(null)}>
+                                                クリア
+                                            </button>
+                                        </div>
+                                    )}
+                                    {activeRole && (
+                                        <div className="flex w-full items-center gap-2 sm:w-auto">
+                                            <span className="inline-block rounded bg-indigo-100 px-2 py-0.5 text-xs text-indigo-800">
+                                                ロール: {activeRole}
+                                            </span>
+                                            <button
+                                                className="text-xs text-gray-500"
+                                                onClick={() => {
+                                                    setActiveRole(null);
+                                                    fetchTasks();
+                                                }}
+                                            >
+                                                クリア
+                                            </button>
+                                        </div>
+                                    )}
+                                    {activeAudience && (
+                                        <div className="flex w-full items-center gap-2 sm:w-auto">
+                                            <span
+                                                className={
+                                                    `inline-block rounded px-2 py-0.5 text-xs ` +
+                                                    (activeAudience === 'all' ? 'bg-green-100 text-green-800' : 'bg-purple-100 text-purple-800')
+                                                }
+                                            >
+                                                {activeAudience === 'all' ? '全体公開' : '限定公開'}
+                                            </span>
+                                            <button
+                                                className="text-xs text-gray-500"
+                                                onClick={() => {
+                                                    setActiveAudience(null);
+                                                    fetchTasks();
+                                                }}
+                                            >
                                                 クリア
                                             </button>
                                         </div>
@@ -693,6 +839,68 @@ export default function TasksIndexPage() {
                                                                 ) : (
                                                                     <span className="text-sm text-gray-500">担当者なし</span>
                                                                 )}
+                                                                {/* mobile: show audience and role badges under assignees */}
+                                                                <div className="mt-2">
+                                                                    {(() => {
+                                                                        const aud = (t as any).audience;
+                                                                        const roles = ((t as any).roles || (t as any).role || []) as Array<{
+                                                                            id?: number;
+                                                                            name?: string;
+                                                                        }>;
+                                                                        if (aud === 'all') {
+                                                                            return (
+                                                                                <button
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        setActiveAudience('all');
+                                                                                        fetchTasks();
+                                                                                    }}
+                                                                                    className="inline-flex items-center gap-2 rounded bg-green-100 px-2 py-0.5 text-xs text-green-800"
+                                                                                >
+                                                                                    全体公開
+                                                                                </button>
+                                                                            );
+                                                                        }
+                                                                        if (aud === 'restricted') {
+                                                                            return (
+                                                                                <div>
+                                                                                    <button
+                                                                                        onClick={(e) => {
+                                                                                            e.stopPropagation();
+                                                                                            setActiveAudience('restricted');
+                                                                                            fetchTasks();
+                                                                                        }}
+                                                                                        className="inline-flex items-center gap-2 rounded bg-purple-100 px-2 py-0.5 text-xs text-purple-800"
+                                                                                    >
+                                                                                        限定公開
+                                                                                    </button>
+                                                                                    <div className="mt-1 flex flex-wrap gap-1">
+                                                                                        {roles && roles.length > 0 ? (
+                                                                                            roles.map((r) => (
+                                                                                                <button
+                                                                                                    key={r.id || r.name}
+                                                                                                    onClick={(e) => {
+                                                                                                        e.stopPropagation();
+                                                                                                        setActiveRole(String(r.name ?? r.id));
+                                                                                                        fetchTasks();
+                                                                                                    }}
+                                                                                                    className="cursor-pointer rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-800"
+                                                                                                >
+                                                                                                    {r.name}
+                                                                                                </button>
+                                                                                            ))
+                                                                                        ) : (
+                                                                                            <span className="text-sm text-gray-500">
+                                                                                                (対象未指定)
+                                                                                            </span>
+                                                                                        )}
+                                                                                    </div>
+                                                                                </div>
+                                                                            );
+                                                                        }
+                                                                        return null;
+                                                                    })()}
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -764,6 +972,9 @@ export default function TasksIndexPage() {
                                                 </th>
                                                 <th className="p-2">
                                                     <SortableHeader sort_key="status">ステータス</SortableHeader>
+                                                </th>
+                                                <th className="p-2">
+                                                    <SortableHeader sort_key="audience">公開設定</SortableHeader>
                                                 </th>
                                                 <th className="p-2"></th>
                                             </tr>
@@ -839,6 +1050,75 @@ export default function TasksIndexPage() {
                                                                 )}
                                                             </td>
                                                             <td className="p-2 align-middle text-sm">
+                                                                {(() => {
+                                                                    const aud = (t as any).audience;
+                                                                    const roles = ((t as any).roles || (t as any).role || []) as Array<{
+                                                                        id?: number;
+                                                                        name?: string;
+                                                                    }>;
+                                                                    if (aud === 'all') {
+                                                                        return (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    setActiveAudience('all');
+                                                                                    fetchTasks();
+                                                                                }}
+                                                                                className="inline-flex transform cursor-pointer items-center rounded transition duration-150 hover:bg-green-200 hover:opacity-95 hover:shadow-sm"
+                                                                            >
+                                                                                <span className="inline-block rounded bg-green-100 px-2 py-0.5 text-xs text-green-800">
+                                                                                    全体公開
+                                                                                </span>
+                                                                            </button>
+                                                                        );
+                                                                    }
+                                                                    if (aud === 'restricted') {
+                                                                        return (
+                                                                            <div>
+                                                                                <div>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={(e) => {
+                                                                                            e.stopPropagation();
+                                                                                            setActiveAudience('restricted');
+                                                                                            fetchTasks();
+                                                                                        }}
+                                                                                        className="inline-flex transform cursor-pointer items-center rounded transition duration-150 hover:bg-purple-200 hover:opacity-95 hover:shadow-sm"
+                                                                                    >
+                                                                                        <span className="inline-block rounded bg-purple-100 px-2 py-0.5 text-xs text-purple-800">
+                                                                                            限定公開
+                                                                                        </span>
+                                                                                    </button>
+                                                                                </div>
+                                                                                <div className="mt-1 flex flex-wrap gap-1">
+                                                                                    {roles && roles.length > 0 ? (
+                                                                                        roles.map((r) => (
+                                                                                            <button
+                                                                                                key={r.id || r.name}
+                                                                                                type="button"
+                                                                                                onClick={(e) => {
+                                                                                                    e.stopPropagation();
+                                                                                                    // prefer role name for display (not id)
+                                                                                                    setActiveRole(String(r.name ?? r.id));
+                                                                                                    fetchTasks();
+                                                                                                }}
+                                                                                                className="cursor-pointer rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-800 transition duration-150 hover:bg-gray-200"
+                                                                                            >
+                                                                                                {r.name}
+                                                                                            </button>
+                                                                                        ))
+                                                                                    ) : (
+                                                                                        <span className="text-sm text-gray-500">(対象未指定)</span>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    }
+                                                                    return <span className="text-sm text-muted-foreground">—</span>;
+                                                                })()}
+                                                            </td>
+                                                            <td className="p-2 align-middle text-sm">
                                                                 <div className="flex items-center gap-2">
                                                                     <Button
                                                                         variant="outline"
@@ -868,7 +1148,7 @@ export default function TasksIndexPage() {
                                                         </tr>
                                                         {isExpanded && (
                                                             <tr key={`expanded-${t.id}`} className="bg-gray-50">
-                                                                <td colSpan={6} className="p-4">
+                                                                <td colSpan={7} className="p-4">
                                                                     <div className="text-sm">
                                                                         <div className="mb-2 font-medium">内容</div>
                                                                         <div className="whitespace-pre-wrap text-gray-700">

@@ -63,7 +63,30 @@ type PlacedEvent = {
 
 export default function TasksCalendarPage() {
     const breadcrumbs: BreadcrumbItem[] = [{ title: 'タスク・予定', href: '/tasks' }, { title: 'カレンダー' }];
-    const [events, setEvents] = useState<TaskEvent[]>([]);
+    const [events, setEvents] = useState<TaskEvent[]>(() => {
+        try {
+            const ssrTasks = (page.props as unknown as { tasks?: any[] }).tasks;
+            if (Array.isArray(ssrTasks) && ssrTasks.length > 0) {
+                return ssrTasks
+                    .map((t: any) => ({
+                        id: t.id,
+                        title: t.title,
+                        start_at: t.start_at,
+                        end_at: t.end_at,
+                        category_color: t.category && t.category.color ? t.category.color : null,
+                        category_name: t.category && t.category.name ? t.category.name : null,
+                        description: t.description ?? null,
+                        assignees: t.assignees ?? [],
+                        user_id: t.user_id ?? null,
+                        status: t.status ?? null,
+                    }))
+                    .filter((e: TaskEvent) => e.start_at);
+            }
+        } catch {
+            // ignore
+        }
+        return [];
+    });
     const [currentMonth, setCurrentMonth] = useState(() => {
         const d = new Date();
         return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -83,6 +106,7 @@ export default function TasksCalendarPage() {
     // 編集フォーム用 state
     const [users, setUsers] = useState<{ id: number; name: string }[]>([]);
     const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
+    const [availableRoles, setAvailableRoles] = useState<{ id: number; name: string }[]>([]);
     // 祝日: サーバから取得するマップ (YYYY-MM-DD -> 名前)
     const [holidaysMap, setHolidaysMap] = useState<Record<string, string>>({});
     const [editing, setEditing] = useState(false);
@@ -95,7 +119,9 @@ export default function TasksCalendarPage() {
         user_ids: number[];
         task_category_id?: number | null;
         status?: string | null;
-    }>({ title: '', description: '', start_at: '', end_at: '', user_ids: [], task_category_id: null, status: '未着手' });
+        audience?: 'all' | 'restricted';
+        roles?: number[];
+    }>({ title: '', description: '', start_at: '', end_at: '', user_ids: [], task_category_id: null, status: '未着手', audience: 'all', roles: [] });
     const [errors, setErrors] = useState<Record<string, string[]>>({});
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
     const [formError, setFormError] = useState<string | null>(null);
@@ -161,22 +187,39 @@ export default function TasksCalendarPage() {
 
     const fetchAll = useCallback(async () => {
         try {
-            const res = await axios.get('/api/tasks');
-            const tasks = res.data.tasks || [];
-            const mapped: TaskEvent[] = tasks.map((t: ApiTask) => ({
-                id: t.id,
-                title: t.title,
-                start_at: t.start_at,
-                end_at: t.end_at,
-                category_color: t.category && t.category.color ? t.category.color : null,
-                category_name: t.category && t.category.name ? t.category.name : null,
-                description: t.description ?? null,
-                assignees: t.assignees ?? [],
-                user_id: t.user_id ?? null,
-                status: t.status ?? null,
-            }));
-            // include events that have a start_at even if end_at is missing
-            setEvents(mapped.filter((e) => e.start_at));
+            // If server provided tasks in SSR props, use them and avoid a second API call
+            const ssrTasks = (page.props as unknown as { tasks?: any[] }).tasks;
+            if (Array.isArray(ssrTasks) && ssrTasks.length > 0) {
+                const mapped: TaskEvent[] = ssrTasks.map((t: ApiTask) => ({
+                    id: t.id,
+                    title: t.title,
+                    start_at: t.start_at,
+                    end_at: t.end_at,
+                    category_color: t.category && t.category.color ? t.category.color : null,
+                    category_name: t.category && t.category.name ? t.category.name : null,
+                    description: t.description ?? null,
+                    assignees: t.assignees ?? [],
+                    user_id: t.user_id ?? null,
+                    status: t.status ?? null,
+                }));
+                setEvents(mapped.filter((e) => e.start_at));
+            } else {
+                const res = await axios.get('/api/tasks');
+                const tasks = res.data.tasks || [];
+                const mapped: TaskEvent[] = tasks.map((t: ApiTask) => ({
+                    id: t.id,
+                    title: t.title,
+                    start_at: t.start_at,
+                    end_at: t.end_at,
+                    category_color: t.category && t.category.color ? t.category.color : null,
+                    category_name: t.category && t.category.name ? t.category.name : null,
+                    description: t.description ?? null,
+                    assignees: t.assignees ?? [],
+                    user_id: t.user_id ?? null,
+                    status: t.status ?? null,
+                }));
+                setEvents(mapped.filter((e) => e.start_at));
+            }
 
             try {
                 const ures = await axios.get('/api/active-users');
@@ -190,12 +233,19 @@ export default function TasksCalendarPage() {
             } catch {
                 // ignore
             }
+            try {
+                const rres = await axios.get('/api/roles');
+                // RoleController returns either a JSON-wrapped { roles: [...] } or a plain array.
+                setAvailableRoles(rres.data?.roles ?? (Array.isArray(rres.data) ? rres.data : []));
+            } catch {
+                // ignore
+            }
             // load holidays for the current month (may use SSR-provided data or API)
             await fetchHolidaysForMonth(currentMonth);
         } catch (e) {
             console.error(e);
         }
-    }, [fetchHolidaysForMonth, currentMonth]);
+    }, [fetchHolidaysForMonth, currentMonth, page.props]);
 
     // helper: parse DB date formats used across tasks pages
     const parseDbDate = (raw?: string | null): Date | null => {
@@ -215,6 +265,20 @@ export default function TasksCalendarPage() {
         if (!isNaN(iso.getTime())) return iso;
         return null;
     };
+
+    // map API task shape to local TaskEvent
+    const mapApiTaskToTaskEvent = (t: ApiTask): TaskEvent => ({
+        id: t.id,
+        title: t.title,
+        start_at: t.start_at,
+        end_at: t.end_at,
+        category_color: t.category && t.category.color ? t.category.color : null,
+        category_name: t.category && t.category.name ? t.category.name : null,
+        description: t.description ?? null,
+        assignees: t.assignees ?? [],
+        user_id: t.user_id ?? null,
+        status: t.status ?? null,
+    });
 
     // (fetchHolidaysForMonth is defined above as a useCallback)
 
@@ -493,6 +557,8 @@ export default function TasksCalendarPage() {
                       : [],
                 task_category_id: t.category ? t.category.id : null,
                 status: t.status || '未着手',
+                audience: t.audience || 'all',
+                roles: Array.isArray(t.roles) ? t.roles.map((r: any) => r.id) : [],
             });
             setErrors({});
             setEditing(true);
@@ -528,11 +594,40 @@ export default function TasksCalendarPage() {
             payload.end_at = editForm.end_at ? inputValueToDbDate(editForm.end_at) : null;
             // Ensure user_ids is explicitly included: array when selected, or null when none selected
             payload.user_ids = editForm.user_ids && editForm.user_ids.length > 0 ? editForm.user_ids : null;
+            // include audience and roles explicitly
+            if (editForm.audience) payload.audience = editForm.audience;
+            if (editForm.roles && editForm.roles.length > 0) payload.roles = editForm.roles;
             const res = await axios.post('/api/tasks', payload);
+            const updatedTask =
+                (res && res.data && (res.data.task || res.data.task === null) ? res.data.task : res.data.task) || res.data.task || res.data;
+            // fallback: if server returns updated task in res.data.task, use it; otherwise use res.data
+            const mapped = mapApiTaskToTaskEvent(updatedTask as ApiTask);
+            setEvents((prev) => prev.map((ev) => (ev.id === mapped.id ? mapped : ev)));
+            // build a placed event for the modal
+            const s = parseDbDate(mapped.start_at);
+            const en = parseDbDate(mapped.end_at);
+            if (s) {
+                const placed: PlacedEvent = {
+                    id: mapped.id,
+                    title: mapped.title,
+                    start: s,
+                    end: en ?? new Date(s.getFullYear(), s.getMonth(), s.getDate(), 23, 59, 59, 999),
+                    weekIndex: 0,
+                    startIndex: 0,
+                    endIndex: 0,
+                    row: 0,
+                    color: mapped.category_color ?? null,
+                    description: mapped.description ?? null,
+                    assignees: mapped.assignees ?? [],
+                    category_name: mapped.category_name ?? null,
+                    user_id: mapped.user_id ?? null,
+                    status: mapped.status ?? null,
+                    originalEndMissing: !en,
+                };
+                setSelectedEvent(placed);
+            }
             setToast({ message: res.data.message || '更新しました', type: 'success' });
             setEditing(false);
-            setSelectedEvent(null);
-            await fetchAll();
         } catch (err) {
             const maybeResponse = (err as { response?: unknown } | null)?.response;
             if (maybeResponse && typeof maybeResponse === 'object' && maybeResponse !== null) {
@@ -597,6 +692,8 @@ export default function TasksCalendarPage() {
                                         user_ids: [],
                                         task_category_id: null,
                                         status: '未着手',
+                                        audience: 'all',
+                                        roles: [],
                                     });
                                     setErrors({});
                                     setCreateOpen(true);
@@ -854,6 +951,8 @@ export default function TasksCalendarPage() {
                                 <Textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
                             </div>
 
+                            {/* 公開設定はステータスの下に移動しました */}
+
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 <div>
                                     <Label>
@@ -902,6 +1001,41 @@ export default function TasksCalendarPage() {
                                     <option value="キャンセル">キャンセル</option>
                                     <option value="保留">保留</option>
                                 </select>
+                            </div>
+
+                            <div>
+                                <Label>公開設定</Label>
+                                <div className="mt-1 flex items-center gap-3">
+                                    <label className="flex items-center gap-2">
+                                        <input
+                                            type="radio"
+                                            name="audience"
+                                            value="all"
+                                            checked={editForm.audience === 'all'}
+                                            onChange={() => setEditForm({ ...editForm, audience: 'all' })}
+                                        />
+                                        <span className="text-sm">全体公開</span>
+                                    </label>
+                                    <label className="flex items-center gap-2">
+                                        <input
+                                            type="radio"
+                                            name="audience"
+                                            value="restricted"
+                                            checked={editForm.audience === 'restricted'}
+                                            onChange={() => setEditForm({ ...editForm, audience: 'restricted' })}
+                                        />
+                                        <span className="text-sm">限定公開</span>
+                                    </label>
+                                </div>
+                                {editForm.audience === 'restricted' ? (
+                                    <div className="mt-2">
+                                        <MultiSelectCombobox
+                                            options={availableRoles.map((r) => ({ value: r.id, label: r.name }))}
+                                            selected={editForm.roles || []}
+                                            onChange={(vals) => setEditForm({ ...editForm, roles: vals })}
+                                        />
+                                    </div>
+                                ) : null}
                             </div>
 
                             <div className="flex items-center justify-end gap-2">
@@ -954,11 +1088,42 @@ export default function TasksCalendarPage() {
                                 payload.start_at = editForm.start_at ? inputValueToDbDate(editForm.start_at) : null;
                                 payload.end_at = editForm.end_at ? inputValueToDbDate(editForm.end_at) : null;
                                 payload.user_ids = editForm.user_ids && editForm.user_ids.length > 0 ? editForm.user_ids : null;
+                                // include audience and roles explicitly
+                                if (editForm.audience) payload.audience = editForm.audience;
+                                if (editForm.roles && editForm.roles.length > 0) payload.roles = editForm.roles;
                                 const res = await axios.post('/api/tasks', payload);
+                                const created =
+                                    (res && res.data && (res.data.task || res.data.task === null) ? res.data.task : res.data.task) ||
+                                    res.data.task ||
+                                    res.data;
+                                const mapped = mapApiTaskToTaskEvent(created as ApiTask);
+                                // append to events so the calendar shows it immediately
+                                setEvents((prev) => [...prev, mapped]);
+                                // open detail modal for the new event
+                                const s = parseDbDate(mapped.start_at);
+                                const en = parseDbDate(mapped.end_at);
+                                if (s) {
+                                    const placed: PlacedEvent = {
+                                        id: mapped.id,
+                                        title: mapped.title,
+                                        start: s,
+                                        end: en ?? new Date(s.getFullYear(), s.getMonth(), s.getDate(), 23, 59, 59, 999),
+                                        weekIndex: 0,
+                                        startIndex: 0,
+                                        endIndex: 0,
+                                        row: 0,
+                                        color: mapped.category_color ?? null,
+                                        description: mapped.description ?? null,
+                                        assignees: mapped.assignees ?? [],
+                                        category_name: mapped.category_name ?? null,
+                                        user_id: mapped.user_id ?? null,
+                                        status: mapped.status ?? null,
+                                        originalEndMissing: !en,
+                                    };
+                                    setSelectedEvent(placed);
+                                }
                                 setToast({ message: res.data.message || '作成しました', type: 'success' });
                                 setCreateOpen(false);
-                                // refresh
-                                await fetchAll();
                             } catch (err) {
                                 const maybeResponse = (err as { response?: unknown } | null)?.response;
                                 if (maybeResponse && typeof maybeResponse === 'object' && maybeResponse !== null) {
@@ -1067,6 +1232,41 @@ export default function TasksCalendarPage() {
                                 <option value="キャンセル">キャンセル</option>
                                 <option value="保留">保留</option>
                             </select>
+                        </div>
+
+                        <div>
+                            <Label>公開設定</Label>
+                            <div className="mt-1 flex items-center gap-3">
+                                <label className="flex items-center gap-2">
+                                    <input
+                                        type="radio"
+                                        name="audience"
+                                        value="all"
+                                        checked={editForm.audience === 'all'}
+                                        onChange={() => setEditForm({ ...editForm, audience: 'all' })}
+                                    />
+                                    <span className="text-sm">全体公開</span>
+                                </label>
+                                <label className="flex items-center gap-2">
+                                    <input
+                                        type="radio"
+                                        name="audience"
+                                        value="restricted"
+                                        checked={editForm.audience === 'restricted'}
+                                        onChange={() => setEditForm({ ...editForm, audience: 'restricted' })}
+                                    />
+                                    <span className="text-sm">限定公開</span>
+                                </label>
+                            </div>
+                            {editForm.audience === 'restricted' ? (
+                                <div className="mt-2">
+                                    <MultiSelectCombobox
+                                        options={availableRoles.map((r) => ({ value: r.id, label: r.name }))}
+                                        selected={editForm.roles || []}
+                                        onChange={(vals) => setEditForm({ ...editForm, roles: vals })}
+                                    />
+                                </div>
+                            ) : null}
                         </div>
 
                         <div className="flex items-center justify-end gap-2">
