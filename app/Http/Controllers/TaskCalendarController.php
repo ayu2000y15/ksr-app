@@ -44,7 +44,7 @@ class TaskCalendarController extends Controller
                 });
         });
 
-        // enforce visibility same as TaskController@index
+        // enforce visibility: same semantics as TaskController, but accept optional ?audience param
         $user = $request->user();
         $userRoleIds = [];
         if ($user) {
@@ -55,20 +55,61 @@ class TaskCalendarController extends Controller
             }
         }
 
-        $q->where(function ($qq) use ($userRoleIds, $user) {
-            $qq->where('audience', 'all');
-            if ($user) {
-                $qq->orWhere('user_id', $user->id);
-            }
-            if (!empty($userRoleIds)) {
-                $qq->orWhere(function ($q2) use ($userRoleIds) {
-                    $q2->where('audience', 'restricted')
+        $roleParam = $request->query('role');
+        $hasRoleParam = !empty($roleParam);
+
+        $audienceParam = $request->query('audience');
+
+        if ($hasRoleParam) {
+            $q->whereHas('roles', function ($qr) use ($roleParam) {
+                if (is_numeric($roleParam)) {
+                    $qr->where('roles.id', intval($roleParam));
+                } else {
+                    $qr->where('roles.name', $roleParam);
+                }
+            });
+
+            if ($audienceParam === 'all') {
+                $q->where('audience', 'all');
+            } elseif ($audienceParam === 'restricted') {
+                if (!empty($userRoleIds)) {
+                    $q->where('audience', 'restricted')
                         ->whereHas('roles', function ($qr) use ($userRoleIds) {
                             $qr->whereIn('roles.id', $userRoleIds);
                         });
+                } else {
+                    $q->whereRaw('0 = 1');
+                }
+            }
+        } else {
+            if ($audienceParam === 'all') {
+                $q->where('audience', 'all');
+            } elseif ($audienceParam === 'restricted') {
+                if (!empty($userRoleIds)) {
+                    $q->where('audience', 'restricted')
+                        ->whereHas('roles', function ($qr) use ($userRoleIds) {
+                            $qr->whereIn('roles.id', $userRoleIds);
+                        });
+                } else {
+                    $q->whereRaw('0 = 1');
+                }
+            } else {
+                $q->where(function ($qq) use ($userRoleIds, $user) {
+                    $qq->where('audience', 'all');
+                    if ($user) {
+                        $qq->orWhere('user_id', $user->id);
+                    }
+                    if (!empty($userRoleIds)) {
+                        $qq->orWhere(function ($q2) use ($userRoleIds) {
+                            $q2->where('audience', 'restricted')
+                                ->whereHas('roles', function ($qr) use ($userRoleIds) {
+                                    $qr->whereIn('roles.id', $userRoleIds);
+                                });
+                        });
+                    }
                 });
             }
-        });
+        }
 
         $tasks = $q->get()->map(function ($t) {
             $assignees = [];

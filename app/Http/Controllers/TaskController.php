@@ -8,12 +8,34 @@ use App\Models\User;
 use App\Models\TaskCategory;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
 
 class TaskController
 {
     public function index(Request $request)
     {
         $q = Task::query();
+        // optional: if caller provided ?month=YYYY-MM-DD, restrict to tasks overlapping that month
+        if ($request->has('month')) {
+            try {
+                $month = Carbon::parse($request->query('month'));
+            } catch (\Exception $e) {
+                $month = Carbon::now();
+            }
+            $start = $month->copy()->startOfMonth()->toDateTimeString();
+            $end = $month->copy()->endOfMonth()->toDateTimeString();
+            $q->where(function ($qq) use ($start, $end) {
+                $qq->whereBetween('start_at', [$start, $end])
+                    ->orWhereBetween('end_at', [$start, $end])
+                    ->orWhere(function ($q2) use ($start, $end) {
+                        $q2->where('start_at', '<=', $start)
+                            ->where(function ($q3) use ($end) {
+                                $q3->whereNotNull('end_at')->where('end_at', '>=', $end)
+                                    ->orWhereNull('end_at');
+                            });
+                    });
+            });
+        }
         // optional filter: date range or user
         if ($request->has('user_id')) {
             $uid = (int)$request->query('user_id');
@@ -65,8 +87,10 @@ class TaskController
             $q->orderBy('id', 'desc');
         }
 
-        // enforce visibility: always show audience='all'; for audience='restricted' only show if
-        // the current user belongs to at least one of the task's roles
+        // enforce visibility: by default show audience='all' and owner and restricted-with-role matches.
+        // If caller provided ?audience=all|restricted, constrain results to that audience while
+        // still allowing owners (they always see their tasks) and, for restricted filter, allow
+        // restricted tasks that match the user's roles.
         $user = $request->user();
         $userRoleIds = [];
         if ($user) {
@@ -77,27 +101,14 @@ class TaskController
             }
         }
 
-        $q->where(function ($qq) use ($userRoleIds, $user) {
-            $qq->where('audience', 'all');
-
-            // task owner should always see their tasks
-            if ($user) {
-                $qq->orWhere('user_id', $user->id);
-            }
-
-            if (!empty($userRoleIds)) {
-                $qq->orWhere(function ($q2) use ($userRoleIds) {
-                    $q2->where('audience', 'restricted')
-                        ->whereHas('roles', function ($qr) use ($userRoleIds) {
-                            $qr->whereIn('roles.id', $userRoleIds);
-                        });
-                });
-            }
-        });
-
-        // optional: filter by role when provided as query param ?role=rolename or ?role=id
+        // Build strictness flags
         $roleParam = $request->query('role');
-        if (!empty($roleParam)) {
+        $hasRoleParam = !empty($roleParam);
+
+        $audienceParam = $request->query('audience');
+
+        // If a role filter is provided, perform a strict role-only query (optionally intersect with audience)
+        if ($hasRoleParam) {
             $q->whereHas('roles', function ($qr) use ($roleParam) {
                 if (is_numeric($roleParam)) {
                     $qr->where('roles.id', intval($roleParam));
@@ -105,6 +116,52 @@ class TaskController
                     $qr->where('roles.name', $roleParam);
                 }
             });
+
+            // if audience param specified, intersect with that audience strictly
+            if ($audienceParam === 'all') {
+                $q->where('audience', 'all');
+            } elseif ($audienceParam === 'restricted') {
+                // only restricted tasks that match the user's roles (if user has roles)
+                if (!empty($userRoleIds)) {
+                    $q->where('audience', 'restricted')
+                        ->whereHas('roles', function ($qr) use ($userRoleIds) {
+                            $qr->whereIn('roles.id', $userRoleIds);
+                        });
+                } else {
+                    // user cannot see restricted tasks via role match
+                    $q->whereRaw('0 = 1');
+                }
+            }
+        } else {
+            // No role filter: apply audience filtering rules. Treat audience=all/restricted strictly (no owner fallback)
+            if ($audienceParam === 'all') {
+                $q->where('audience', 'all');
+            } elseif ($audienceParam === 'restricted') {
+                if (!empty($userRoleIds)) {
+                    $q->where('audience', 'restricted')
+                        ->whereHas('roles', function ($qr) use ($userRoleIds) {
+                            $qr->whereIn('roles.id', $userRoleIds);
+                        });
+                } else {
+                    $q->whereRaw('0 = 1');
+                }
+            } else {
+                // default behaviour: audience='all' OR owner OR restricted matching user's roles
+                $q->where(function ($qq) use ($userRoleIds, $user) {
+                    $qq->where('audience', 'all');
+                    if ($user) {
+                        $qq->orWhere('user_id', $user->id);
+                    }
+                    if (!empty($userRoleIds)) {
+                        $qq->orWhere(function ($q2) use ($userRoleIds) {
+                            $q2->where('audience', 'restricted')
+                                ->whereHas('roles', function ($qr) use ($userRoleIds) {
+                                    $qr->whereIn('roles.id', $userRoleIds);
+                                });
+                        });
+                    }
+                });
+            }
         }
 
         $tasks = $q->get();

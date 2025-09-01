@@ -91,6 +91,7 @@ export default function TasksCalendarPage() {
         const d = new Date();
         return new Date(d.getFullYear(), d.getMonth(), 1);
     });
+    // audience filtering is not used on the calendar page UI
     // ADDED: クリックされたイベント詳細を保持するためのstate
     const [selectedEvent, setSelectedEvent] = useState<PlacedEvent | null>(null);
     // state to show list of hidden events when user clicks "他N件"
@@ -187,9 +188,15 @@ export default function TasksCalendarPage() {
 
     const fetchAll = useCallback(async () => {
         try {
-            // If server provided tasks in SSR props, use them and avoid a second API call
-            const ssrTasks = (page.props as unknown as { tasks?: any[] }).tasks;
-            if (Array.isArray(ssrTasks) && ssrTasks.length > 0) {
+            // If server provided tasks in SSR props, we can use them only when the user hasn't
+            // selected a specific audience filter (currentAudience==='any'). If the user has chosen
+            // 'all' or 'restricted' we must call the API to get server-filtered results.
+            // Only reuse SSR tasks when the SSR-provided month matches the currently shown month.
+            const ssrProps = page.props as unknown as { tasks?: unknown[]; month?: string };
+            const ssrTasks = ssrProps.tasks;
+            const ssrMonth = ssrProps.month;
+            const shownMonthIso = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-01`;
+            if (Array.isArray(ssrTasks) && ssrTasks.length > 0 && ssrMonth === shownMonthIso) {
                 const mapped: TaskEvent[] = ssrTasks.map((t: ApiTask) => ({
                     id: t.id,
                     title: t.title,
@@ -204,7 +211,10 @@ export default function TasksCalendarPage() {
                 }));
                 setEvents(mapped.filter((e) => e.start_at));
             } else {
-                const res = await axios.get('/api/tasks');
+                const params: Record<string, unknown> = {};
+                // include the currently shown month so server can return tasks that overlap this month
+                params.month = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-01`;
+                const res = await axios.get('/api/tasks', { params });
                 const tasks = res.data.tasks || [];
                 const mapped: TaskEvent[] = tasks.map((t: ApiTask) => ({
                     id: t.id,
@@ -558,7 +568,13 @@ export default function TasksCalendarPage() {
                 task_category_id: t.category ? t.category.id : null,
                 status: t.status || '未着手',
                 audience: t.audience || 'all',
-                roles: Array.isArray(t.roles) ? t.roles.map((r: any) => r.id) : [],
+                roles: Array.isArray(t.roles)
+                    ? t.roles.map((r: unknown) =>
+                          r && typeof r === 'object' && 'id' in (r as Record<string, unknown>)
+                              ? Number((r as Record<string, unknown>).id)
+                              : Number(r),
+                      )
+                    : [],
             });
             setErrors({});
             setEditing(true);
@@ -680,6 +696,7 @@ export default function TasksCalendarPage() {
                         >
                             戻る
                         </Button>
+                        {/* audience filter buttons removed per request */}
                         {taskPerm.create ? (
                             <Button
                                 onClick={() => {
