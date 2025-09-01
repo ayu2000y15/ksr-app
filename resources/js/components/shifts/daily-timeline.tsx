@@ -939,7 +939,7 @@ export default function DailyTimeline(props: {
                                 </Button>
                                 <Button
                                     size="sm"
-                                    variant="outline"
+                                    variant="destructive"
                                     onClick={() => {
                                         setShowAddUser(false);
                                         setSelectedUserId(null);
