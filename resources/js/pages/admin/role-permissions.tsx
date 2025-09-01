@@ -26,11 +26,15 @@ export default function RolePermissionsPage() {
     const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' } | null>(null);
 
     const page = usePage();
-    const authProps = page.props?.auth as unknown as { permissions?: Record<string, boolean>; user?: any } | undefined;
-    const sharedPermissions = authProps?.permissions || {};
+    // Inertia shares two things:
+    // - page.props.auth.permissions: flat array of permission names (legacy)
+    // - page.props.permissions: nested map used across the app with boolean flags (we should use this)
+    const flatAuthPermissions = page.props?.auth?.permissions || [];
+    const sharedPermissions = page.props?.permissions || {};
+    const currentUser = page.props?.auth?.user ?? null;
 
     useEffect(() => {
-        fetchRoles(sharedPermissions, authProps?.user);
+        fetchRoles(sharedPermissions, currentUser);
         fetchPermissions();
     }, []);
 
@@ -80,7 +84,7 @@ export default function RolePermissionsPage() {
 
         await axios.post(`/api/roles/${selectedRole.id}/permissions`, { permission_ids });
 
-        await fetchRoles(sharedPermissions, authProps?.user); // ロールリストを再取得してリレーションを更新
+    await fetchRoles(sharedPermissions, currentUser); // ロールリストを再取得してリレーションを更新
         setIsSaving(false);
         setToast({ message: '保存しました', type: 'success' });
     };
@@ -199,7 +203,17 @@ export default function RolePermissionsPage() {
         });
     };
 
-    const can = (perm: string) => !!sharedPermissions[perm];
+    const can = (perm: string) => {
+        // perm is like 'role.update' or 'user.view'
+        const parts = perm.split('.');
+        if (parts.length === 2) {
+            const group = parts[0];
+            const action = parts[1];
+            return !!(sharedPermissions[group] && sharedPermissions[group][action]);
+        }
+        // fallback: check flat auth permissions array
+        return flatAuthPermissions.includes(perm);
+    };
 
     return (
         <AppSidebarLayout breadcrumbs={breadcrumbs}>
