@@ -120,6 +120,12 @@ class SharePermissions
                         'delete' => $safeHas('properties.delete'),
                         'reorder' => $safeHas('properties.reorder'),
                     ],
+                    'task' => [
+                        'view' => $safeHas('task.view'),
+                        'create' => $safeHas('task.create'),
+                        'update' => $safeHas('task.update'),
+                        'delete' => $safeHas('task.delete'),
+                    ],
                     'is_system_admin' => $isSystemAdmin,
                 ],
             ]);

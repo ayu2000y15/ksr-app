@@ -25,14 +25,36 @@ export default function RolePermissionsPage() {
     const [isSaving, setIsSaving] = useState(false);
     const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' } | null>(null);
 
+    const page = usePage();
+    const authProps = page.props?.auth as unknown as { permissions?: Record<string, boolean>; user?: any } | undefined;
+    const sharedPermissions = authProps?.permissions || {};
+
     useEffect(() => {
-        fetchRoles();
+        fetchRoles(sharedPermissions, authProps?.user);
         fetchPermissions();
     }, []);
 
-    const fetchRoles = async () => {
+    const fetchRoles = async (perms: Record<string, boolean>, currentUser: any) => {
+        // If the user has any role-management or user-role-assignment viewing permissions, request full list
+        const keysToCheck = ['role.viewAny', 'role.view', 'role.assign', 'role.update', 'user.view', 'user.update'];
+        const shouldRequestAll = keysToCheck.some((k) => !!perms[k]);
+
         const res = await axios.get('/api/roles');
-        setRoles(res.data);
+        const data = res.data || [];
+
+        if (shouldRequestAll) {
+            setRoles(data);
+            return;
+        }
+
+        // Fallback: filter roles to those the current user belongs to (defensive - server may already do this)
+        if (currentUser && Array.isArray(currentUser.roles)) {
+            const myRoleIds = currentUser.roles.map((r: any) => r.id);
+            setRoles((data || []).filter((r: any) => myRoleIds.includes(r.id)));
+            return;
+        }
+
+        setRoles(data);
     };
     const fetchPermissions = async () => {
         const res = await axios.get('/api/permissions');
@@ -58,7 +80,7 @@ export default function RolePermissionsPage() {
 
         await axios.post(`/api/roles/${selectedRole.id}/permissions`, { permission_ids });
 
-        await fetchRoles(); // ロールリストを再取得してリレーションを更新
+        await fetchRoles(sharedPermissions, authProps?.user); // ロールリストを再取得してリレーションを更新
         setIsSaving(false);
         setToast({ message: '保存しました', type: 'success' });
     };
@@ -85,6 +107,7 @@ export default function RolePermissionsPage() {
         damaged_inventory: '破損在庫管理',
         その他: 'その他',
         properties: '物件管理',
+        task: 'タスク管理',
         // 必要に応じてここに追加
     };
 
@@ -151,6 +174,11 @@ export default function RolePermissionsPage() {
         'properties.edit': '物件編集',
         'properties.delete': '物件削除',
         'properties.reorder': '物件並び替え',
+        // task
+        'task.view': 'タスク閲覧',
+        'task.create': 'タスク作成',
+        'task.update': 'タスク編集',
+        'task.delete': 'タスク削除',
     };
 
     const allSelected = permissions.length > 0 && permissions.every((p) => !!checked[p.id]);
@@ -171,10 +199,7 @@ export default function RolePermissionsPage() {
         });
     };
 
-    const page = usePage();
-    const authProps = page.props?.auth as unknown as { permissions?: string[] } | undefined;
-    const authPermissions: string[] = authProps?.permissions ?? [];
-    const can = (perm: string) => authPermissions.includes(perm);
+    const can = (perm: string) => !!sharedPermissions[perm];
 
     return (
         <AppSidebarLayout breadcrumbs={breadcrumbs}>

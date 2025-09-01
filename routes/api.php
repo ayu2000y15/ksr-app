@@ -144,6 +144,18 @@ Route::middleware(['web', 'auth'])->group(function () {
     // サーバー側集計 API（月別カテゴリ・名称ごとの破損集計）
     Route::get('damaged-inventories/stats', [\App\Http\Controllers\Api\DamagedInventoryController::class, 'stats']);
 
+    // Tasks API
+    Route::get('/tasks', [\App\Http\Controllers\TaskController::class, 'index']);
+    Route::get('/tasks/{id}', [\App\Http\Controllers\TaskController::class, 'show']);
+    // POST accepts id for update to simplify frontend (same pattern as room-occupancies)
+    Route::post('/tasks', [\App\Http\Controllers\TaskController::class, 'store']);
+    Route::delete('/tasks/{id}', [\App\Http\Controllers\TaskController::class, 'destroy']);
+
+    // Task categories
+    Route::get('/task-categories', [\App\Http\Controllers\TaskCategoryController::class, 'index']);
+    Route::post('/task-categories', [\App\Http\Controllers\TaskCategoryController::class, 'store']);
+    Route::delete('/task-categories/{id}', [\App\Http\Controllers\TaskCategoryController::class, 'destroy']);
+
     // 破損在庫管理 API
     Route::apiResource('damaged-inventories', \App\Http\Controllers\Api\DamagedInventoryController::class);
     // 投稿へのリアクションと既読
@@ -355,5 +367,130 @@ Route::middleware(['web', 'auth'])->group(function () {
         ]);
 
         return response()->json(['message' => '送迎申請を作成しました', 'transport_request' => $tr], 201);
+    });
+
+    // Holidays API: return holidays in the requested month as [{date, name}, ...]
+    Route::get('/holidays', function (\Illuminate\Http\Request $request) {
+        $month = $request->query('month');
+        $all = $request->query('all');
+        if ($all) {
+            // Only return holidays from the current year onward
+            $curYear = \Carbon\Carbon::now()->year;
+            $holidays = \App\Models\Holiday::whereYear('date', '>=', $curYear)
+                ->orderBy('date')
+                ->get(['id', 'date', 'name'])
+                ->map(function ($h) {
+                    return [
+                        'id' => $h->id,
+                        'date' => \Carbon\Carbon::parse($h->date)->toDateString(),
+                        'name' => $h->name ?? '',
+                    ];
+                })->toArray();
+        } else {
+            try {
+                $m = $month ? \Carbon\Carbon::parse($month) : \Carbon\Carbon::now();
+            } catch (\Exception $e) {
+                $m = \Carbon\Carbon::now();
+            }
+            $holidays = \App\Models\Holiday::whereBetween('date', [$m->copy()->startOfMonth(), $m->copy()->endOfMonth()])
+                ->get(['id', 'date', 'name'])
+                ->map(function ($h) {
+                    return [
+                        'id' => $h->id,
+                        'date' => \Carbon\Carbon::parse($h->date)->toDateString(),
+                        'name' => $h->name ?? '',
+                    ];
+                })->toArray();
+        }
+
+        return response()->json(['holidays' => $holidays], 200);
+    });
+
+    // Create holiday
+    Route::post('/holidays', function (\Illuminate\Http\Request $request) {
+        $data = $request->validate([
+            'date' => 'required|date',
+            'name' => 'required|string|max:255',
+        ]);
+
+        $h = \App\Models\Holiday::create([
+            'date' => $data['date'],
+            'name' => $data['name'],
+        ]);
+
+        return response()->json(['holiday' => $h], 201);
+    });
+
+    // Delete holiday
+    Route::delete('/holidays/{id}', function (\Illuminate\Http\Request $request, $id) {
+        $h = \App\Models\Holiday::find($id);
+        if (! $h) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+        $h->delete();
+        return response()->json(['message' => 'deleted'], 200);
+    });
+
+    // Update holiday
+    Route::patch('/holidays/{id}', function (\Illuminate\Http\Request $request, $id) {
+        $data = $request->validate([
+            'date' => 'required|date',
+            'name' => 'required|string|max:255',
+        ]);
+        $h = \App\Models\Holiday::find($id);
+        if (! $h) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+        $h->date = $data['date'];
+        $h->name = $data['name'];
+        $h->save();
+        return response()->json(['holiday' => $h], 200);
+    });
+
+    // Import holidays for a given year from external public API (Nager.Date)
+    Route::post('/holidays/import-year', function (\Illuminate\Http\Request $request) {
+        $data = $request->validate([
+            'year' => 'required|integer|min:1900|max:2100',
+        ]);
+        $year = (int) $data['year'];
+
+        // Use Guzzle (bundled with Laravel installs) to fetch public holidays for JP
+        try {
+            $client = new \GuzzleHttp\Client(['timeout' => 10]);
+            $res = $client->get("https://date.nager.at/api/v3/PublicHolidays/{$year}/JP");
+            $body = (string) $res->getBody();
+            $arr = json_decode($body, true);
+            if (!is_array($arr)) {
+                return response()->json(['message' => '外部APIの応答が不正です'], 500);
+            }
+
+            $created = 0;
+            $skipped = 0;
+            $errors = [];
+            foreach ($arr as $h) {
+                if (empty($h['date'])) continue;
+                try {
+                    $date = \Carbon\Carbon::parse($h['date'])->toDateString();
+                } catch (\Exception $e) {
+                    continue;
+                }
+                $name = $h['localName'] ?? ($h['name'] ?? '');
+                $exists = \App\Models\Holiday::where('date', $date)->first();
+                if ($exists) {
+                    $skipped++;
+                    continue;
+                }
+                try {
+                    \App\Models\Holiday::create(['date' => $date, 'name' => $name]);
+                    $created++;
+                } catch (\Exception $e) {
+                    $errors[] = $date . ': ' . $e->getMessage();
+                }
+            }
+
+            return response()->json(['created' => $created, 'skipped' => $skipped, 'errors' => $errors], 200);
+        } catch (\Exception $e) {
+            return response()->json(['message' => '外部APIから取得できませんでした: ' . $e->getMessage()], 500);
+        }
     });
 });

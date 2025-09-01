@@ -606,6 +606,21 @@ export default function Dashboard() {
             <Head title="ダッシュボード" />
             <div className="p-4 sm:p-6 lg:p-8">
                 <style>{`.hide-scrollbar::-webkit-scrollbar{display:none}.hide-scrollbar{-ms-overflow-style:none;scrollbar-width:none;}`}</style>
+                {/* お知らせカード上部: タスクカレンダーへのショートカット */}
+                <div className="mb-4 flex items-center justify-end">
+                    <Button
+                        variant="outline"
+                        onClick={() => {
+                            try {
+                                router.get(route('tasks.calendar'));
+                            } catch {
+                                window.location.href = route('tasks.calendar');
+                            }
+                        }}
+                    >
+                        タスクカレンダー
+                    </Button>
+                </div>
                 <div className="mb-6">
                     <Card>
                         <CardHeader>
@@ -714,7 +729,7 @@ export default function Dashboard() {
                                     <div className="mb-4 ml-3 text-xs text-muted-foreground">
                                         ※送迎申請は車を所持しているユーザーが行ってください。
                                         <br />
-                                        ※2日前までの申請が可能です。
+                                        ※当日～2日前までの申請が可能です。
                                     </div>
                                 )}
                             {shifts.length === 0 ? (

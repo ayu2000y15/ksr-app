@@ -140,6 +140,20 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
     // --- 掲示板（Inertia pages） ---
     Route::inertia('/posts', 'posts/index')->name('posts.index');
     Route::inertia('/posts/create', 'posts/create')->name('posts.create');
+    // タスク・予定（Inertia page）
+    Route::inertia('/tasks', 'tasks/index')->name('tasks.index');
+    // タスク カレンダー表示 (コントローラ経由で祝日を渡す)
+    Route::get('/tasks/calendar', [\App\Http\Controllers\TaskCalendarController::class, 'index'])->name('tasks.calendar');
+    // タスクカテゴリ管理（在庫カテゴリと同様の画面構成）
+    Route::prefix('tasks')->name('tasks.')->group(function () {
+        Route::get('categories', [\App\Http\Controllers\TaskCategoryPageController::class, 'index'])->name('categories.index');
+        Route::get('categories/create', [\App\Http\Controllers\TaskCategoryPageController::class, 'create'])->name('categories.create');
+        Route::post('categories', [\App\Http\Controllers\TaskCategoryPageController::class, 'store'])->name('categories.store');
+        Route::get('categories/{category}/edit', [\App\Http\Controllers\TaskCategoryPageController::class, 'edit'])->name('categories.edit');
+        Route::patch('categories/{category}', [\App\Http\Controllers\TaskCategoryPageController::class, 'update'])->name('categories.update');
+        Route::delete('categories/{category}', [\App\Http\Controllers\TaskCategoryPageController::class, 'destroy'])->name('categories.destroy');
+        Route::post('categories/reorder', [\App\Http\Controllers\TaskCategoryPageController::class, 'reorder'])->name('categories.reorder');
+    });
     // Use controller for show so we can pass the post as an Inertia prop
     Route::get('/posts/{post}', [PostController::class, 'showPage'])->name('posts.show');
     Route::get('/posts/{post}/edit', [PostController::class, 'editPage'])->name('posts.edit');
@@ -188,6 +202,9 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
         // damaged inventory page
         Route::inertia('damaged', 'inventory/damaged/index')->name('damaged');
     });
+
+    // --- 管理: 休日登録 ---
+    Route::inertia('/admin/holidays', 'admin/holidays')->name('admin.holidays');
 });
 
 require __DIR__ . '/auth.php';

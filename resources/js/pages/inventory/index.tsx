@@ -306,19 +306,20 @@ export default function Index({ items: initial }: any) {
                         <HeadingSmall title="在庫管理" description="カテゴリごとに在庫を表示。" />
                     </div>
                     <div className="flex items-center justify-start gap-2 sm:justify-end">
-                        {/* カテゴリ編集: show if user can update inventory categories (use inventory.update as proxy) */}
-                        {inventoryPerms.update && (
-                            <Link href={route('inventory.categories.index')}>
-                                <Button size="sm" variant="ghost" className="whitespace-nowrap">
-                                    カテゴリ編集
-                                </Button>
-                            </Link>
-                        )}
                         {/* 在庫ログ: show if user can view logs */}
                         {inventoryPerms.logs && (
                             <Link href={route('inventory.stock_logs.index')}>
                                 <Button size="sm" variant="ghost" className="whitespace-nowrap">
                                     在庫ログ
+                                </Button>
+                            </Link>
+                        )}
+
+                        {/* カテゴリ編集: show if user can update inventory categories (use inventory.update as proxy) */}
+                        {inventoryPerms.update && (
+                            <Link href={route('inventory.categories.index')}>
+                                <Button size="sm" variant="ghost" className="whitespace-nowrap">
+                                    カテゴリ編集
                                 </Button>
                             </Link>
                         )}

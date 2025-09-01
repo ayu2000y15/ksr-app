@@ -20,7 +20,36 @@ class RoleController extends Controller
 
         $this->authorize('viewAny', Role::class);
 
-        // 非システム管理者は、自分が所属しているロールのみ返す
+        // 要件: 次のいずれかの権限を持つ閲覧者は、自分のロールだけでなく全てのロールを閲覧できるようにする。
+        // チェックする権限キー（合理的な推定）:
+        $checkPerms = [
+            'role.viewAny',
+            'role.view',
+            'role.assign',
+            'role.update',
+            'user.view',
+            'user.update',
+        ];
+
+        $canSeeAll = false;
+        if ($user) {
+            foreach ($checkPerms as $p) {
+                try {
+                    if ($user->hasPermissionTo($p)) {
+                        $canSeeAll = true;
+                        break;
+                    }
+                } catch (\Exception $e) {
+                    // ignore missing permission entries
+                }
+            }
+        }
+
+        if ($user && $canSeeAll) {
+            return Role::with('permissions')->orderBy('id')->get();
+        }
+
+        // デフォルト: 非管理者かつ権限が無ければ、自分が所属しているロールのみ返す
         if ($user) {
             $roleIds = $user->roles->pluck('id')->values()->all();
             return Role::with('permissions')->whereIn('id', $roleIds)->orderBy('id')->get();

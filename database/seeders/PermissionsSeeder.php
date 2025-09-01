@@ -34,6 +34,11 @@ class PermissionsSeeder extends Seeder
             'shift.create',
             'shift.update',
             'shift.delete',
+            // task management
+            'task.view',
+            'task.create',
+            'task.update',
+            'task.delete',
             // additional variants for finer-grained checks
             'shift.viewAny',
             'shift.manage',
