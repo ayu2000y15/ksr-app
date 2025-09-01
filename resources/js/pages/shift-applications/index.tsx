@@ -429,7 +429,7 @@ export default function Index({
                                     </div>
                                     <div className="mt-1">
                                         ・<strong className="font-semibold">食券不要申請</strong>
-                                        は二日前までに行ってください。それ以降は受け付けません。
+                                        は2日前までに行ってください。それ以降は受け付けません。
                                     </div>
                                 </div>
                             </div>

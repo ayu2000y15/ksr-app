@@ -72,6 +72,12 @@ class HandleInertiaRequests extends Middleware
                 ...(new Ziggy)->toArray(),
                 'location' => $request->url(),
             ],
+            // シフト申請の未来日表示制限（日数）をフロントに共有
+            'shift' => function () {
+                return [
+                    'application_deadline_days' => config('shift.application_deadline_days', 0),
+                ];
+            },
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }

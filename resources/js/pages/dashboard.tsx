@@ -264,6 +264,17 @@ export default function Dashboard() {
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
     const page = usePage<SharedData>();
     const { auth } = page.props as any;
+    const shiftConfig = (page.props as any)?.shift ?? { application_deadline_days: 0 };
+    const deadlineDays = Number(shiftConfig.application_deadline_days) || 0;
+    const maxSelectableDate: Date | null =
+        deadlineDays > 0
+            ? (() => {
+                  const d = new Date();
+                  d.setHours(0, 0, 0, 0);
+                  d.setDate(d.getDate() + deadlineDays);
+                  return d;
+              })()
+            : null;
     const permissions: string[] = page.props?.auth?.permissions ?? [];
     const isSuperAdmin: boolean = page.props?.auth?.isSuperAdmin ?? (page.props as any)['auth.isSuperAdmin'] ?? false;
     const nestedPermissions = (page.props as unknown as { permissions?: Record<string, any> } | undefined)?.permissions;
@@ -281,6 +292,15 @@ export default function Dashboard() {
             hasNested = Boolean(nestedPermissions[parts[0]][key]);
         }
         if (hasFlat || hasNested) canViewShifts = true;
+    }
+    // determine if user may view tasks (calendar)
+    let canViewTasks = false;
+    if (isSuperAdmin) canViewTasks = true;
+    else {
+        const perm = 'task.view';
+        const hasFlat = Array.isArray(permissions) && permissions.includes(perm);
+        const hasNested = Boolean(nestedPermissions && nestedPermissions.tasks && nestedPermissions.tasks.view);
+        if (hasFlat || hasNested) canViewTasks = true;
     }
     const leftRowsRef = useRef<HTMLDivElement | null>(null);
     const rightRowsRef = useRef<HTMLDivElement | null>(null);
@@ -544,6 +564,14 @@ export default function Dashboard() {
     const goToNextDay = () => {
         const newDate = new Date(currentDate);
         newDate.setDate(newDate.getDate() + 1);
+        // respect application deadline
+        try {
+            if (maxSelectableDate) {
+                const nd = new Date(newDate);
+                nd.setHours(0, 0, 0, 0);
+                if (nd.getTime() > maxSelectableDate.getTime()) return; // disallow moving beyond deadline
+            }
+        } catch {}
         setCurrentDate(newDate);
     };
 
@@ -608,18 +636,20 @@ export default function Dashboard() {
                 <style>{`.hide-scrollbar::-webkit-scrollbar{display:none}.hide-scrollbar{-ms-overflow-style:none;scrollbar-width:none;}`}</style>
                 {/* お知らせカード上部: タスクカレンダーへのショートカット */}
                 <div className="mb-4 flex items-center justify-end">
-                    <Button
-                        variant="outline"
-                        onClick={() => {
-                            try {
-                                router.get(route('tasks.calendar'));
-                            } catch {
-                                window.location.href = route('tasks.calendar');
-                            }
-                        }}
-                    >
-                        タスクカレンダー
-                    </Button>
+                    {canViewTasks && (
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                try {
+                                    router.get(route('tasks.calendar'));
+                                } catch {
+                                    window.location.href = route('tasks.calendar');
+                                }
+                            }}
+                        >
+                            タスクカレンダー
+                        </Button>
+                    )}
                 </div>
                 <div className="mb-6">
                     <Card>
@@ -707,7 +737,29 @@ export default function Dashboard() {
                                         </Button>
                                     </PopoverTrigger>
                                     <PopoverContent className="w-auto p-0">
-                                        <Calendar mode="single" selected={currentDate} onSelect={handleDateSelect} initialFocus locale={ja} />
+                                        <Calendar
+                                            mode="single"
+                                            selected={currentDate}
+                                            onSelect={(date) => {
+                                                if (!date) {
+                                                    handleDateSelect(date);
+                                                    return;
+                                                }
+                                                if (maxSelectableDate) {
+                                                    const d = new Date(date);
+                                                    d.setHours(0, 0, 0, 0);
+                                                    if (d.getTime() > maxSelectableDate.getTime()) {
+                                                        // ignore selection beyond deadline
+                                                        return;
+                                                    }
+                                                }
+                                                handleDateSelect(date);
+                                            }}
+                                            initialFocus
+                                            locale={ja}
+                                            toDate={maxSelectableDate ?? undefined}
+                                            disabled={maxSelectableDate ? { after: maxSelectableDate } : undefined}
+                                        />
                                     </PopoverContent>
                                 </Popover>
                                 {/*【追加】本日ボタンを配置*/}
@@ -717,9 +769,18 @@ export default function Dashboard() {
                                 <Button variant="outline" size="icon" onClick={goToPreviousDay}>
                                     <ChevronLeft className="h-4 w-4" />
                                 </Button>
-                                <Button variant="outline" size="icon" onClick={goToNextDay}>
-                                    <ChevronRight className="h-4 w-4" />
-                                </Button>
+                                {!(
+                                    maxSelectableDate &&
+                                    (() => {
+                                        const d = new Date(currentDate);
+                                        d.setHours(0, 0, 0, 0);
+                                        return d.getTime() >= maxSelectableDate.getTime();
+                                    })()
+                                ) && (
+                                    <Button variant="outline" size="icon" onClick={goToNextDay}>
+                                        <ChevronRight className="h-4 w-4" />
+                                    </Button>
+                                )}
                             </div>
                         </CardHeader>
                         <CardContent>
