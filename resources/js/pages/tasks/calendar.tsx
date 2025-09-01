@@ -122,7 +122,8 @@ export default function TasksCalendarPage() {
                 user_id: t.user_id ?? null,
                 status: t.status ?? null,
             }));
-            setEvents(mapped.filter((e) => e.start_at && e.end_at));
+            // include events that have a start_at even if end_at is missing
+            setEvents(mapped.filter((e) => e.start_at));
 
             try {
                 const ures = await axios.get('/api/active-users');
@@ -136,41 +137,65 @@ export default function TasksCalendarPage() {
             } catch {
                 // ignore
             }
-            // If Inertia SSR provided holidays via page.props.holidays (array of {date,name}), use it
-            try {
-                const ssrHolidays = (page.props as any).holidays;
-                if (Array.isArray(ssrHolidays)) {
-                    // two possible shapes: array of date strings ['YYYY-MM-DD', ...] OR array of {date,name}
-                    if (ssrHolidays.length > 0 && typeof ssrHolidays[0] === 'string') {
-                        // need to fetch names from API for the current month
-                        try {
-                            const mParam = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-01`;
-                            const hres = await axios.get('/api/holidays', { params: { month: mParam } });
-                            const list = hres.data.holidays || [];
-                            const map: Record<string, string> = {};
-                            for (const it of list) {
-                                if (it && it.date) map[String(it.date)] = it.name || '';
-                            }
-                            setHolidaysMap(map);
-                        } catch (e) {
-                            // fallback: convert strings to empty-name map
-                            const map: Record<string, string> = {};
-                            for (const d of ssrHolidays) map[String(d)] = '';
-                            setHolidaysMap(map);
-                        }
-                    } else {
+            // load holidays for the current month (may use SSR-provided data or API)
+            await fetchHolidaysForMonth(currentMonth);
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    // fetch holidays for a specific month (monthDate is a Date where month is the target)
+    const fetchHolidaysForMonth = async (monthDate: Date) => {
+        try {
+            const ssrHolidays = (page.props as any).holidays;
+            if (Array.isArray(ssrHolidays) && ssrHolidays.length > 0) {
+                // two possible shapes: array of date strings ['YYYY-MM-DD', ...] OR array of {date,name}
+                if (typeof ssrHolidays[0] === 'string') {
+                    // SSR provided only date strings; fetch names for the shown month
+                    try {
+                        const mParam = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, '0')}-01`;
+                        const hres = await axios.get('/api/holidays', { params: { month: mParam } });
+                        const list = hres.data.holidays || [];
                         const map: Record<string, string> = {};
-                        for (const it of ssrHolidays) {
+                        for (const it of list) {
                             if (it && it.date) map[String(it.date)] = it.name || '';
                         }
                         setHolidaysMap(map);
+                        return;
+                    } catch {
+                        const map: Record<string, string> = {};
+                        for (const d of ssrHolidays) map[String(d)] = '';
+                        setHolidaysMap(map);
+                        return;
                     }
                 }
-            } catch {
-                // ignore
+                // SSR provided full objects - try to use only those in the requested month
+                const year = String(monthDate.getFullYear());
+                const month = String(monthDate.getMonth() + 1).padStart(2, '0');
+                const prefix = `${year}-${month}`;
+                const monthItems = ssrHolidays.filter((it: any) => it && it.date && String(it.date).startsWith(prefix));
+                if (monthItems.length > 0) {
+                    const map: Record<string, string> = {};
+                    for (const it of monthItems) {
+                        map[String(it.date)] = it.name || '';
+                    }
+                    setHolidaysMap(map);
+                    return;
+                }
+                // if SSR objects don't include the requested month, fall back to API
             }
-        } catch (e) {
-            console.error(e);
+
+            // fallback: call API for the requested month
+            const mParam = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, '0')}-01`;
+            const hres = await axios.get('/api/holidays', { params: { month: mParam } });
+            const list = hres.data.holidays || [];
+            const map: Record<string, string> = {};
+            for (const it of list) {
+                if (it && it.date) map[String(it.date)] = it.name || '';
+            }
+            setHolidaysMap(map);
+        } catch {
+            // ignore errors; leave holidaysMap as-is or empty
         }
     };
 
@@ -202,6 +227,11 @@ export default function TasksCalendarPage() {
     useEffect(() => {
         fetchAll();
     }, []);
+
+    // when the visible month changes, refresh holidays for that month
+    useEffect(() => {
+        void fetchHolidaysForMonth(currentMonth);
+    }, [currentMonth]);
 
     const parseDbDate = (raw?: string | null): Date | null => {
         if (!raw) return null;
@@ -242,7 +272,24 @@ export default function TasksCalendarPage() {
             .map((e: TaskEvent) => {
                 const s = parseDbDate(e.start_at);
                 const en = parseDbDate(e.end_at);
-                if (!s || !en) return null;
+                if (!s) return null;
+                // If end is missing, treat it as an all-day event on the start date
+                if (!en) {
+                    const sd = new Date(s.getFullYear(), s.getMonth(), s.getDate(), 0, 0, 0, 0);
+                    const ed = new Date(s.getFullYear(), s.getMonth(), s.getDate(), 23, 59, 59, 999);
+                    return {
+                        id: e.id,
+                        title: e.title,
+                        start: sd,
+                        end: ed,
+                        color: e.category_color ?? null,
+                        description: e.description ?? null,
+                        assignees: e.assignees ?? [],
+                        category_name: e.category_name ?? null,
+                        user_id: e.user_id ?? null,
+                        status: e.status ?? null,
+                    };
+                }
                 return {
                     id: e.id,
                     title: e.title,

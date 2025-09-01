@@ -84,7 +84,7 @@ export default function RolePermissionsPage() {
 
         await axios.post(`/api/roles/${selectedRole.id}/permissions`, { permission_ids });
 
-    await fetchRoles(sharedPermissions, currentUser); // ロールリストを再取得してリレーションを更新
+        await fetchRoles(sharedPermissions, currentUser); // ロールリストを再取得してリレーションを更新
         setIsSaving(false);
         setToast({ message: '保存しました', type: 'success' });
     };
