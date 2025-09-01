@@ -695,11 +695,16 @@ export default function Dashboard() {
                                                 : `${currentDate.getMonth() + 1}/${currentDate.getDate()} のシフト`}
                                         </Button>
 
-                                        {/* 送迎申請モーダルを開く（ユーザーが has_car の場合のみ表示） */}
+                                        {/* 送迎申請モーダルを開く（車所持かつ申請期間内かつ当日のシフトに含まれるユーザーのみ表示） */}
                                         {(() => {
                                             const canActAsDriver =
                                                 (auth && auth.user && (auth.user.has_car === 1 || auth.user.has_car === true)) || hasCarFlag;
-                                            const showTransportControl = Boolean(canActAsDriver && withinTransportWindow);
+                                            const userId = auth && auth.user ? Number(auth.user.id) : null;
+                                            const isUserInShifts =
+                                                userId !== null &&
+                                                Array.isArray(shifts) &&
+                                                shifts.some((s: any) => Number(s.user?.id ?? s.user_id ?? 0) === userId);
+                                            const showTransportControl = Boolean(canActAsDriver && withinTransportWindow && isUserInShifts);
                                             if (!showTransportControl) return null;
                                             return (
                                                 <>
@@ -791,6 +796,8 @@ export default function Dashboard() {
                                         ※送迎申請は車を所持しているユーザーが行ってください。
                                         <br />
                                         ※当日～2日前までの申請が可能です。
+                                        <br />
+                                        ※送迎申請ボタンは、表示日のシフトに登録されているユーザーのみ表示されます。
                                     </div>
                                 )}
                             {shifts.length === 0 ? (
