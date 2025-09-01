@@ -20,6 +20,7 @@ class DailyNoteController extends Controller
     // GET /api/daily-notes?month=YYYY-MM
     public function index(Request $request)
     {
+        $this->authorize('viewAny', DailyNote::class);
         $month = $request->query('month');
         $query = DailyNote::with(['user', 'attachments', 'comments.user', 'comments.quote']);
         if ($month && preg_match('/^\d{4}-\d{2}$/', $month)) {
@@ -38,6 +39,8 @@ class DailyNoteController extends Controller
         ]);
 
         $user = $request->user();
+        // authorization: any authenticated user can create
+        $this->authorize('create', DailyNote::class);
         DB::beginTransaction();
         try {
             $note = DailyNote::create(['date' => $data['date'], 'user_id' => $user->id, 'body' => $data['body']]);
@@ -60,8 +63,12 @@ class DailyNoteController extends Controller
     {
         $note = DailyNote::find($id);
         if (!$note) return response()->json(['message' => 'Not found'], 404);
-        // allow delete only by owner
-        if ($note->user_id !== $request->user()->id) return response()->json(['message' => 'Forbidden'], 403);
+        // authorize using policy (owner only)
+        try {
+            $this->authorize('delete', $note);
+        } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
         $note->delete();
         return response()->noContent();
     }
@@ -71,8 +78,12 @@ class DailyNoteController extends Controller
     {
         $note = DailyNote::find($id);
         if (!$note) return response()->json(['message' => 'Not found'], 404);
-        // only owner can update
-        if ($note->user_id !== $request->user()->id) return response()->json(['message' => 'Forbidden'], 403);
+        // authorize using policy (owner only)
+        try {
+            $this->authorize('update', $note);
+        } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
 
         $data = $request->validate([
             'body' => 'required|string',

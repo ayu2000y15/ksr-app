@@ -1,7 +1,7 @@
 import Toast from '@/components/ui/toast';
 import { Head, usePage } from '@inertiajs/react';
 import axios from 'axios';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,19 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { BreadcrumbItem, Permission, Role } from '@/types';
+
+type AuthUser = {
+    id?: number;
+    roles?: { id: number }[];
+};
+
+type PageProps = {
+    auth?: {
+        permissions?: string[];
+        user?: AuthUser | null;
+    };
+    permissions?: Record<string, Record<string, boolean>>;
+};
 
 // パンくずリストの定義
 const breadcrumbs: BreadcrumbItem[] = [
@@ -25,26 +38,27 @@ export default function RolePermissionsPage() {
     const [isSaving, setIsSaving] = useState(false);
     const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' } | null>(null);
 
-    const page = usePage();
+    const page = usePage() as unknown as { props: PageProps };
     // Inertia shares two things:
     // - page.props.auth.permissions: flat array of permission names (legacy)
     // - page.props.permissions: nested map used across the app with boolean flags (we should use this)
     const flatAuthPermissions = page.props?.auth?.permissions || [];
-    const sharedPermissions = page.props?.permissions || {};
+    const sharedPermissions = useMemo(() => page.props?.permissions || {}, [page.props?.permissions]);
+    const memoSharedPermissions = useMemo(() => sharedPermissions, [sharedPermissions]);
     const currentUser = page.props?.auth?.user ?? null;
 
     useEffect(() => {
-        fetchRoles(sharedPermissions, currentUser);
+        fetchRoles(memoSharedPermissions as Record<string, Record<string, boolean>>, currentUser);
         fetchPermissions();
-    }, []);
+    }, [memoSharedPermissions, currentUser]);
 
-    const fetchRoles = async (perms: Record<string, boolean>, currentUser: any) => {
+    const fetchRoles = async (perms: Record<string, Record<string, boolean>> | undefined, currentUser: AuthUser | null) => {
         // If the user has any role-management or user-role-assignment viewing permissions, request full list
         const keysToCheck = ['role.viewAny', 'role.view', 'role.assign', 'role.update', 'user.view', 'user.update'];
-        const shouldRequestAll = keysToCheck.some((k) => !!perms[k]);
+        const shouldRequestAll = !!perms && keysToCheck.some((k) => !!perms[k]);
 
         const res = await axios.get('/api/roles');
-        const data = res.data || [];
+        const data = (res.data || []) as Role[];
 
         if (shouldRequestAll) {
             setRoles(data);
@@ -53,8 +67,8 @@ export default function RolePermissionsPage() {
 
         // Fallback: filter roles to those the current user belongs to (defensive - server may already do this)
         if (currentUser && Array.isArray(currentUser.roles)) {
-            const myRoleIds = currentUser.roles.map((r: any) => r.id);
-            setRoles((data || []).filter((r: any) => myRoleIds.includes(r.id)));
+            const myRoleIds = currentUser.roles.map((r) => r.id);
+            setRoles((data || []).filter((r) => myRoleIds.includes(r.id)));
             return;
         }
 
@@ -108,6 +122,7 @@ export default function RolePermissionsPage() {
         shift_detail: 'シフト詳細',
         holiday: '休日管理',
         user_shift_setting: 'ユーザー別休暇上限',
+        daily_note: '日次ノート',
         inventory: '在庫管理',
         damaged_inventory: '破損在庫管理',
         その他: 'その他',
@@ -156,6 +171,9 @@ export default function RolePermissionsPage() {
         'holiday.create': '休日登録',
         'holiday.update': '休日編集',
         'holiday.delete': '休日削除',
+        // daily note
+        'daily_note.view': '日次ノート閲覧',
+        'daily_note.create': '日次ノート作成',
         // default shifts
         'default_shift.view': 'デフォルトシフト閲覧',
         'default_shift.create': 'デフォルトシフト作成',
@@ -215,7 +233,10 @@ export default function RolePermissionsPage() {
         if (parts.length === 2) {
             const group = parts[0];
             const action = parts[1];
-            return !!(sharedPermissions[group] && sharedPermissions[group][action]);
+            // sharedPermissions has a loose runtime shape provided by the server; cast to a flexible record to avoid TS index errors
+            const sp = sharedPermissions as Record<string, unknown>;
+            const grp = sp[group] as Record<string, unknown> | undefined;
+            return !!(grp && (grp[action] as boolean));
         }
         // fallback: check flat auth permissions array
         return flatAuthPermissions.includes(perm);

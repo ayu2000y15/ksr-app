@@ -66,8 +66,27 @@ export default function DailyNotesIndex() {
     const [holidays, setHolidays] = useState<string[]>([]);
     const [selectedDate, setSelectedDate] = useState<string>('');
     const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' | 'info' } | null>(null);
-    const pageProps = usePage().props as { auth?: { user?: { id?: number } } };
+    type PageProps = {
+        auth?: { user?: { id?: number }; permissions?: string[] };
+        permissions?: Record<string, Record<string, boolean>>;
+    };
+
+    const pageProps = usePage().props as PageProps;
     const currentUserId = pageProps?.auth?.user?.id ?? null;
+
+    // helper to check permissions from either flat auth.permissions (string[])
+    // or nested permissions object (e.g. { daily_note: { create: true } })
+    const hasPermission = (perm: string) => {
+        const flat = pageProps?.auth?.permissions;
+        if (Array.isArray(flat) && flat.includes(perm)) return true;
+        const nested = pageProps?.permissions;
+        if (nested && typeof nested === 'object') {
+            const [group, action] = perm.split('.');
+            const typed = nested as Record<string, Record<string, boolean>>;
+            if (typed[group] && typed[group][action]) return true;
+        }
+        return false;
+    };
 
     const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
 
@@ -290,6 +309,7 @@ export default function DailyNotesIndex() {
                             notes={grouped[selectedDate] || []}
                             currentUserId={currentUserId}
                             editingNoteId={editingNoteId}
+                            canCreate={hasPermission('daily_note.create')}
                             onStartEdit={(id: number) => setEditingNoteId(id)}
                             onCancelEdit={() => setEditingNoteId(null)}
                             onNoteCreate={handleCreate}
@@ -449,6 +469,7 @@ type NoteSheetProps = {
     onNoteDelete: (noteId: number) => void;
     onCommentAdd: (dailyNoteId: number, body: string, quoteId?: number) => void;
     onCommentDelete: (commentId: number) => void;
+    canCreate?: boolean;
 };
 
 function NoteSheet({
@@ -463,6 +484,7 @@ function NoteSheet({
     onNoteDelete,
     onCommentAdd,
     onCommentDelete,
+    canCreate,
 }: NoteSheetProps) {
     if (!selectedDate) {
         return (
@@ -475,7 +497,7 @@ function NoteSheet({
     }
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-4">
             <div className="text-xl font-bold">ノート: {selectedDate}</div>
             <div className="space-y-4">
                 {notes.map((note: Note) => (
@@ -495,7 +517,13 @@ function NoteSheet({
                     </div>
                 ))}
             </div>
-            <NewNoteForm onSubmit={onNoteCreate} />
+            {canCreate ? (
+                <NewNoteForm onSubmit={onNoteCreate} />
+            ) : (
+                <Card className="mt-6">
+                    <CardContent className="p-4 text-sm text-muted-foreground">新しいノートを作成する権限がありません。</CardContent>
+                </Card>
+            )}
         </div>
     );
 }

@@ -79,6 +79,10 @@ class PermissionsSeeder extends Seeder
             'holiday.update',
             'holiday.delete',
 
+            // daily notes (日次ノート)
+            'daily_note.view',
+            'daily_note.create',
+
             // per-user shift settings (ユーザー別休暇上限設定)
             'user_shift_setting.view',
             'user_shift_setting.create',

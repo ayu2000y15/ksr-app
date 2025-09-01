@@ -37,6 +37,7 @@ class AuthServiceProvider extends ServiceProvider
         \App\Models\ShiftDetail::class => \App\Policies\ShiftDetailPolicy::class,
         \App\Models\Property::class => \App\Policies\PropertyPolicy::class,
         \App\Models\InventoryItem::class => \App\Policies\InventoryPolicy::class,
+        \App\Models\DailyNote::class => \App\Policies\DailyNotePolicy::class,
     ];
 
     /**

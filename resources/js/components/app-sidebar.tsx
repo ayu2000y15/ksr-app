@@ -20,7 +20,7 @@ import { SidebarSettingsMenu } from './sidebar-settings-menu';
 const mainNavItems: NavItem[] = [
     { title: 'ユーザー管理', href: '/users', icon: Users, permission: 'user.view' },
     { title: '各種申請', href: '/shift-applications', icon: CalendarCheck, permission: 'shift_application.view' },
-    { title: '日次ノート', href: '/daily-notes', icon: FileText, permission: '' },
+    { title: '日次ノート', href: '/daily-notes', icon: FileText, permission: 'daily_note.view' },
     { title: 'タスク・予定', href: '/tasks', icon: CheckSquare, permission: 'task.view' },
     { title: '掲示板・マニュアル', href: '/posts', icon: MessageSquare, permission: '' },
     { title: 'シフト管理', href: '/shifts', icon: Calendar, permission: 'shift.view' },
