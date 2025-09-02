@@ -379,11 +379,11 @@ export default function PostsIndex() {
                                                                             <Badge className="bg-gray-100 text-gray-800">既読</Badge>
                                                                         </div>
                                                                     ) : null}
-                                                                    <div className="flex items-center gap-2">
+                                                                    <div className="flex min-w-0 items-center gap-2">
                                                                         <Link
                                                                             href={route('posts.show', post.id)}
                                                                             onClick={(e: MouseEvent) => e.stopPropagation()}
-                                                                            className="text-blue-600 hover:underline"
+                                                                            className="max-w-[48ch] break-words whitespace-normal text-blue-600 hover:underline"
                                                                         >
                                                                             {post.title || '(無題)'}
                                                                         </Link>

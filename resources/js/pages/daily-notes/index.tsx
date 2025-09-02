@@ -117,7 +117,7 @@ function renderWithLinks(text?: string, highlight?: string | null) {
                 }
 
                 try {
-                    const re = new RegExp(`(${highlight.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')})`, 'gi');
+                    const re = new RegExp(`(${String(highlight).replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')})`, 'gi');
                     const parts = part.split(re);
                     return (
                         <span key={`t-${idx}`}>
@@ -194,18 +194,49 @@ export default function DailyNotesIndex() {
     const [isSearching, setIsSearching] = useState(true);
     const [activeTag, setActiveTag] = useState<string | null>(null);
 
-    const fetchNotes = async (opts?: { q?: string | null; start?: string | null; end?: string | null; month?: string | null }) => {
+    // fetchNotes supports optional tag filtering. If the backend doesn't support tag param,
+    // a client-side fallback filters returned notes by tag.
+    const fetchNotes = async (opts?: {
+        q?: string | null;
+        start?: string | null;
+        end?: string | null;
+        month?: string | null;
+        tag?: string | null;
+    }) => {
         const params = new URLSearchParams();
         if (opts?.month) params.set('month', opts.month);
         if (opts?.q) params.set('q', opts.q);
         if (opts?.start) params.set('start', opts.start);
         if (opts?.end) params.set('end', opts.end);
+        if (opts?.tag) params.set('tag', opts.tag);
 
         try {
             const res = await fetch(`/api/daily-notes?${params.toString()}`, { credentials: 'same-origin' });
             if (!res.ok) throw new Error('failed');
             const json = await res.json();
-            setNotes(json.notes || []);
+            let loaded: Note[] = json.notes || [];
+
+            // client-side fallback: when tag filter requested but backend didn't filter,
+            // ensure we only keep notes that actually have the tag attached
+            if (opts?.tag) {
+                const tagName = String(opts.tag);
+                loaded = (loaded || []).filter((n: Note) => {
+                    const t = n.tags;
+                    if (!t) return false;
+                    if (Array.isArray(t)) {
+                        return t.some((it) => String(it?.name ?? it) === tagName);
+                    }
+                    // if tags stored as a string, check containment
+                    if (typeof t === 'string')
+                        return t
+                            .split(',')
+                            .map((s) => s.trim())
+                            .includes(tagName);
+                    return false;
+                });
+            }
+
+            setNotes(loaded);
         } catch (e) {
             console.error(e);
         }
@@ -237,14 +268,15 @@ export default function DailyNotesIndex() {
     };
 
     const handleTagClick = async (tagName: string) => {
-        // set tag as active and perform a tag search (no date range)
+        // set tag as active and perform a tag-only search (no date range)
         setActiveTag(tagName);
-        setSearchQ(tagName);
-        setConfirmedSearchQ(tagName);
+        // clear keyword search highlighting when filtering by tag
+        setSearchQ('');
+        setConfirmedSearchQ(null);
         setIsSearching(true);
         setSearchStart(null);
         setSearchEnd(null);
-        await fetchNotes({ q: tagName, start: null, end: null });
+        await fetchNotes({ tag: tagName, start: null, end: null });
         // scroll to top so header/search area is visible after tag click
         try {
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -998,6 +1030,25 @@ function NewNoteForm({ onSubmit }: { onSubmit: (body: string, attachments: File[
         setPreviewUrls(urls);
     };
 
+    const removeAttachment = (index: number) => {
+        setAttachments((prev) => prev.filter((_, i) => i !== index));
+        const urls = prevUrlsRef.current.slice();
+        if (urls[index]) URL.revokeObjectURL(urls[index]);
+        const newUrls = urls.filter((_, i) => i !== index);
+        prevUrlsRef.current = newUrls;
+        setPreviewUrls(newUrls);
+        // reset file input to allow re-adding same file
+        if (fileRef.current) fileRef.current.value = '';
+    };
+
+    const clearAllAttachments = () => {
+        setAttachments([]);
+        prevUrlsRef.current.forEach((u) => URL.revokeObjectURL(u));
+        prevUrlsRef.current = [];
+        setPreviewUrls([]);
+        if (fileRef.current) fileRef.current.value = '';
+    };
+
     useEffect(() => {
         return () => {
             // cleanup on unmount
@@ -1011,6 +1062,14 @@ function NewNoteForm({ onSubmit }: { onSubmit: (body: string, attachments: File[
             <CardContent className="p-4">
                 <form onSubmit={handleSubmit} className="space-y-3">
                     <Textarea placeholder="新しいノートを追記..." value={body} onChange={(e) => setBody(e.target.value)} rows={3} />
+                    <div className="text-sm text-muted-foreground">
+                        <p>
+                            <span className="font-medium">タグの付け方</span>
+                            <br></br>・本文中に <span className="font-medium">#タグ名</span> の形式で記載してください。
+                            <br></br>・複数指定する場合はスペースで区切ります。<br></br>
+                            ・タグは投稿後に一覧で表示され、タグをクリックするとそのタグが付いた投稿のみ検索できます。
+                        </p>
+                    </div>
                     <div className="flex items-center justify-between">
                         <Button type="button" variant="ghost" size="icon" onClick={() => fileRef.current?.click()}>
                             <Paperclip className="h-5 w-5" />
@@ -1025,20 +1084,40 @@ function NewNoteForm({ onSubmit }: { onSubmit: (body: string, attachments: File[
                         <div>
                             <div className="mt-2 grid grid-cols-3 gap-2">
                                 {previewUrls.map((src, i) => (
-                                    <button
+                                    <div
                                         key={i}
-                                        type="button"
+                                        className="relative h-32 cursor-pointer overflow-hidden rounded-md border"
                                         onClick={() => {
                                             setStartIndex(i);
                                             setModalOpen(true);
                                         }}
-                                        className="h-32 overflow-hidden rounded-md border"
+                                        onKeyDown={(e) => e.key === 'Enter' && (setStartIndex(i), setModalOpen(true))}
+                                        role="button"
+                                        tabIndex={0}
                                     >
                                         <img src={src} className="h-full w-full object-cover" alt={`new-attach-${i}`} />
-                                    </button>
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                removeAttachment(i);
+                                            }}
+                                            className="absolute top-1 right-1 z-10 rounded-full bg-background/80 p-1 text-xs"
+                                            aria-label="削除"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
                                 ))}
                             </div>
-                            <div className="mt-2 text-sm text-muted-foreground">{attachments.length}件のファイルが選択されています。</div>
+                            <div className="mt-2 flex items-center justify-between">
+                                <div className="text-sm text-muted-foreground">{attachments.length}件のファイルが選択されています。</div>
+                                <div>
+                                    <button type="button" className="rounded border px-3 py-1 text-sm" onClick={clearAllAttachments}>
+                                        添付を取消
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     )}
                     {modalOpen && <ImageModal images={previewUrls} startIndex={startIndex} onClose={() => setModalOpen(false)} />}
@@ -1262,7 +1341,7 @@ function CommentSection({ noteId, comments, currentUserId, onCommentAdd, onComme
                                     </p>
                                 </div>
                             )}
-                            <p className="mt-1 break-words break-all whitespace-pre-wrap">{renderWithLinks(c.body)}</p>
+                            <p className="mt-1 break-words break-all whitespace-pre-wrap">{renderWithLinks(c.body, highlight)}</p>
                         </div>
                     </div>
                 ))}

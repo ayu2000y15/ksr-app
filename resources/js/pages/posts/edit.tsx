@@ -826,6 +826,15 @@ export default function PostEdit() {
                                             />
                                         </div>
 
+                                        <div className="text-sm text-muted-foreground">
+                                            <p>
+                                                <span className="font-medium">タグの付け方</span>
+                                                <br></br>・本文中に <span className="font-medium">#タグ名</span> の形式で記載してください。
+                                                <br></br>・複数指定する場合はスペースで区切ります。<br></br>
+                                                ・タグは投稿後に一覧で表示され、タグをクリックするとそのタグが付いた投稿のみ検索できます。
+                                            </p>
+                                        </div>
+
                                         <div>
                                             <Label htmlFor="attachments">添付</Label>
                                             <div className="flex items-center gap-3">
@@ -933,6 +942,14 @@ export default function PostEdit() {
                                             placeholder="タグを入力 (例: 機材名)"
                                             className="mt-2"
                                         />
+                                        <div className="text-sm text-muted-foreground">
+                                            <p>
+                                                <span className="font-medium">タグの付け方</span>
+                                                <br></br>・本文中に <span className="font-medium">#タグ名</span> の形式で記載してください。
+                                                <br></br>・複数指定する場合はスペースで区切ります。<br></br>
+                                                ・タグは投稿後に一覧で表示され、タグをクリックするとそのタグが付いた投稿のみ検索できます。
+                                            </p>
+                                        </div>
                                     </div>
                                 )}
 

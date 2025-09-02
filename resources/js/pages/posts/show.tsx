@@ -592,9 +592,11 @@ export default function PostShow() {
                         <CardHeader className="border-b bg-gray-50 py-4">
                             <div className="flex flex-wrap items-start justify-between gap-4">
                                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-                                    <div className="min-w-0 flex-shrink-0">
+                                    <div className="min-w-0 flex-1">
                                         <div className="flex items-center gap-2">
-                                            <h1 className="text-xl font-bold break-words whitespace-normal sm:text-2xl">{post?.title || '(無題)'}</h1>
+                                            <h1 className="max-w-full text-xl font-bold break-words whitespace-normal sm:text-2xl">
+                                                {post?.title || '(無題)'}
+                                            </h1>
                                             {isDraft(post) && <Badge className="border-yellow-300 bg-yellow-50 text-yellow-800">下書き</Badge>}
                                         </div>
                                         <div className="mt-1 truncate text-sm text-muted-foreground">
