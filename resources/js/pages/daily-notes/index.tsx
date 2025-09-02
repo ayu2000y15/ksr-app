@@ -84,7 +84,7 @@ function renderWithLinks(text?: string, highlight?: string | null) {
                                 href={p}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="break-words break-all text-sky-600 underline hover:text-sky-800"
+                                className="inline-block max-w-[48ch] truncate text-sky-600 underline hover:text-sky-800"
                             >
                                 {p}
                             </a>
@@ -109,7 +109,7 @@ function renderWithLinks(text?: string, highlight?: string | null) {
                             href={part}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="break-words break-all text-sky-600 underline hover:text-sky-800"
+                            className="inline-block max-w-[48ch] truncate text-sky-600 underline hover:text-sky-800"
                         >
                             {part}
                         </a>
@@ -752,7 +752,11 @@ function NoteSheet({
     return (
         <div className="space-y-4">
             <div className="text-xl font-bold">
-                {activeTag ? `タグ検索：${activeTag}` : showSearchHeader ? `検索結果：${searchQ}` : `ノート: ${selectedDate}`}
+                {activeTag
+                    ? `タグ検索：${activeTag}（${notes.length}件）`
+                    : showSearchHeader
+                      ? `検索結果：${searchQ}（${notes.length}件）`
+                      : `ノート: ${selectedDate}（${notes.length}件）`}
             </div>
             <div className="space-y-4">
                 {notes.map((note: Note) => (
@@ -834,7 +838,13 @@ function NoteItem({
                             // reset lastIndex in case regex is stateful
                             urlRe.lastIndex = 0;
                             return (
-                                <a key={i} href={p} target="_blank" rel="noopener noreferrer" className="text-sky-600 underline hover:text-sky-800">
+                                <a
+                                    key={i}
+                                    href={p}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-block max-w-[48ch] truncate text-sky-600 underline hover:text-sky-800"
+                                >
                                     {p}
                                 </a>
                             );
@@ -860,7 +870,7 @@ function NoteItem({
                                 href={part}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-sky-600 underline hover:text-sky-800"
+                                className="inline-block max-w-[48ch] truncate text-sky-600 underline hover:text-sky-800"
                             >
                                 {part}
                             </a>
