@@ -1145,6 +1145,7 @@ function NoteEditor({ note, onSave, onCancel }: { note: Note; onSave: NoteEditor
     const [newAttachments, setNewAttachments] = useState<File[]>([]);
     const [newPreviewUrls, setNewPreviewUrls] = useState<string[]>([]);
     const [deletedAttachmentIds, setDeletedAttachmentIds] = useState<number[]>([]);
+    const [saving, setSaving] = useState(false);
     const editFileRef = useRef<HTMLInputElement>(null);
     const prevNewUrlsRef = useRef<string[]>([]);
     const [modalOpen, setModalOpen] = useState(false);
@@ -1272,10 +1273,26 @@ function NoteEditor({ note, onSave, onCancel }: { note: Note; onSave: NoteEditor
                 {modalOpen && <ImageModal images={buildModalImages()} startIndex={startIndex} onClose={() => setModalOpen(false)} />}
 
                 <div className="flex justify-end gap-2">
-                    <Button variant="ghost" onClick={() => onCancel()}>
+                    <Button variant="ghost" onClick={() => onCancel()} disabled={saving}>
                         キャンセル
                     </Button>
-                    <Button onClick={() => onSave(note.id!, body, newAttachments, deletedAttachmentIds)}>保存する</Button>
+                    <Button
+                        onClick={async () => {
+                            if (saving) return;
+                            try {
+                                setSaving(true);
+                                // support both sync and async onSave
+                                await Promise.resolve(onSave(note.id!, body, newAttachments, deletedAttachmentIds));
+                            } catch (err) {
+                                console.error(err);
+                            } finally {
+                                setSaving(false);
+                            }
+                        }}
+                        disabled={saving}
+                    >
+                        {saving ? '保存中...' : '保存する'}
+                    </Button>
                 </div>
             </div>
         </Card>
@@ -1380,12 +1397,20 @@ function CommentInput({
 }) {
     const [text, setText] = useState('');
     const inputRef = useRef<HTMLTextAreaElement>(null);
+    const [sending, setSending] = useState(false);
 
-    const handleSubmit = () => {
-        if (!text.trim()) return;
-        onSubmit(text, quote?.id);
-        setText('');
-        onClearQuote();
+    const handleSubmit = async () => {
+        if (!text.trim() || sending) return;
+        try {
+            setSending(true);
+            await Promise.resolve(onSubmit(text, quote?.id));
+            setText('');
+            onClearQuote();
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setSending(false);
+        }
     };
 
     return (
@@ -1407,8 +1432,8 @@ function CommentInput({
                     onChange={(e) => setText(e.target.value)}
                     className={`resize-none ${quote ? 'rounded-t-none' : ''}`}
                 />
-                <Button onClick={handleSubmit} disabled={!text.trim()}>
-                    送信
+                <Button onClick={handleSubmit} disabled={!text.trim() || sending}>
+                    {sending ? '送信中...' : '送信'}
                 </Button>
             </div>
         </div>
