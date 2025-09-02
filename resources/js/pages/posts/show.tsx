@@ -7,7 +7,7 @@ import { Head, Link, usePage } from '@inertiajs/react';
 // Ensure the emoji-picker web component is registered at runtime by importing the module for its side-effects.
 import 'emoji-picker-element';
 import { Edit, Globe, Plus, Printer, Smile, Tag, Trash } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 const breadcrumbs = [
@@ -349,6 +349,84 @@ export default function PostShow() {
         return unsafe.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
     }
 
+    // Convert plain text URLs into clickable links (returns React nodes)
+    function linkifyText(text?: string) {
+        if (!text) return null;
+        const urlRe = /(https?:\/\/[^\s]+)/g;
+        const parts = text.split(urlRe);
+        return parts.map((part, i) => {
+            if (urlRe.test(part)) {
+                // reset lastIndex in case regex is stateful
+                (urlRe as RegExp).lastIndex = 0;
+                return (
+                    <a
+                        key={`l-${i}`}
+                        href={part}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="break-words break-all !text-sky-600 underline hover:!text-sky-800"
+                    >
+                        {part}
+                    </a>
+                );
+            }
+            // preserve line breaks
+            const lines = part.split('\n');
+            return lines.map((ln, j) => (
+                <span key={`t-${i}-${j}`}>
+                    {ln}
+                    {j < lines.length - 1 ? <br /> : null}
+                </span>
+            ));
+        });
+    }
+
+    // Render HTML string to React nodes, converting text-node URLs into clickable links
+    function renderHtmlWithLinks(html?: string) {
+        if (!html) return null;
+        try {
+            const container = document.createElement('div');
+            container.innerHTML = html;
+
+            let keyCounter = 0;
+
+            const nodeToReact = (node: ChildNode): React.ReactNode => {
+                const key = `n-${keyCounter++}`;
+                if (node.nodeType === Node.TEXT_NODE) {
+                    const txt = node.textContent || '';
+                    return <span key={key}>{linkifyText(txt)}</span>;
+                }
+                if (node.nodeType === Node.ELEMENT_NODE) {
+                    const el = node as Element;
+                    const tag = el.tagName.toLowerCase();
+                    const props: Record<string, string> = { key } as Record<string, string>;
+                    // copy attributes (class -> className)
+                    for (let i = 0; i < el.attributes.length; i++) {
+                        const a = el.attributes[i];
+                        const name = a.name === 'class' ? 'className' : a.name;
+                        props[name] = a.value;
+                    }
+                    // Ensure anchors open in a new tab and have hover styles
+                    if (tag === 'a') {
+                        if (!props['target']) props['target'] = '_blank';
+                        if (!props['rel']) props['rel'] = 'noopener noreferrer';
+                        const existing = props['className'] || '';
+                        const hoverClass = 'text-sky-600 underline hover:text-sky-800 break-words break-all';
+                        props['className'] = (existing ? existing + ' ' : '') + hoverClass;
+                    }
+                    const children = Array.from(el.childNodes).map((c) => nodeToReact(c));
+                    return React.createElement(tag, props, children.length === 0 ? null : children);
+                }
+                return null;
+            };
+
+            return Array.from(container.childNodes).map((n) => nodeToReact(n));
+        } catch (err) {
+            console.error(err);
+            return <div dangerouslySetInnerHTML={{ __html: html || '' }} />;
+        }
+    }
+
     function formatTextToParagraphs(txt: string) {
         // normalize newlines
         const normalized = txt.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
@@ -516,7 +594,7 @@ export default function PostShow() {
                                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
                                     <div className="min-w-0 flex-shrink-0">
                                         <div className="flex items-center gap-2">
-                                            <h1 className="truncate text-xl font-bold sm:text-2xl">{post?.title || '(無題)'}</h1>
+                                            <h1 className="text-xl font-bold break-words whitespace-normal sm:text-2xl">{post?.title || '(無題)'}</h1>
                                             {isDraft(post) && <Badge className="border-yellow-300 bg-yellow-50 text-yellow-800">下書き</Badge>}
                                         </div>
                                         <div className="mt-1 truncate text-sm text-muted-foreground">
@@ -585,7 +663,11 @@ export default function PostShow() {
                         </CardHeader>
                         <CardContent className="space-y-6 pt-6">
                             <div className="prose dark:prose-invert max-w-none">
-                                <div className="post-body" dangerouslySetInnerHTML={{ __html: post?.body || '' }} />
+                                {(() => {
+                                    const raw = post?.body || '';
+                                    // render HTML or plain text, but ensure text nodes are linkified
+                                    return <div className="post-body text-sm whitespace-pre-wrap">{renderHtmlWithLinks(raw)}</div>;
+                                })()}
                             </div>
                             {post?.type === 'manual' ? (
                                 <div className="space-y-6">
@@ -594,7 +676,7 @@ export default function PostShow() {
                                             it: {
                                                 id?: number | string;
                                                 content?: string;
-                                                attachments?: Array<{ url?: string; isImage?: boolean; original_name?: string }>;
+                                                attachments?: Array<{ url?: string; isImage?: boolean; original_name?: string; size?: number }>;
                                             },
                                             i: number,
                                         ) => (
@@ -605,23 +687,17 @@ export default function PostShow() {
                                                     </div>
                                                     <div className="min-w-0">
                                                         <div className="text-sm break-words whitespace-pre-wrap text-gray-600">
-                                                            {(() => {
-                                                                try {
-                                                                    const tmp = document.createElement('div');
-                                                                    tmp.innerHTML = it.content || '';
-                                                                    const txt = tmp.textContent || tmp.innerText || '';
-                                                                    return txt;
-                                                                } catch {
-                                                                    return '';
-                                                                }
-                                                            })()}
+                                                            {renderHtmlWithLinks(it.content)}
                                                         </div>
                                                     </div>
                                                 </div>
                                                 {Array.isArray(it.attachments) && it.attachments.length > 0 && (
                                                     <div className={`mt-3 grid ${it.attachments.length === 1 ? 'grid-cols-1' : 'grid-cols-2'} gap-3`}>
                                                         {it.attachments.map(
-                                                            (a: { url?: string; isImage?: boolean; original_name?: string }, ai: number) => (
+                                                            (
+                                                                a: { url?: string; isImage?: boolean; original_name?: string; size?: number },
+                                                                ai: number,
+                                                            ) => (
                                                                 <div
                                                                     key={a.url || ai}
                                                                     className="overflow-hidden rounded bg-gray-50"

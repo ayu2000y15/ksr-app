@@ -10,7 +10,7 @@ import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, router, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { ja } from 'date-fns/locale';
-import { CalendarIcon, Car, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CalendarIcon, Car, ChevronLeft, ChevronRight, Edit, Plus, Trash } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -279,6 +279,20 @@ export default function Dashboard() {
     const isSuperAdmin: boolean = page.props?.auth?.isSuperAdmin ?? (page.props as any)['auth.isSuperAdmin'] ?? false;
     const nestedPermissions = (page.props as unknown as { permissions?: Record<string, any> } | undefined)?.permissions;
 
+    // whether the current user can create announcements
+    const canCreateAnnouncements = (() => {
+        try {
+            if (isSuperAdmin) return true;
+            const perms = page.props?.auth?.permissions;
+            if (Array.isArray(perms)) return perms.includes('announcement.create');
+            if (perms && typeof perms === 'object') {
+                if (perms['announcement.create']) return true;
+                if (perms.announcement && (perms.announcement.create === true || perms.announcement.create === 1)) return true;
+            }
+        } catch {}
+        return false;
+    })();
+
     // determine if user may view/manage shifts using same logic as app-sidebar
     let canViewShifts = false;
     if (isSuperAdmin) canViewShifts = true;
@@ -323,6 +337,14 @@ export default function Dashboard() {
     // toast shown on dashboard (used by child components; modal will call onSuccess after closing)
     type ToastState = { message: string; type: 'success' | 'error' } | null;
     const [toast, setToast] = useState<ToastState>(null);
+    const [announcements, setAnnouncements] = useState<any[]>([]);
+    const [createOpen, setCreateOpen] = useState(false);
+    const [expandedAnnouncementId, setExpandedAnnouncementId] = useState<number | null>(null);
+    const [editingAnnouncement, setEditingAnnouncement] = useState<any | null>(null);
+    const [annPage, setAnnPage] = useState(1);
+    const [perPage] = useState(5);
+    const [totalAnnouncements, setTotalAnnouncements] = useState<number | null>(null);
+    const [loadingMore, setLoadingMore] = useState(false);
 
     useEffect(() => {
         if (hasCarFlag !== null) return; // already known
@@ -343,6 +365,29 @@ export default function Dashboard() {
             setHasCarFlag(false);
         })();
     }, [hasCarFlag, auth]);
+
+    // load announcements with pagination
+    const loadAnnouncements = async (p: number, append = false) => {
+        try {
+            if (append) setLoadingMore(true);
+            const res = await axios.get('/api/announcements', { params: { page: p, per_page: perPage } });
+            const items = (res.data && res.data.announcements) || [];
+            const total = typeof res.data?.total === 'number' ? res.data.total : null;
+            if (append) setAnnouncements((cur) => cur.concat(items));
+            else setAnnouncements(Array.isArray(items) ? items : []);
+            if (total !== null) setTotalAnnouncements(total);
+            setAnnPage(p);
+        } catch {
+            if (!append) setAnnouncements([]);
+        } finally {
+            setLoadingMore(false);
+        }
+    };
+
+    useEffect(() => {
+        loadAnnouncements(1, false);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     useEffect(() => {
         const compute = () => {
@@ -653,15 +698,202 @@ export default function Dashboard() {
                 </div>
                 <div className="mb-6">
                     <Card>
-                        <CardHeader>
+                        <CardHeader className="flex-row items-center justify-between">
                             <CardTitle>お知らせ</CardTitle>
+                            {canCreateAnnouncements && (
+                                <Button
+                                    onClick={() => {
+                                        setCreateOpen(true);
+                                    }}
+                                >
+                                    <Plus className="mr-0 h-4 w-4 sm:mr-2" />
+                                    <span className="hidden sm:inline">新規作成</span>
+                                </Button>
+                            )}
                         </CardHeader>
                         <CardContent>
-                            <p>現在、新しいお知らせはありません。</p>
+                            {announcements.length === 0 ? (
+                                <p>現在、新しいお知らせはありません。</p>
+                            ) : (
+                                <div>
+                                    {announcements.map((a) => {
+                                        const d = new Date(a.created_at || a.createdAt || Date.now());
+                                        const dateLabel = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(
+                                            d.getDate(),
+                                        ).padStart(2, '0')}`;
+                                        const expanded = expandedAnnouncementId === Number(a.id);
+                                        return (
+                                            <div key={a.id} className="border-b border-gray-100">
+                                                <div
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    aria-expanded={expanded}
+                                                    onClick={async () => {
+                                                        const nextExpanded = expanded ? null : Number(a.id);
+                                                        setExpandedAnnouncementId(nextExpanded);
+                                                        if (nextExpanded && !a.read_by_current_user) {
+                                                            try {
+                                                                await axios.post(`/api/announcements/${a.id}/read`);
+                                                            } catch {}
+                                                            setAnnouncements((cur) =>
+                                                                cur.map((it) =>
+                                                                    Number(it.id) === Number(a.id) ? { ...it, read_by_current_user: true } : it,
+                                                                ),
+                                                            );
+                                                        }
+                                                    }}
+                                                    onKeyDown={async (e) => {
+                                                        if (e.key === 'Enter' || e.key === ' ') {
+                                                            const nextExpanded = expanded ? null : Number(a.id);
+                                                            setExpandedAnnouncementId(nextExpanded);
+                                                            if (nextExpanded && !a.read_by_current_user) {
+                                                                try {
+                                                                    await axios.post(`/api/announcements/${a.id}/read`);
+                                                                } catch {}
+                                                                setAnnouncements((cur) =>
+                                                                    cur.map((it) =>
+                                                                        Number(it.id) === Number(a.id) ? { ...it, read_by_current_user: true } : it,
+                                                                    ),
+                                                                );
+                                                            }
+                                                        }
+                                                    }}
+                                                    className="flex cursor-pointer items-start gap-4 py-3 hover:bg-gray-50"
+                                                >
+                                                    <div className="flex-shrink-0 text-sm font-medium text-indigo-600 md:w-28">{dateLabel}</div>
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="text-sm font-medium break-words whitespace-normal text-gray-800 md:truncate">
+                                                                <div className="break-words break-all">{a.title}</div>
+                                                            </div>
+                                                            {(() => {
+                                                                try {
+                                                                    const readByMe = Boolean(
+                                                                        a.read_by_current_user === true ||
+                                                                            a.readByCurrentUser === true ||
+                                                                            a.read_by_current_user === 1,
+                                                                    );
+                                                                    if (!readByMe) {
+                                                                        return (
+                                                                            <span className="ml-2 rounded bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">
+                                                                                New
+                                                                            </span>
+                                                                        );
+                                                                    }
+                                                                } catch {
+                                                                    return null;
+                                                                }
+                                                                return null;
+                                                            })()}
+                                                            {/* 投稿者の場合は編集・削除アイコンを表示 */}
+                                                            {auth && auth.user && Number(auth.user.id) === Number(a.user_id ?? a.user?.id) ? (
+                                                                <div className="ml-2 flex items-center gap-2">
+                                                                    <button
+                                                                        title="編集"
+                                                                        className="text-gray-600 hover:text-gray-900"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setEditingAnnouncement(a);
+                                                                        }}
+                                                                    >
+                                                                        <Edit className="h-4 w-4" />
+                                                                    </button>
+                                                                </div>
+                                                            ) : null}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                {expanded && (
+                                                    <div className="px-2 pt-1 pb-4 text-sm text-gray-700">
+                                                        <div>{renderContentWithLinks(a.content)}</div>
+                                                        {/* 削除は展開内のみ表示（誤操作防止） */}
+                                                        {auth && auth.user && Number(auth.user.id) === Number(a.user_id ?? a.user?.id) ? (
+                                                            <div className="mt-3 flex justify-end">
+                                                                <Button
+                                                                    variant="destructive"
+                                                                    size="sm"
+                                                                    onClick={async (e) => {
+                                                                        e.stopPropagation();
+                                                                        if (!confirm('本当に削除しますか？')) return;
+                                                                        try {
+                                                                            await axios.delete(`/api/announcements/${a.id}`);
+                                                                            setAnnouncements((cur) =>
+                                                                                cur.filter((it) => Number(it.id) !== Number(a.id)),
+                                                                            );
+                                                                            setToast({ message: 'お知らせを削除しました', type: 'success' });
+                                                                            setTimeout(() => setToast(null), 3000);
+                                                                        } catch {
+                                                                            setToast({ message: '削除に失敗しました', type: 'error' });
+                                                                            setTimeout(() => setToast(null), 3000);
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    <Trash className="mr-0 h-4 w-4" />
+                                                                </Button>
+                                                            </div>
+                                                        ) : null}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
                             <div className="mt-2 text-xs text-muted-foreground" />
+                            <div className="mt-3 flex items-center justify-center">
+                                {totalAnnouncements === null ? (
+                                    <Button
+                                        onClick={async () => {
+                                            const next = annPage + 1;
+                                            await loadAnnouncements(next, true);
+                                        }}
+                                        disabled={loadingMore}
+                                    >
+                                        {loadingMore ? '読み込み中...' : 'もっと見る'}
+                                    </Button>
+                                ) : announcements.length < (totalAnnouncements ?? 0) ? (
+                                    <Button
+                                        onClick={async () => {
+                                            const next = annPage + 1;
+                                            await loadAnnouncements(next, true);
+                                        }}
+                                        disabled={loadingMore}
+                                    >
+                                        {loadingMore ? '読み込み中...' : 'もっと見る'}
+                                    </Button>
+                                ) : (
+                                    <div className="text-sm text-muted-foreground">これ以上、お知らせはありません</div>
+                                )}
+                            </div>
                         </CardContent>
                     </Card>
                 </div>
+
+                {/* Create Announcement Modal */}
+                {createOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center">
+                        <div className="absolute inset-0 bg-black/40" onClick={() => setCreateOpen(false)} />
+                        <div className="relative z-10 w-full max-w-xl rounded bg-white p-4 shadow-lg">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-lg font-medium">新しいお知らせを作成</h3>
+                                <Button variant="ghost" onClick={() => setCreateOpen(false)}>
+                                    閉じる
+                                </Button>
+                            </div>
+                            <CreateAnnouncementForm
+                                onCancel={() => setCreateOpen(false)}
+                                onCreated={(item: any) => {
+                                    // 新規作成時は先頭に挿入し、ページ状態を1に戻す
+                                    setAnnouncements((cur) => [item].concat(cur));
+                                    setAnnPage(1);
+                                    setCreateOpen(false);
+                                    setToast({ message: 'お知らせを作成しました', type: 'success' });
+                                    setTimeout(() => setToast(null), 3000);
+                                }}
+                            />
+                        </div>
+                    </div>
+                )}
 
                 <div>
                     <Card>
@@ -933,6 +1165,131 @@ export default function Dashboard() {
                 </div>
             </div>
             {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+            {/* Edit modal */}
+            {editingAnnouncement && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black/40" onClick={() => setEditingAnnouncement(null)} />
+                    <div className="relative z-10 w-full max-w-xl rounded bg-white p-4 shadow-lg">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-medium">お知らせを編集</h3>
+                            <Button variant="ghost" onClick={() => setEditingAnnouncement(null)}>
+                                閉じる
+                            </Button>
+                        </div>
+                        <CreateAnnouncementForm
+                            initial={editingAnnouncement}
+                            onCancel={() => setEditingAnnouncement(null)}
+                            onUpdated={(item: any) => {
+                                setAnnouncements((cur) => cur.map((it) => (Number(it.id) === Number(item.id) ? item : it)));
+                                setEditingAnnouncement(null);
+                                setToast({ message: 'お知らせを更新しました', type: 'success' });
+                                setTimeout(() => setToast(null), 3000);
+                            }}
+                        />
+                    </div>
+                </div>
+            )}
         </AppLayout>
+    );
+}
+
+// Render plain text content but convert URLs to clickable links
+function renderContentWithLinks(content?: string) {
+    if (!content) return null;
+    // simple URL regex (http/https)
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = content.split(urlRegex);
+    const nodes: any[] = [];
+
+    parts.forEach((part, idx) => {
+        if (!part) return;
+        if (urlRegex.test(part)) {
+            // reset lastIndex in case of global regex
+            urlRegex.lastIndex = 0;
+            nodes.push(
+                <a
+                    key={`link-${idx}`}
+                    href={part}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    // single-line truncate: ensure the anchor is a block-level inline-block that can truncate
+                    className="inline-block w-full max-w-full truncate overflow-hidden whitespace-nowrap text-sky-600 underline hover:text-sky-800"
+                >
+                    {part}
+                </a>,
+            );
+        } else {
+            // preserve line breaks
+            const lines = part.split('\n');
+            lines.forEach((line, i) => {
+                nodes.push(
+                    <span key={`text-${idx}-${i}`} className="break-words">
+                        {line}
+                    </span>,
+                );
+                if (i < lines.length - 1) nodes.push(<br key={`br-${idx}-${i}`} />);
+            });
+        }
+    });
+
+    return nodes;
+}
+
+// Simple form component for creating announcements
+function CreateAnnouncementForm({
+    onCreated,
+    onCancel,
+    initial,
+    onUpdated,
+}: {
+    onCreated?: (a: any) => void;
+    onCancel: () => void;
+    initial?: any;
+    onUpdated?: (a: any) => void;
+}) {
+    const [title, setTitle] = useState(initial?.title ?? '');
+    const [content, setContent] = useState(initial?.content ?? '');
+    const [loading, setLoading] = useState(false);
+
+    const submit = async () => {
+        if (!title.trim() || !content.trim()) return;
+        setLoading(true);
+        try {
+            if (initial && initial.id && onUpdated) {
+                // update
+                const res = await axios.post(`/api/announcements/${initial.id}`, { title: title.trim(), content: content.trim() });
+                const item = (res.data && res.data.announcement) || null;
+                if (item) onUpdated(item);
+            } else {
+                const res = await axios.post('/api/announcements', { title: title.trim(), content: content.trim() });
+                const item = (res.data && res.data.announcement) || null;
+                if (item && onCreated) onCreated(item);
+            }
+        } catch {
+            // ignore for now
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="mt-3">
+            <div className="mb-2">
+                <label className="mb-1 block text-sm">タイトル</label>
+                <input className="w-full rounded border px-2 py-1" value={title} onChange={(e) => setTitle(e.target.value)} />
+            </div>
+            <div className="mb-2">
+                <label className="mb-1 block text-sm">内容</label>
+                <textarea className="w-full rounded border px-2 py-1" rows={6} value={content} onChange={(e) => setContent(e.target.value)} />
+            </div>
+            <div className="flex items-center justify-end gap-2">
+                <Button variant="ghost" onClick={onCancel}>
+                    キャンセル
+                </Button>
+                <Button onClick={submit} disabled={loading || !title.trim() || !content.trim()}>
+                    作成
+                </Button>
+            </div>
+        </div>
     );
 }

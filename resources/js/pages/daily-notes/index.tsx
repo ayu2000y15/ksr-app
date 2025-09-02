@@ -57,6 +57,89 @@ function formatRelativeTime(raw?: string) {
     return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// Return YYYY-MM-DD for given date in Japan Standard Time (UTC+9)
+function toJstYmd(date: Date) {
+    const jst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+    const y = jst.getUTCFullYear();
+    const m = String(jst.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(jst.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+// convert URLs in text to clickable links while optionally preserving a highlight term
+function renderWithLinks(text?: string, highlight?: string | null) {
+    if (!text) return null;
+    const urlRe = /(https?:\/\/[^\s]+)/g;
+
+    if (!highlight) {
+        const parts = text.split(urlRe);
+        return (
+            <>
+                {parts.map((p, i) => {
+                    if (urlRe.test(p)) {
+                        urlRe.lastIndex = 0;
+                        return (
+                            <a
+                                key={i}
+                                href={p}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="break-words break-all text-sky-600 underline hover:text-sky-800"
+                            >
+                                {p}
+                            </a>
+                        );
+                    }
+                    return <span key={i}>{p}</span>;
+                })}
+            </>
+        );
+    }
+
+    const urlParts = text.split(urlRe);
+    return (
+        <>
+            {urlParts.map((part, idx) => {
+                if (!part) return null;
+                if (urlRe.test(part)) {
+                    urlRe.lastIndex = 0;
+                    return (
+                        <a
+                            key={`u-${idx}`}
+                            href={part}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="break-words break-all text-sky-600 underline hover:text-sky-800"
+                        >
+                            {part}
+                        </a>
+                    );
+                }
+
+                try {
+                    const re = new RegExp(`(${highlight.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')})`, 'gi');
+                    const parts = part.split(re);
+                    return (
+                        <span key={`t-${idx}`}>
+                            {parts.map((p, i) =>
+                                re.test(p) ? (
+                                    <mark key={i} className="bg-yellow-200 text-yellow-900">
+                                        {p}
+                                    </mark>
+                                ) : (
+                                    <span key={i}>{p}</span>
+                                ),
+                            )}
+                        </span>
+                    );
+                } catch {
+                    return <span key={`t-${idx}`}>{part}</span>;
+                }
+            })}
+        </>
+    );
+}
+
 // --- メインコンポーネント ---
 export default function DailyNotesIndex() {
     const [currentMonth, setCurrentMonth] = useState<Date>(() => {
@@ -98,10 +181,11 @@ export default function DailyNotesIndex() {
 
     // search state (default: from 3 months ago to today)
     const formatYMD = (d: Date) => d.toISOString().slice(0, 10);
-    const todayStr = formatYMD(new Date());
-    const threeMonthsAgo = new Date();
+    // default search dates should use Japan Standard Time
+    const todayStr = toJstYmd(new Date());
+    const threeMonthsAgo = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
     threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-    const threeMonthsAgoStr = formatYMD(threeMonthsAgo);
+    const threeMonthsAgoStr = toJstYmd(threeMonthsAgo);
 
     const [searchQ, setSearchQ] = useState('');
     const [confirmedSearchQ, setConfirmedSearchQ] = useState<string | null>(null);
@@ -230,9 +314,11 @@ export default function DailyNotesIndex() {
     );
 
     useEffect(() => {
-        const today = new Date();
-        if (currentMonth.getFullYear() === today.getFullYear() && currentMonth.getMonth() === today.getMonth()) {
-            selectDay(today.getDate());
+        // Use JST-based today so server/client timezone mismatch doesn't affect day selection
+        const now = new Date();
+        const jstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+        if (currentMonth.getFullYear() === jstNow.getFullYear() && currentMonth.getMonth() === jstNow.getMonth()) {
+            selectDay(jstNow.getDate());
         }
     }, [currentMonth, selectDay]);
 
@@ -389,7 +475,7 @@ export default function DailyNotesIndex() {
                                     クリア
                                 </Button>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="md;gap-2 flex items-center gap-0.5">
                                 <input
                                     type="date"
                                     value={searchStart || ''}
@@ -542,7 +628,10 @@ function CalendarView({
                                             const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                                             const hasNotes = (groupedNotes[dateStr] || []).length > 0;
                                             const isSelected = selectedDate === dateStr;
-                                            const isToday = new Date().toDateString() === new Date(year, month, day).toDateString();
+                                            // compute today's date in JST for accurate 'today' marking
+                                            const now = new Date();
+                                            const jstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+                                            const isToday = jstNow.getFullYear() === year && jstNow.getMonth() === month && jstNow.getDate() === day;
                                             const holidayFlag = Array.isArray(holidays) ? holidays.includes(dateStr) : false;
 
                                             // cell default is transparent so column background shows through; override for special states
@@ -695,27 +784,80 @@ function NoteItem({
     const formatTime = (raw?: string) => (raw ? formatRelativeTime(raw) : '');
     const userName = note.user?.name || note.user_name || '不明';
 
-    const highlightText = (text?: string) => {
-        if (!text || !highlight) return <>{text}</>;
-        try {
-            const re = new RegExp(`(${highlight.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-            const parts = text.split(re);
+    // highlightText removed; use renderWithLinks(text, highlight) instead
+
+    // convert URLs in text to clickable links while preserving highlight marking
+    const renderWithLinks = (text?: string) => {
+        if (!text) return null;
+        // URL regex (simple, supports http/https)
+        const urlRe = /(https?:\/\/[^\s]+)/g;
+
+        // if highlight is not set, simply split by URLs and map
+        if (!highlight) {
+            const parts = text.split(urlRe);
             return (
                 <>
-                    {parts.map((p, i) =>
-                        re.test(p) ? (
-                            <mark key={i} className="bg-yellow-200 text-yellow-900">
-                                {p}
-                            </mark>
-                        ) : (
-                            <span key={i}>{p}</span>
-                        ),
-                    )}
+                    {parts.map((p, i) => {
+                        if (urlRe.test(p)) {
+                            // reset lastIndex in case regex is stateful
+                            urlRe.lastIndex = 0;
+                            return (
+                                <a key={i} href={p} target="_blank" rel="noopener noreferrer" className="text-sky-600 underline hover:text-sky-800">
+                                    {p}
+                                </a>
+                            );
+                        }
+                        return <span key={i}>{p}</span>;
+                    })}
                 </>
             );
-        } catch {
-            return <>{text}</>;
         }
+
+        // when highlight is present, we need to both mark highlights and render links
+        // strategy: first split by URLs, then within non-URL parts apply highlight marking
+        const urlParts = text.split(urlRe);
+        return (
+            <>
+                {urlParts.map((part, idx) => {
+                    if (!part) return null;
+                    if (urlRe.test(part)) {
+                        (urlRe as RegExp).lastIndex = 0;
+                        return (
+                            <a
+                                key={`u-${idx}`}
+                                href={part}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-sky-600 underline hover:text-sky-800"
+                            >
+                                {part}
+                            </a>
+                        );
+                    }
+
+                    // apply highlight marking inside this non-url chunk
+                    try {
+                        const re = new RegExp(`(${highlight.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')})`, 'gi');
+                        const parts = part.split(re);
+                        return (
+                            <span key={`t-${idx}`}>
+                                {parts.map((p, i) =>
+                                    re.test(p) ? (
+                                        <mark key={i} className="bg-yellow-200 text-yellow-900">
+                                            {p}
+                                        </mark>
+                                    ) : (
+                                        <span key={i}>{p}</span>
+                                    ),
+                                )}
+                            </span>
+                        );
+                    } catch {
+                        return <span key={`t-${idx}`}>{part}</span>;
+                    }
+                })}
+            </>
+        );
     };
 
     // render body with hashtags removed from inline text (tags will be shown as badges below)
@@ -758,7 +900,7 @@ function NoteItem({
                     )}
                 </div>
 
-                <div className="mt-2 text-sm whitespace-pre-wrap">{highlightText(bodyWithoutHashes || note.body)}</div>
+                <div className="mt-2 text-sm break-words break-all whitespace-pre-wrap">{renderWithLinks(bodyWithoutHashes || note.body)}</div>
 
                 {Array.isArray(note.attachments) && note.attachments.length > 0 && <NoteAttachments attachments={note.attachments} />}
 
@@ -1120,7 +1262,7 @@ function CommentSection({ noteId, comments, currentUserId, onCommentAdd, onComme
                                     </p>
                                 </div>
                             )}
-                            <p className="mt-1 whitespace-pre-wrap">{highlightText(c.body)}</p>
+                            <p className="mt-1 break-words break-all whitespace-pre-wrap">{renderWithLinks(c.body)}</p>
                         </div>
                     </div>
                 ))}

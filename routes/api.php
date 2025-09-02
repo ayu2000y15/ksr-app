@@ -7,6 +7,7 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\UserRoleController;
 use App\Models\User;
+use App\Http\Controllers\Api\AnnouncementController;
 
 /*
 |--------------------------------------------------------------------------
@@ -27,6 +28,12 @@ Route::middleware(['web', 'auth'])->group(function () {
             'has_system_admin_role' => $user->hasRole('システム管理者'),
         ];
     });
+
+    Route::get('/announcements', [AnnouncementController::class, 'index']);
+    Route::post('/announcements', [AnnouncementController::class, 'store']);
+    Route::post('/announcements/{id}/read', [AnnouncementController::class, 'markRead']);
+    Route::post('/announcements/{id}', [AnnouncementController::class, 'update']);
+    Route::delete('/announcements/{id}', [AnnouncementController::class, 'destroy']);
 
     // デバッグ用：システム管理者ロールの権限を確認
     Route::get('/debug/admin-role', function () {

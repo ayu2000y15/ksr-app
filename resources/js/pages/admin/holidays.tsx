@@ -10,7 +10,6 @@ import axios from 'axios';
 import { useEffect, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'ダッシュボード', href: route('dashboard') },
     { title: '各種設定', href: route('admin.role-permissions') },
     { title: '休日登録', href: '' },
 ];
@@ -152,7 +151,7 @@ export default function HolidaysPage() {
                                         {(() => {
                                             const cur = new Date().getFullYear();
                                             const years = [] as number[];
-                                            for (let y = cur - 5; y <= cur + 5; y++) years.push(y);
+                                            for (let y = cur; y <= cur + 5; y++) years.push(y);
                                             return years.map((y) => (
                                                 <option key={y} value={y}>
                                                     {y}年

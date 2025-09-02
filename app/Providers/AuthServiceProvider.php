@@ -16,6 +16,7 @@ use App\Policies\ShiftPolicy;
 use App\Policies\ShiftApplicationPolicy;
 use App\Policies\UserShiftSettingPolicy;
 use App\Policies\DefaultShiftPolicy;
+use App\Policies\AnnouncementPolicy;
 
 class AuthServiceProvider extends ServiceProvider
 {
@@ -38,6 +39,7 @@ class AuthServiceProvider extends ServiceProvider
         \App\Models\Property::class => \App\Policies\PropertyPolicy::class,
         \App\Models\InventoryItem::class => \App\Policies\InventoryPolicy::class,
         \App\Models\DailyNote::class => \App\Policies\DailyNotePolicy::class,
+        \App\Models\Announcement::class => AnnouncementPolicy::class,
     ];
 
     /**

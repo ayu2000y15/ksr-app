@@ -15,7 +15,6 @@ export default function UserShiftSettings(): JSX.Element {
     const maxIdDigits = Math.max(2, ...(users || []).map((u: any) => String(u.id).length));
 
     const breadcrumbs = [
-        { title: 'ダッシュボード', href: route('dashboard') },
         { title: '各種設定', href: route('admin.role-permissions') },
         { title: 'ユーザー別休暇上限設定', href: '' },
     ];

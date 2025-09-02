@@ -47,7 +47,6 @@ export default function Create() {
     };
 
     const breadcrumbs = [
-        { title: 'ダッシュボード', href: route('dashboard') },
         { title: '各種設定', href: route('admin.role-permissions') },
         { title: 'デフォルトシフト設定', href: route('admin.default-shifts.index') },
         { title: '新規作成', href: '' },

@@ -558,35 +558,35 @@ export default function PostsIndex() {
                             {/* Mobile filter controls */}
                             <div className="mb-3 block md:hidden">
                                 <div className="flex flex-col gap-2 rounded border bg-white p-3">
-                                    <div className="flex gap-2">
+                                    <div className="flex flex-wrap items-center gap-2">
                                         <input
                                             type="text"
                                             placeholder="タグで絞り込み"
                                             value={mobileTag || ''}
                                             onChange={(e) => setMobileTag(e.target.value || null)}
-                                            className="flex-1 rounded border p-2 text-sm"
+                                            className="min-w-0 flex-1 rounded border p-2 text-sm"
                                         />
                                         <select
                                             value={mobileType || ''}
                                             onChange={(e) => setMobileType(e.target.value || null)}
-                                            className="rounded border p-2 text-sm"
+                                            className="w-full min-w-0 rounded border p-2 text-sm sm:w-auto"
                                         >
                                             <option value="">タイプ</option>
                                             <option value="board">掲示板</option>
                                             <option value="manual">マニュアル</option>
                                         </select>
                                     </div>
-                                    <div className="flex gap-2">
+                                    <div className="flex flex-wrap items-center gap-2">
                                         <select
                                             value={mobileAudience || ''}
                                             onChange={(e) => setMobileAudience(e.target.value || null)}
-                                            className="rounded border p-2 text-sm"
+                                            className="w-full min-w-0 rounded border p-2 text-sm sm:w-auto"
                                         >
                                             <option value="">閲覧範囲</option>
                                             <option value="all">全体公開</option>
                                             <option value="restricted">限定公開</option>
                                         </select>
-                                        <div className="flex gap-2">
+                                        <div className="flex flex-wrap items-center gap-2">
                                             <button
                                                 type="button"
                                                 className="rounded bg-indigo-600 px-3 py-1 text-white"

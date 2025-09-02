@@ -18,10 +18,7 @@ export default function ChangePassword() {
         post(route('password.change.store'));
     };
 
-    const breadcrumbs = [
-        { title: 'ダッシュボード', href: route('dashboard') },
-        { title: 'パスワード変更', href: '' },
-    ];
+    const breadcrumbs = [{ title: 'パスワード変更', href: '' }];
 
     return (
         <AppSidebarLayout breadcrumbs={breadcrumbs}>

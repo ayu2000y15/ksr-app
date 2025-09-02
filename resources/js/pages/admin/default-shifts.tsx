@@ -11,7 +11,6 @@ export default function Index() {
     const items = page.props.default_shifts || [];
 
     const breadcrumbs = [
-        { title: 'ダッシュボード', href: route('dashboard') },
         { title: '各種設定', href: route('admin.role-permissions') },
         { title: 'デフォルトシフト設定', href: '' },
     ];

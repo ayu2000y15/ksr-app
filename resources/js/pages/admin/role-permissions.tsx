@@ -128,6 +128,7 @@ export default function RolePermissionsPage() {
         その他: 'その他',
         properties: '物件管理',
         task: 'タスク管理',
+        announcement: 'お知らせ',
         // 必要に応じてここに追加
     };
 
@@ -207,6 +208,8 @@ export default function RolePermissionsPage() {
         'task.create': 'タスク作成',
         'task.update': 'タスク編集',
         'task.delete': 'タスク削除',
+        // announcements
+        'announcement.create': 'お知らせ作成',
     };
 
     const allSelected = permissions.length > 0 && permissions.every((p) => !!checked[p.id]);
