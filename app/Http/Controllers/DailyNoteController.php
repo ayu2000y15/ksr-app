@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\DailyNote;
+use App\Models\Tag;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -22,10 +23,34 @@ class DailyNoteController extends Controller
     {
         $this->authorize('viewAny', DailyNote::class);
         $month = $request->query('month');
-        $query = DailyNote::with(['user', 'attachments', 'comments.user', 'comments.quote']);
-        if ($month && preg_match('/^\d{4}-\d{2}$/', $month)) {
+        $q = $request->query('q'); // keyword
+        $start = $request->query('start'); // YYYY-MM-DD
+        $end = $request->query('end'); // YYYY-MM-DD
+
+        $query = DailyNote::with(['user', 'attachments', 'comments.user', 'comments.quote', 'tags']);
+
+        // date range: explicit start/end takes precedence
+        if ($start && $end && preg_match('/^\d{4}-\d{2}-\d{2}$/', $start) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $end)) {
+            $query->whereBetween('date', [$start, $end]);
+        } elseif ($month && preg_match('/^\d{4}-\d{2}$/', $month)) {
+            // fallback: month param
             $query->whereBetween('date', ["$month-01", "$month-31"]);
         }
+
+        // keyword search across note body and comment bodies
+        if ($q && is_string($q)) {
+            $keyword = "%" . str_replace('%', '\\%', $q) . "%";
+            $query->where(function ($sub) use ($keyword) {
+                $sub->where('body', 'like', $keyword)
+                    ->orWhereHas('comments', function ($cq) use ($keyword) {
+                        $cq->where('body', 'like', $keyword);
+                    })
+                    ->orWhereHas('tags', function ($tq) use ($keyword) {
+                        $tq->where('name', 'like', $keyword);
+                    });
+            });
+        }
+
         $notes = $query->orderBy('date', 'desc')->orderBy('created_at', 'desc')->get();
         return response()->json(['notes' => $notes]);
     }
@@ -44,6 +69,23 @@ class DailyNoteController extends Controller
         DB::beginTransaction();
         try {
             $note = DailyNote::create(['date' => $data['date'], 'user_id' => $user->id, 'body' => $data['body']]);
+            // extract #tags from body and attach
+            if (!empty($data['body'])) {
+                preg_match_all('/#([\p{L}0-9_\-]+)/u', $data['body'], $m);
+                $tagIds = [];
+                if (!empty($m[1])) {
+                    foreach (array_unique($m[1]) as $raw) {
+                        $name = trim($raw);
+                        if ($name === '') continue;
+                        $tag = Tag::firstOrCreate(['name' => $name]);
+                        $tagIds[] = $tag->id;
+                    }
+                }
+                if (!empty($tagIds)) {
+                    $note->tags()->sync($tagIds);
+                }
+            }
+
             if ($request->hasFile('attachments')) {
                 foreach ($request->file('attachments') as $file) {
                     $path = $this->attachmentService->store($file);
@@ -51,7 +93,7 @@ class DailyNoteController extends Controller
                 }
             }
             DB::commit();
-            $note->load(['user', 'attachments', 'comments.user']);
+            $note->load(['user', 'attachments', 'comments.user', 'tags']);
             return response()->json($note, 201);
         } catch (\Throwable $e) {
             DB::rollBack();
@@ -107,6 +149,21 @@ class DailyNoteController extends Controller
                 }
             }
 
+            // extract #tags from body and sync
+            if (isset($data['body'])) {
+                preg_match_all('/#([\p{L}0-9_\-]+)/u', $data['body'], $m);
+                $tagIds = [];
+                if (!empty($m[1])) {
+                    foreach (array_unique($m[1]) as $raw) {
+                        $name = trim($raw);
+                        if ($name === '') continue;
+                        $tag = Tag::firstOrCreate(['name' => $name]);
+                        $tagIds[] = $tag->id;
+                    }
+                }
+                $note->tags()->sync($tagIds);
+            }
+
             // store new attachments
             if ($request->hasFile('attachments')) {
                 foreach ($request->file('attachments') as $file) {
@@ -116,7 +173,7 @@ class DailyNoteController extends Controller
             }
 
             DB::commit();
-            $note->load(['user', 'attachments', 'comments.user', 'comments.quote']);
+            $note->load(['user', 'attachments', 'comments.user', 'comments.quote', 'tags']);
             return response()->json($note, 200);
         } catch (\Throwable $e) {
             DB::rollBack();

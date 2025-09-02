@@ -39,6 +39,7 @@ type Note = {
     attachments?: Attachment[];
     comments?: Comment[];
     created_at?: string;
+    tags?: Array<{ id?: number; name?: string }> | string;
 };
 
 const breadcrumbs = [{ title: '日次ノート', href: route('daily_notes.index') }];
@@ -95,14 +96,45 @@ export default function DailyNotesIndex() {
 
     const monthStr = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}`;
 
+    // search state (default: from 3 months ago to today)
+    const formatYMD = (d: Date) => d.toISOString().slice(0, 10);
+    const todayStr = formatYMD(new Date());
+    const threeMonthsAgo = new Date();
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+    const threeMonthsAgoStr = formatYMD(threeMonthsAgo);
+
+    const [searchQ, setSearchQ] = useState('');
+    const [confirmedSearchQ, setConfirmedSearchQ] = useState<string | null>(null);
+    const [searchStart, setSearchStart] = useState<string | null>(threeMonthsAgoStr);
+    const [searchEnd, setSearchEnd] = useState<string | null>(todayStr);
+    const [isSearching, setIsSearching] = useState(true);
+    const [activeTag, setActiveTag] = useState<string | null>(null);
+
+    const fetchNotes = async (opts?: { q?: string | null; start?: string | null; end?: string | null; month?: string | null }) => {
+        const params = new URLSearchParams();
+        if (opts?.month) params.set('month', opts.month);
+        if (opts?.q) params.set('q', opts.q);
+        if (opts?.start) params.set('start', opts.start);
+        if (opts?.end) params.set('end', opts.end);
+
+        try {
+            const res = await fetch(`/api/daily-notes?${params.toString()}`, { credentials: 'same-origin' });
+            if (!res.ok) throw new Error('failed');
+            const json = await res.json();
+            setNotes(json.notes || []);
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
     useEffect(() => {
+        // if searching is false, fetch monthly view; otherwise do nothing (search will fetch)
+        if (isSearching) return;
         let mounted = true;
         (async () => {
             try {
-                const res = await fetch(`/api/daily-notes?month=${monthStr}`, { credentials: 'same-origin' });
-                if (!res.ok) throw new Error('failed');
-                const json = await res.json();
-                if (mounted) setNotes(json.notes || []);
+                if (!mounted) return;
+                await fetchNotes({ month: monthStr });
             } catch (e) {
                 console.error(e);
             }
@@ -110,7 +142,54 @@ export default function DailyNotesIndex() {
         return () => {
             mounted = false;
         };
-    }, [monthStr]);
+    }, [monthStr, isSearching]);
+
+    const doSearch = async () => {
+        // clear active tag when performing a normal keyword/period search
+        setActiveTag(null);
+        setIsSearching(true);
+        setConfirmedSearchQ(searchQ.trim() || null);
+        await fetchNotes({ q: searchQ || null, start: searchStart || null, end: searchEnd || null });
+    };
+
+    const handleTagClick = async (tagName: string) => {
+        // set tag as active and perform a tag search (no date range)
+        setActiveTag(tagName);
+        setSearchQ(tagName);
+        setConfirmedSearchQ(tagName);
+        setIsSearching(true);
+        setSearchStart(null);
+        setSearchEnd(null);
+        await fetchNotes({ q: tagName, start: null, end: null });
+        // scroll to top so header/search area is visible after tag click
+        try {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        } catch {
+            // ignore if running in non-browser environment
+        }
+    };
+
+    useEffect(() => {
+        // run initial fetch with default range on mount but do not confirm keyword
+        (async () => {
+            setIsSearching(true);
+            await fetchNotes({ q: null, start: searchStart || null, end: searchEnd || null });
+        })();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const clearSearch = async () => {
+        // reset to default 3 months -> today and clear confirmed keyword
+        setSearchQ('');
+        setConfirmedSearchQ(null);
+        // clear active tag when user clears search
+        setActiveTag(null);
+        setSearchStart(threeMonthsAgoStr);
+        setSearchEnd(todayStr);
+        // show selected date's notes by exiting search mode and loading the month view
+        setIsSearching(false);
+        await fetchNotes({ month: monthStr });
+    };
 
     // fetch holidays for the current month from API (same format as shifts calendar)
     useEffect(() => {
@@ -141,7 +220,11 @@ export default function DailyNotesIndex() {
     const selectDay = React.useCallback(
         (d: number) => {
             const date = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            // when user clicks a date, exit search mode so the sheet shows that day's notes
             setSelectedDate(date);
+            // clear any active tag search so header returns to normal when a date is selected
+            setActiveTag(null);
+            setIsSearching(false);
         },
         [currentMonth],
     );
@@ -292,32 +375,71 @@ export default function DailyNotesIndex() {
                 </div>
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-start">
                     <div className="col-span-1">
-                        <CalendarView
-                            currentMonth={currentMonth}
-                            selectedDate={selectedDate}
-                            groupedNotes={grouped}
-                            holidays={holidays}
-                            onDateSelect={selectDay}
-                            onPrev={gotoPrev}
-                            onNext={gotoNext}
-                        />
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="text"
+                                    placeholder="キーワード検索"
+                                    value={searchQ}
+                                    onChange={(e) => setSearchQ(e.target.value)}
+                                    className="flex-1 rounded-md border px-2 py-1"
+                                />
+                                <Button onClick={doSearch}>検索</Button>
+                                <Button variant="ghost" onClick={clearSearch}>
+                                    クリア
+                                </Button>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="date"
+                                    value={searchStart || ''}
+                                    onChange={(e) => setSearchStart(e.target.value || null)}
+                                    className="rounded-md border px-2 py-1"
+                                />
+                                <span className="px-2 text-sm text-muted-foreground">〜</span>
+                                <input
+                                    type="date"
+                                    value={searchEnd || ''}
+                                    onChange={(e) => setSearchEnd(e.target.value || null)}
+                                    className="rounded-md border px-2 py-1"
+                                />
+                            </div>
+                            <CalendarView
+                                currentMonth={currentMonth}
+                                selectedDate={selectedDate}
+                                groupedNotes={grouped}
+                                holidays={holidays}
+                                onDateSelect={selectDay}
+                                onPrev={gotoPrev}
+                                onNext={gotoNext}
+                            />
+                        </div>
                     </div>
                     <div className="col-span-2">
-                        <NoteSheet
-                            key={selectedDate}
-                            selectedDate={selectedDate}
-                            notes={grouped[selectedDate] || []}
-                            currentUserId={currentUserId}
-                            editingNoteId={editingNoteId}
-                            canCreate={hasPermission('daily_note.create')}
-                            onStartEdit={(id: number) => setEditingNoteId(id)}
-                            onCancelEdit={() => setEditingNoteId(null)}
-                            onNoteCreate={handleCreate}
-                            onNoteUpdate={handleUpdate}
-                            onNoteDelete={handleDelete}
-                            onCommentAdd={addComment}
-                            onCommentDelete={deleteComment}
-                        />
+                        {(() => {
+                            const notesForSheet = isSearching ? notes : grouped[selectedDate] || [];
+                            return (
+                                <NoteSheet
+                                    key={selectedDate + (isSearching ? '_search' : '')}
+                                    selectedDate={selectedDate}
+                                    notes={notesForSheet}
+                                    currentUserId={currentUserId}
+                                    editingNoteId={editingNoteId}
+                                    canCreate={hasPermission('daily_note.create')}
+                                    onStartEdit={(id: number) => setEditingNoteId(id)}
+                                    onCancelEdit={() => setEditingNoteId(null)}
+                                    onNoteCreate={handleCreate}
+                                    onNoteUpdate={handleUpdate}
+                                    onNoteDelete={handleDelete}
+                                    onCommentAdd={addComment}
+                                    onCommentDelete={deleteComment}
+                                    searchQ={confirmedSearchQ ?? ''}
+                                    isSearching={isSearching}
+                                    activeTag={activeTag}
+                                    onTagClick={handleTagClick}
+                                />
+                            );
+                        })()}
                     </div>
                 </div>
             </div>
@@ -470,6 +592,10 @@ type NoteSheetProps = {
     onCommentAdd: (dailyNoteId: number, body: string, quoteId?: number) => void;
     onCommentDelete: (commentId: number) => void;
     canCreate?: boolean;
+    searchQ?: string;
+    isSearching?: boolean;
+    activeTag?: string | null;
+    onTagClick?: (tagName: string) => void | Promise<void>;
 };
 
 function NoteSheet({
@@ -485,6 +611,10 @@ function NoteSheet({
     onCommentAdd,
     onCommentDelete,
     canCreate,
+    searchQ,
+    isSearching,
+    activeTag,
+    onTagClick,
 }: NoteSheetProps) {
     if (!selectedDate) {
         return (
@@ -495,10 +625,14 @@ function NoteSheet({
             </Card>
         );
     }
+    const headerKey = activeTag ?? (searchQ || '');
+    const showSearchHeader = !!(isSearching && headerKey && headerKey.toString().trim().length > 0);
 
     return (
         <div className="space-y-4">
-            <div className="text-xl font-bold">ノート: {selectedDate}</div>
+            <div className="text-xl font-bold">
+                {activeTag ? `タグ検索：${activeTag}` : showSearchHeader ? `検索結果：${searchQ}` : `ノート: ${selectedDate}`}
+            </div>
             <div className="space-y-4">
                 {notes.map((note: Note) => (
                     <div key={note.id}>
@@ -512,6 +646,10 @@ function NoteSheet({
                                 onDelete={() => onNoteDelete(note.id!)}
                                 onCommentAdd={onCommentAdd}
                                 onCommentDelete={onCommentDelete}
+                                highlight={searchQ}
+                                isSearching={isSearching}
+                                activeTag={activeTag}
+                                onTagClick={onTagClick}
                             />
                         )}
                     </div>
@@ -536,11 +674,52 @@ type NoteItemProps = {
     onDelete: () => void;
     onCommentAdd: (dailyNoteId: number, body: string, quoteId?: number) => void;
     onCommentDelete: (commentId: number) => void;
+    highlight?: string | null;
+    isSearching?: boolean;
+    activeTag?: string | null;
+    onTagClick?: (tagName: string) => void | Promise<void>;
 };
 
-function NoteItem({ note, currentUserId, onStartEdit, onDelete, onCommentAdd, onCommentDelete }: NoteItemProps) {
+function NoteItem({
+    note,
+    currentUserId,
+    onStartEdit,
+    onDelete,
+    onCommentAdd,
+    onCommentDelete,
+    highlight,
+    isSearching,
+    activeTag,
+    onTagClick,
+}: NoteItemProps) {
     const formatTime = (raw?: string) => (raw ? formatRelativeTime(raw) : '');
     const userName = note.user?.name || note.user_name || '不明';
+
+    const highlightText = (text?: string) => {
+        if (!text || !highlight) return <>{text}</>;
+        try {
+            const re = new RegExp(`(${highlight.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+            const parts = text.split(re);
+            return (
+                <>
+                    {parts.map((p, i) =>
+                        re.test(p) ? (
+                            <mark key={i} className="bg-yellow-200 text-yellow-900">
+                                {p}
+                            </mark>
+                        ) : (
+                            <span key={i}>{p}</span>
+                        ),
+                    )}
+                </>
+            );
+        } catch {
+            return <>{text}</>;
+        }
+    };
+
+    // render body with hashtags removed from inline text (tags will be shown as badges below)
+    const bodyWithoutHashes = (note.body || '').replace(/#([\p{L}0-9_-]+)/gu, '').trim();
 
     return (
         <div className="flex items-start gap-4 rounded-lg border bg-card p-4 text-card-foreground">
@@ -550,9 +729,13 @@ function NoteItem({ note, currentUserId, onStartEdit, onDelete, onCommentAdd, on
             </Avatar>
             <div className="flex-1">
                 <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-sm">
-                        <span className="font-bold">{userName}</span>
-                        <span className="text-muted-foreground">{formatTime(note.created_at)}</span>
+                    <div className="flex flex-col">
+                        <div className="flex items-center gap-2 text-sm">
+                            <span className="font-bold">{userName}</span>
+                            <span className="text-muted-foreground">{formatTime(note.created_at)}</span>
+                        </div>
+                        {/* show note date in search results so user knows which day this note belongs to */}
+                        {isSearching && note.date && <div className="text-xs text-muted-foreground">{note.date}</div>}
                     </div>
                     {note.user_id === currentUserId && (
                         <DropdownMenu>
@@ -575,9 +758,24 @@ function NoteItem({ note, currentUserId, onStartEdit, onDelete, onCommentAdd, on
                     )}
                 </div>
 
-                <div className="mt-2 text-sm whitespace-pre-wrap">{note.body}</div>
+                <div className="mt-2 text-sm whitespace-pre-wrap">{highlightText(bodyWithoutHashes || note.body)}</div>
 
                 {Array.isArray(note.attachments) && note.attachments.length > 0 && <NoteAttachments attachments={note.attachments} />}
+
+                {Array.isArray(note.tags) && note.tags.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                        {note.tags.map((t: { id?: number; name?: string }) => (
+                            <button
+                                key={t.id ?? t.name}
+                                type="button"
+                                onClick={() => onTagClick && onTagClick(t.name || '')}
+                                className={`inline-flex items-center rounded-full bg-orange-100 px-2 py-1 text-xs text-orange-800 ${activeTag === t.name ? 'ring-2 ring-primary' : ''}`}
+                            >
+                                #{t.name}
+                            </button>
+                        ))}
+                    </div>
+                )}
 
                 <div className="mt-4 border-t pt-3">
                     <CommentSection
@@ -586,6 +784,7 @@ function NoteItem({ note, currentUserId, onStartEdit, onDelete, onCommentAdd, on
                         currentUserId={currentUserId}
                         onCommentAdd={onCommentAdd}
                         onCommentDelete={onCommentDelete}
+                        highlight={highlight}
                     />
                 </div>
             </div>
@@ -616,7 +815,7 @@ function NoteAttachments({ attachments }: { attachments: Attachment[] }) {
         <>
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {images.map((src, i) => (
-                    <button key={i} onClick={() => openAt(i)} className="h-28 overflow-hidden rounded-md border">
+                    <button key={i} onClick={() => openAt(i)} className="h-32 overflow-hidden rounded-md border">
                         <img src={src} className="h-full w-full object-cover" alt={`attachment-${i}`} />
                     </button>
                 ))}
@@ -691,7 +890,7 @@ function NewNoteForm({ onSubmit }: { onSubmit: (body: string, attachments: File[
                                             setStartIndex(i);
                                             setModalOpen(true);
                                         }}
-                                        className="h-28 overflow-hidden rounded-md border"
+                                        className="h-32 overflow-hidden rounded-md border"
                                     >
                                         <img src={src} className="h-full w-full object-cover" alt={`new-attach-${i}`} />
                                     </button>
@@ -810,7 +1009,7 @@ function NoteEditor({ note, onSave, onCancel }: { note: Note; onSave: NoteEditor
                                         const idx = (note.attachments || []).filter((a) => !deletedAttachmentIds.includes(a.id!)).length + i;
                                         openModalAt(idx);
                                     }}
-                                    className="h-28 overflow-hidden rounded-md border"
+                                    className="h-32 overflow-hidden rounded-md border"
                                 >
                                     <img src={src} className="h-full w-full object-cover" alt={`new-${i}`} />
                                 </button>
@@ -859,11 +1058,35 @@ type CommentSectionProps = {
     currentUserId: number | null;
     onCommentAdd: (dailyNoteId: number, body: string, quoteId?: number) => void;
     onCommentDelete: (commentId: number) => void;
+    highlight?: string | null;
 };
 
-function CommentSection({ noteId, comments, currentUserId, onCommentAdd, onCommentDelete }: CommentSectionProps) {
+function CommentSection({ noteId, comments, currentUserId, onCommentAdd, onCommentDelete, highlight }: CommentSectionProps) {
     const [quote, setQuote] = useState<Comment | null>(null);
     const formatTime = (raw?: string) => (raw ? formatRelativeTime(raw) : '');
+
+    const highlightText = (text?: string) => {
+        if (!text || !highlight) return <>{text}</>;
+        try {
+            const re = new RegExp(`(${highlight.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+            const parts = text.split(re);
+            return (
+                <>
+                    {parts.map((p, i) =>
+                        re.test(p) ? (
+                            <mark key={i} className="bg-yellow-200 text-yellow-900">
+                                {p}
+                            </mark>
+                        ) : (
+                            <span key={i}>{p}</span>
+                        ),
+                    )}
+                </>
+            );
+        } catch {
+            return <>{text}</>;
+        }
+    };
 
     return (
         <div className="space-y-3">
@@ -893,11 +1116,11 @@ function CommentSection({ noteId, comments, currentUserId, onCommentAdd, onComme
                             {c.quote && (
                                 <div className="mt-1 border-l-2 pl-2 text-xs text-muted-foreground">
                                     <p className="truncate">
-                                        @{c.quote.user?.name}: {c.quote.body}
+                                        @{c.quote.user?.name}: {highlightText(c.quote.body)}
                                     </p>
                                 </div>
                             )}
-                            <p className="mt-1 whitespace-pre-wrap">{c.body}</p>
+                            <p className="mt-1 whitespace-pre-wrap">{highlightText(c.body)}</p>
                         </div>
                     </div>
                 ))}

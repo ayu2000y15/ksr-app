@@ -24,4 +24,9 @@ class DailyNote extends Model
     {
         return $this->hasMany(DailyNoteComment::class);
     }
+
+    public function tags()
+    {
+        return $this->belongsToMany(Tag::class, 'daily_note_tag');
+    }
 }
