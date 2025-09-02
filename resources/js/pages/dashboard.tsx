@@ -760,10 +760,12 @@ export default function Dashboard() {
                                                     }}
                                                     className="flex cursor-pointer items-start gap-4 py-3 hover:bg-gray-50"
                                                 >
-                                                    <div className="flex-shrink-0 text-sm font-medium text-indigo-600 md:w-28">{dateLabel}</div>
+                                                    <div className="flex-shrink-0 text-xs text-indigo-600 md:w-28 md:text-sm md:font-medium">
+                                                        {dateLabel}
+                                                    </div>
                                                     <div className="flex-1">
-                                                        <div className="flex items-center justify-between">
-                                                            <div className="text-sm font-medium break-words whitespace-normal text-gray-800 md:truncate">
+                                                        <div className="flex min-w-0 items-center justify-between">
+                                                            <div className="min-w-0 text-xs font-medium break-words break-all whitespace-normal text-gray-800 md:text-sm">
                                                                 <div className="break-words break-all">{a.title}</div>
                                                             </div>
                                                             {(() => {
