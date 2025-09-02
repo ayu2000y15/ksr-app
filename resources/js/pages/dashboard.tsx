@@ -843,23 +843,25 @@ export default function Dashboard() {
                             <div className="mt-3 flex items-center justify-center">
                                 {totalAnnouncements === null ? (
                                     <Button
+                                        variant="outline"
                                         onClick={async () => {
                                             const next = annPage + 1;
                                             await loadAnnouncements(next, true);
                                         }}
                                         disabled={loadingMore}
                                     >
-                                        {loadingMore ? '読み込み中...' : 'もっと見る'}
+                                        {loadingMore ? '読み込み中...' : 'もっとみる'}
                                     </Button>
                                 ) : announcements.length < (totalAnnouncements ?? 0) ? (
                                     <Button
+                                        variant="outline"
                                         onClick={async () => {
                                             const next = annPage + 1;
                                             await loadAnnouncements(next, true);
                                         }}
                                         disabled={loadingMore}
                                     >
-                                        {loadingMore ? '読み込み中...' : 'もっと見る'}
+                                        {loadingMore ? '読み込み中...' : 'もっとみる'}
                                     </Button>
                                 ) : (
                                     <div className="text-sm text-muted-foreground">これ以上、お知らせはありません</div>
