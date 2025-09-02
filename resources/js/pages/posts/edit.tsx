@@ -35,6 +35,7 @@ export default function PostEdit() {
         title: initialPost?.title || '',
         body: initialPost?.body || '',
     });
+    const [submitting, setSubmitting] = useState(false);
 
     const [attachments, setAttachments] = useState<File[]>([]);
     // If initialPost exists, use its is_public; otherwise default to draft (false)
@@ -486,6 +487,7 @@ export default function PostEdit() {
         }
 
         try {
+            setSubmitting(true);
             const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
             const postId = initialPost?.id;
             // Use POST with method override for updates to avoid client/server Inertia method/version edge cases
@@ -546,6 +548,8 @@ export default function PostEdit() {
         } catch (err) {
             console.error(err);
             alert('通信エラーが発生しました');
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -1033,11 +1037,11 @@ export default function PostEdit() {
 
                             <CardFooter className="flex justify-end gap-4">
                                 <Link href={route('posts.index')}>
-                                    <Button variant="outline" type="button">
+                                    <Button variant="outline" type="button" disabled={submitting}>
                                         キャンセル
                                     </Button>
                                 </Link>
-                                <Button disabled={processing}>更新する</Button>
+                                <Button disabled={processing || submitting}>{processing || submitting ? '更新中...' : '更新する'}</Button>
                             </CardFooter>
                         </Card>
                     </form>

@@ -29,6 +29,7 @@ export default function PostCreate() {
         title: '',
         body: '',
     });
+    const [submitting, setSubmitting] = useState(false);
     const [attachments, setAttachments] = useState<File[]>([]);
     // default to draft (非公開) instead of public
     const [isPublic, setIsPublic] = useState<boolean>(false);
@@ -332,6 +333,7 @@ export default function PostCreate() {
                 console.log('[posts.create] FormData entries before submit:', Array.from((form as any).entries ? (form as any).entries() : []));
             } catch (e) {}
 
+            setSubmitting(true);
             const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
             const submitUrl = '/api/posts';
             const res = await fetch(submitUrl, {
@@ -394,6 +396,8 @@ export default function PostCreate() {
         } catch (err) {
             console.error(err);
             alert('通信エラーが発生しました');
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -845,7 +849,9 @@ export default function PostCreate() {
                                             キャンセル
                                         </Button>
                                     </Link>
-                                    <Button disabled={processing}>投稿する</Button>
+                                    <Button type="submit" disabled={processing || submitting}>
+                                        {processing || submitting ? '投稿中...' : '投稿する'}
+                                    </Button>
                                 </div>
                             </CardFooter>
                         </Card>
