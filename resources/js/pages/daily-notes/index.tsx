@@ -57,12 +57,20 @@ function formatRelativeTime(raw?: string) {
     return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// Convert a Date to Japan Standard Time (UTC+9) preserving day when local is JST
+function toJstDate(date: Date) {
+    // UTC ms = local ms + offsetMinutes*60000
+    const utcMs = date.getTime() + date.getTimezoneOffset() * 60 * 1000;
+    const jstMs = utcMs + 9 * 60 * 60 * 1000;
+    return new Date(jstMs);
+}
+
 // Return YYYY-MM-DD for given date in Japan Standard Time (UTC+9)
 function toJstYmd(date: Date) {
-    const jst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
-    const y = jst.getUTCFullYear();
-    const m = String(jst.getUTCMonth() + 1).padStart(2, '0');
-    const d = String(jst.getUTCDate()).padStart(2, '0');
+    const jst = toJstDate(date);
+    const y = jst.getFullYear();
+    const m = String(jst.getMonth() + 1).padStart(2, '0');
+    const d = String(jst.getDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
 }
 
@@ -143,12 +151,15 @@ function renderWithLinks(text?: string, highlight?: string | null) {
 // --- メインコンポーネント ---
 export default function DailyNotesIndex() {
     const [currentMonth, setCurrentMonth] = useState<Date>(() => {
-        const d = new Date();
-        return new Date(d.getFullYear(), d.getMonth(), 1);
+        // initialize month based on Japan Standard Time (UTC+9)
+        const now = new Date();
+        const jstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+        return new Date(jstNow.getFullYear(), jstNow.getMonth(), 1);
     });
     const [notes, setNotes] = useState<Note[]>([]);
     const [holidays, setHolidays] = useState<string[]>([]);
-    const [selectedDate, setSelectedDate] = useState<string>('');
+    // default selected date should be today's date in JST
+    const [selectedDate, setSelectedDate] = useState<string>(() => toJstYmd(new Date()));
     const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' | 'info' } | null>(null);
     type PageProps = {
         auth?: { user?: { id?: number }; permissions?: string[] };
@@ -183,7 +194,7 @@ export default function DailyNotesIndex() {
     const formatYMD = (d: Date) => d.toISOString().slice(0, 10);
     // default search dates should use Japan Standard Time
     const todayStr = toJstYmd(new Date());
-    const threeMonthsAgo = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
+    const threeMonthsAgo = toJstDate(new Date());
     threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
     const threeMonthsAgoStr = toJstYmd(threeMonthsAgo);
 
@@ -348,7 +359,7 @@ export default function DailyNotesIndex() {
     useEffect(() => {
         // Use JST-based today so server/client timezone mismatch doesn't affect day selection
         const now = new Date();
-        const jstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+        const jstNow = toJstDate(now);
         if (currentMonth.getFullYear() === jstNow.getFullYear() && currentMonth.getMonth() === jstNow.getMonth()) {
             selectDay(jstNow.getDate());
         }
