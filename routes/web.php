@@ -60,6 +60,8 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
     // 編集・更新・削除のルートを追加
     Route::get('/users/{user}/edit', [UserController::class, 'edit'])->name('users.edit');
     Route::patch('/users/{user}', [UserController::class, 'update'])->name('users.update');
+    // Accept POST for update to support clients that send POST instead of PATCH (e.g. Inertia.post with _method)
+    Route::post('/users/{user}', [UserController::class, 'update'])->name('users.update.post');
     Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
     // ユーザー統計ページ（shifts 配下のパスに移動）
     Route::get('/shifts/user-stats', [UserController::class, 'stats'])->name('shifts.user-stats');

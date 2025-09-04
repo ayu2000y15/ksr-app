@@ -36,6 +36,12 @@ export default function LeaveApplicationModal({ open, onOpenChange, date }: { op
             onSuccess: () => {
                 reset();
                 onOpenChange(false);
+                try {
+                    // notify parent pages to update local state (date is ISO YYYY-MM-DD)
+                    if (typeof window !== 'undefined') {
+                        window.dispatchEvent(new CustomEvent('leave:created', { detail: { date: data.date } }));
+                    }
+                } catch {}
                 // show guidance toast
                 setToast({ message: '念のためシフト担当者に確認してください', type: 'info' });
                 setTimeout(() => setToast(null), 3500);

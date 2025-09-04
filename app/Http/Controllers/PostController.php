@@ -25,7 +25,7 @@ class PostController extends Controller
         $user = $request->user();
 
         // include views.user so we can determine whether the current user has viewed each post
-        $query = Post::with(['user', 'attachments', 'comments', 'reactions', 'tags', 'roles', 'allowedUsers', 'views.user'])
+        $query = Post::with(['user', 'attachments', 'comments', 'reactions', 'tags', 'roles', 'allowedUsers', 'views.user', 'pinnedByUsers'])
             ->where(function ($q) use ($user) {
                 // always show public posts
                 $q->where('is_public', true)->where('audience', 'all');
@@ -117,6 +117,18 @@ class PostController extends Controller
             } catch (\Throwable $e) {
                 // swallow and leave flag false on error
                 $post->viewed_by_current_user = false;
+            }
+            // pinned by current user flag
+            try {
+                $post->pinned_by_current_user = false;
+                if ($user && isset($post->pinnedByUsers) && is_iterable($post->pinnedByUsers)) {
+                    $post->pinned_by_current_user = collect($post->pinnedByUsers)->contains(function ($v) use ($user) {
+                        $uid = $v->id ?? ($v->user_id ?? null);
+                        return $uid && intval($uid) === intval($user->id);
+                    });
+                }
+            } catch (\Throwable $e) {
+                $post->pinned_by_current_user = false;
             }
             return $post;
         });

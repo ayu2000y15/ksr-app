@@ -55,4 +55,12 @@ class Post extends Model
     {
         return $this->belongsToMany(\App\Models\User::class, 'post_user');
     }
+
+    /**
+     * Users who have pinned this post
+     */
+    public function pinnedByUsers()
+    {
+        return $this->belongsToMany(\App\Models\User::class, 'post_user_pins')->withTimestamps();
+    }
 }

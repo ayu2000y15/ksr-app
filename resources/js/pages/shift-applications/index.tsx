@@ -279,14 +279,38 @@ export default function Index({
             await axios.post(route('shifts.mark_break'), { user_id: authUser.id, date: dateStr });
             // update local leaves so UI reflects change without full reload
             setLocalUserLeaves((prev) => (prev.includes(dateStr) ? prev : [...prev, dateStr]));
-            // decrement remaining locally if numeric
-            setLocalRemainingDays((prev) => (prev === null ? null : prev - 1));
+            // decrement remaining locally if numeric, but skip weekends/holidays
+            try {
+                const d = new Date(dateStr);
+                const isWeekendOrHoliday = isHoliday(d) || d.getDay() === 0 || d.getDay() === 6;
+                if (!isWeekendOrHoliday) setLocalRemainingDays((prev) => (prev === null ? null : prev - 1));
+            } catch {}
             setToast({ message: '休暇に変更しました。', type: 'success' });
         } catch (err) {
             console.error(err);
             setToast({ message: '休暇に変更できませんでした。', type: 'error' });
         }
     };
+
+    // listen for leave creations from modal and update local state (skip weekends/holidays)
+    useEffect(() => {
+        const handler = (e: any) => {
+            try {
+                const dateStr = e?.detail?.date;
+                if (!dateStr) return;
+                const d = new Date(dateStr);
+                const isWeekendOrHoliday = isHoliday(d) || d.getDay() === 0 || d.getDay() === 6;
+                setLocalUserLeaves((prev) => (prev.includes(dateStr) ? prev : [...prev, dateStr]));
+                if (!isWeekendOrHoliday) setLocalRemainingDays((prev) => (prev === null ? null : prev - 1));
+            } catch {
+                // ignore
+            }
+        };
+        if (typeof window !== 'undefined') window.addEventListener('leave:created', handler as EventListener);
+        return () => {
+            if (typeof window !== 'undefined') window.removeEventListener('leave:created', handler as EventListener);
+        };
+    }, [isHoliday]);
 
     return (
         <AppSidebarLayout breadcrumbs={breadcrumbs}>
@@ -529,29 +553,41 @@ export default function Index({
                                                     // 3) If no shift: if withinDeadline -> show 休暇申請 (申請), else -> show 休暇登録
                                                     if (!pastOrToday) {
                                                         if (isUserLeave) {
-                                                            return (
-                                                                <Button
-                                                                    size="sm"
-                                                                    variant="destructive"
-                                                                    onClick={async () => {
-                                                                        try {
-                                                                            await axios.post(route('shifts.unmark_break'), {
-                                                                                user_id: authUser.id,
-                                                                                date: iso,
-                                                                            });
-                                                                            setLocalUserLeaves((prev) => prev.filter((x) => x !== iso));
-                                                                            // restore remaining day locally
-                                                                            setLocalRemainingDays((prev) => (prev === null ? null : prev + 1));
-                                                                            setToast({ message: '休暇をキャンセルしました。', type: 'success' });
-                                                                        } catch (e) {
-                                                                            console.error(e);
-                                                                            setToast({ message: '休暇のキャンセルに失敗しました。', type: 'error' });
-                                                                        }
-                                                                    }}
-                                                                >
-                                                                    キャンセル
-                                                                </Button>
-                                                            );
+                                                            // Do not show cancel button when the date is within the application deadline window.
+                                                            // application_deadline_days == 0 means no deadline (allow cancel).
+                                                            const allowCancel = application_deadline_days === 0 ? true : !withinDeadline;
+                                                            const isWeekendOrHoliday = holiday || dayIndex === 0 || dayIndex === 6;
+                                                            // hide cancel on weekends/holidays even when allowCancel is true
+                                                            if (allowCancel && !isWeekendOrHoliday) {
+                                                                return (
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="destructive"
+                                                                        onClick={async () => {
+                                                                            try {
+                                                                                await axios.post(route('shifts.unmark_break'), {
+                                                                                    user_id: authUser.id,
+                                                                                    date: iso,
+                                                                                });
+                                                                                setLocalUserLeaves((prev) => prev.filter((x) => x !== iso));
+                                                                                // restore remaining day locally
+                                                                                setLocalRemainingDays((prev) => (prev === null ? null : prev + 1));
+                                                                                setToast({ message: '休暇をキャンセルしました。', type: 'success' });
+                                                                            } catch (e) {
+                                                                                console.error(e);
+                                                                                setToast({
+                                                                                    message: '休暇のキャンセルに失敗しました。',
+                                                                                    type: 'error',
+                                                                                });
+                                                                            }
+                                                                        }}
+                                                                    >
+                                                                        キャンセル
+                                                                    </Button>
+                                                                );
+                                                            }
+                                                            // otherwise hide the cancel button during application period or on weekends/holidays
+                                                            return null;
                                                         }
                                                         // If the user has a scheduled shift on this date, show shift-related actions regardless of weekend/holiday
                                                         if (isShiftExists || (timeStr && timeStr !== '時間未設定')) {

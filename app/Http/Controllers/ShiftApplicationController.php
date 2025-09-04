@@ -53,10 +53,30 @@ class ShiftApplicationController extends Controller
         $setting = UserShiftSetting::where('user_id', $user->id)->first();
         $monthlyLimit = $setting ? (int) $setting->monthly_leave_limit : 0; // 0 => unlimited
 
-        $usedLeaves = Shift::where('user_id', $user->id)
+        // Count used leave days excluding weekends and declared holidays
+        $leaveDates = Shift::where('user_id', $user->id)
             ->where('shift_type', 'leave')
             ->whereBetween('date', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
-            ->count();
+            ->pluck('date')
+            ->map(function ($d) {
+                return Carbon::parse($d)->toDateString();
+            })
+            ->toArray();
+
+        // filter out weekend days (Sat=6, Sun=0) and holidays
+        $filteredLeaveDates = array_filter($leaveDates, function ($dateStr) use ($holidays) {
+            try {
+                $dt = Carbon::createFromFormat('Y-m-d', $dateStr);
+                $dow = (int) $dt->dayOfWeek; // 0 = Sun, 6 = Sat
+                if ($dow === 0 || $dow === 6) return false;
+                if (in_array($dateStr, $holidays)) return false;
+                return true;
+            } catch (\Throwable $e) {
+                return true; // if parse fails, keep the date to be safe
+            }
+        });
+
+        $usedLeaves = count($filteredLeaveDates);
 
         $remaining = $monthlyLimit === 0 ? null : max(0, $monthlyLimit - $usedLeaves);
 
@@ -234,6 +254,13 @@ class ShiftApplicationController extends Controller
                 if ($shift && $shift->shift_type === 'leave') {
                     $shift->delete();
                 }
+
+                // Also remove any ShiftDetail rows for that user/date so no orphan details remain
+                try {
+                    \App\Models\ShiftDetail::where('user_id', $shiftApplication->user_id)->whereRaw('date(date) = ?', [Carbon::parse($shiftApplication->date)->toDateString()])->delete();
+                } catch (\Exception $e) {
+                    logger()->error('Failed to delete ShiftDetail on application unapprove: ' . $e->getMessage());
+                }
             }
         } catch (\Exception $e) {
             // avoid breaking update flow; log for diagnosis
@@ -248,6 +275,17 @@ class ShiftApplicationController extends Controller
         if (Auth::user()->hasRole('システム管理者')) {
         } else {
             $this->authorize('delete', $shiftApplication);
+        }
+        // If this application had created a Shift (approved leave), remove that Shift and any details
+        try {
+            $shift = \App\Models\Shift::where('user_id', $shiftApplication->user_id)->whereRaw('date(date) = ?', [Carbon::parse($shiftApplication->date)->toDateString()])->first();
+            if ($shift && $shift->shift_type === 'leave') {
+                $shift->delete();
+            }
+
+            \App\Models\ShiftDetail::where('user_id', $shiftApplication->user_id)->whereRaw('date(date) = ?', [Carbon::parse($shiftApplication->date)->toDateString()])->delete();
+        } catch (\Exception $e) {
+            logger()->error('Failed to cleanup Shift/ShiftDetail on application destroy: ' . $e->getMessage());
         }
 
         $shiftApplication->delete();

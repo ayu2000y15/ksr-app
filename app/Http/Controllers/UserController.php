@@ -8,6 +8,7 @@ use App\Models\Shift;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Mail;
@@ -411,6 +412,7 @@ class UserController extends Controller
             'memo' => 'nullable|string',
             'gender' => 'required|in:male,female,other',
             'has_car' => 'required|boolean',
+            'profile_image' => 'nullable|image|max:2048',
         ], $messages);
 
         $user->update($request->only([
@@ -431,6 +433,35 @@ class UserController extends Controller
             'employment_period',
             'employment_notes'
         ]));
+
+        // handle profile image removal or upload
+        // client may send a boolean 'remove_profile_image' to clear existing image
+        if ($request->has('remove_profile_image') && $request->input('remove_profile_image')) {
+            try {
+                if ($user->profile_image) {
+                    // delete from storage if exists
+                    try {
+                        Storage::disk('public')->delete($user->profile_image);
+                    } catch (\Throwable $e) {
+                        // ignore storage delete errors
+                    }
+                    $user->profile_image = null;
+                    $user->save();
+                }
+            } catch (\Throwable $e) {
+                Log::error('Failed to remove profile image: ' . $e->getMessage());
+            }
+        } elseif ($request->hasFile('profile_image')) {
+            try {
+                $file = $request->file('profile_image');
+                $path = $file->store('profile_images', 'public');
+                $user->profile_image = $path;
+                $user->save();
+            } catch (\Throwable $e) {
+                // log and continue; do not block other updates
+                Log::error('Profile image upload failed: ' . $e->getMessage());
+            }
+        }
 
         // Ensure preferred_week_days and preferred_week_days_count stored correctly
         $dirty = false;

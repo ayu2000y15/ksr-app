@@ -182,6 +182,9 @@ Route::middleware(['web', 'auth'])->group(function () {
     Route::post('posts/{post}/reactions', [\App\Http\Controllers\Api\PostInteractionController::class, 'toggleReaction']);
     Route::get('posts/{post}/views', [\App\Http\Controllers\Api\PostInteractionController::class, 'views']);
     Route::post('posts/{post}/views', [\App\Http\Controllers\Api\PostInteractionController::class, 'registerView']);
+    // pin/unpin posts per user
+    Route::post('posts/{post}/pin', [\App\Http\Controllers\Api\PostPinController::class, 'pin']);
+    Route::delete('posts/{post}/pin', [\App\Http\Controllers\Api\PostPinController::class, 'unpin']);
 
     // 入寮登録 API（簡易実装） - 1レコードに複数ユーザーIDを保持
     // This POST endpoint also accepts an `id` to update an existing record (so the frontend can always POST for create/update).

@@ -423,17 +423,19 @@ class ShiftController extends Controller
             'date' => 'required|date',
         ]);
 
-        $shift = Shift::where('user_id', $data['user_id'])->where('date', $data['date'])->first();
+        // remove any explicit Shift record for the date
+        $shift = Shift::where('user_id', $data['user_id'])->whereRaw('date(date) = ?', [$data['date']])->first();
         if ($shift) {
             $shift->delete();
         }
 
-        // After removing the explicit leave shift, attempt to reapply default shift details for that date
-        // (this will create scheduled ShiftDetail entries if defaults exist for the weekday)
+        // Also remove any ShiftDetail rows tied to that user/date so nothing remains linked
+        // (use raw date comparison to ignore DB time portion)
         try {
-            $this->applyDefaultShiftDetails($data['user_id'], $data['date'], 'day');
+            ShiftDetail::where('user_id', $data['user_id'])->whereRaw('date(date) = ?', [Carbon::parse($data['date'])->toDateString()])->delete();
         } catch (\Exception $e) {
-            // ignore failures here; default details are best-effort
+            // ignore failures here but log for diagnosis
+            logger()->error('Failed to delete ShiftDetail on unmarkBreak: ' . $e->getMessage());
         }
 
         if ($request->expectsJson() || $request->ajax()) {

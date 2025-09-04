@@ -24,6 +24,7 @@ class User extends Authenticatable
         'temporary_password',
         'phone_number',
         'line_name',
+        'profile_image',
         'gender',
         'has_car',
         'status',
@@ -71,5 +72,13 @@ class User extends Authenticatable
     public function sendPasswordResetNotification($token)
     {
         $this->notify(new \App\Notifications\ResetPasswordNotification($token));
+    }
+
+    /**
+     * Posts this user has pinned
+     */
+    public function pinnedPosts()
+    {
+        return $this->belongsToMany(\App\Models\Post::class, 'post_user_pins')->withTimestamps();
     }
 }

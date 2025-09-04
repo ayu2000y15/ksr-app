@@ -9,7 +9,7 @@ import Toast from '@/components/ui/toast';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import type { FormEvent } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 // パンくずリスト
 const breadcrumbs = [
@@ -44,21 +44,54 @@ export default function EditUserPage() {
         preferred_week_days_count: user.preferred_week_days_count ?? '',
         employment_period: user.employment_period || '',
         employment_notes: user.employment_notes || '',
+        profile_image: null as File | null,
+        remove_profile_image: false,
     });
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
-        // users.update route expects PATCH
+        if (typeof post === 'function') {
+            // build a debug FormData (for developer console) so we can see what will be sent
+            try {
+                const dbg = new FormData();
+                dbg.append('_method', 'PATCH');
+                Object.entries(data).forEach(([k, v]) => {
+                    if (v === undefined || v === null) return;
+                    if (k === 'profile_image') return;
+                    if (Array.isArray(v)) {
+                        v.forEach((item) => dbg.append(`${k}[]`, typeof item === 'object' ? JSON.stringify(item) : String(item)));
+                    } else {
+                        dbg.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
+                    }
+                });
+                const f = (data as any).profile_image as File | null;
+                if (f) dbg.append('profile_image', f);
+                try {
+                    console.log('[users.edit] FormData entries:', Array.from(dbg.entries()));
+                } catch (e) {
+                    // ignore console errors
+                }
+            } catch (e) {
+                // ignore debug build errors
+            }
+
+            post(route('users.update', user.id), {
+                forceFormData: true,
+                // add method override into submitted payload without mutating local data
+                transform: (payload: any) => ({ ...payload, _method: 'PATCH' }),
+            } as any);
+            return;
+        }
+
         if (typeof patch === 'function') {
-            patch(route('users.update', user.id));
-        } else if (typeof post === 'function') {
-            // fallback: use post with method override
-            post(route('users.update', user.id), { _method: 'PATCH', ...data });
+            patch(route('users.update', user.id), { forceFormData: true });
         }
     };
 
     const [sending, setSending] = useState(false);
     const [sent, setSent] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const [preview, setPreview] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
     const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' | 'info' } | null>(
         flash && flash.success ? { message: flash.success, type: 'success' } : flash && flash.error ? { message: flash.error, type: 'error' } : null,
@@ -439,6 +472,143 @@ export default function EditUserPage() {
                                     <Label htmlFor="memo">その他メモ</Label>
                                     <Textarea id="memo" value={data.memo} onChange={(e) => setData('memo', e.target.value)} />
                                     <InputError message={errors.memo} className="mt-2" />
+                                </div>
+
+                                <div>
+                                    <Label>従業員証用顔写真（4cm × 3cm）</Label>
+                                    <div className="mt-2">
+                                        <div className="flex items-center gap-3">
+                                            <input
+                                                ref={fileInputRef}
+                                                id="profile_image"
+                                                className="hidden"
+                                                type="file"
+                                                accept="image/*"
+                                                onChange={(e) => {
+                                                    const f = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+                                                    // revoke previous preview if any
+                                                    if (preview) {
+                                                        try {
+                                                            URL.revokeObjectURL(preview);
+                                                        } catch {}
+                                                    }
+                                                    if (f) {
+                                                        const url = URL.createObjectURL(f);
+                                                        setPreview(url);
+                                                        setData('profile_image', f);
+                                                        // clear any prior remove flag when a new file is chosen
+                                                        setData('remove_profile_image', false);
+                                                    } else {
+                                                        setPreview(null);
+                                                        setData('profile_image', null);
+                                                    }
+                                                }}
+                                            />
+                                            <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}>
+                                                ファイル選択
+                                            </Button>
+                                            <div className="text-sm text-muted-foreground">
+                                                {preview
+                                                    ? '1 ファイル選択中'
+                                                    : !data.remove_profile_image && user.profile_image
+                                                      ? '既存の画像あり'
+                                                      : '未選択'}
+                                            </div>
+                                            {preview && (
+                                                <button
+                                                    type="button"
+                                                    className="ml-2 text-sm text-red-500"
+                                                    onClick={() => {
+                                                        // clear selection
+                                                        if (fileInputRef.current) fileInputRef.current.value = '';
+                                                        try {
+                                                            if (preview) URL.revokeObjectURL(preview);
+                                                        } catch {}
+                                                        setPreview(null);
+                                                        setData('profile_image', null);
+                                                    }}
+                                                >
+                                                    選択解除
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        <div className="mt-3">
+                                            {preview ? (
+                                                <div
+                                                    className="relative inline-block overflow-hidden bg-gray-50"
+                                                    style={{ width: '3cm', height: '4cm' }}
+                                                >
+                                                    <img src={preview} alt="preview" className="h-full w-full object-cover" />
+                                                    <button
+                                                        type="button"
+                                                        className="absolute top-1 right-1 rounded bg-white/80 p-0.5 text-gray-700 hover:bg-white"
+                                                        onClick={() => {
+                                                            if (fileInputRef.current) fileInputRef.current.value = '';
+                                                            try {
+                                                                if (preview) URL.revokeObjectURL(preview);
+                                                            } catch {}
+                                                            setPreview(null);
+                                                            setData('profile_image', null);
+                                                        }}
+                                                        title="削除"
+                                                    >
+                                                        <svg
+                                                            className="h-4 w-4"
+                                                            viewBox="0 0 24 24"
+                                                            fill="none"
+                                                            stroke="currentColor"
+                                                            strokeWidth="2"
+                                                        >
+                                                            <path d="M6 18L18 6M6 6l12 12" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            ) : !data.remove_profile_image && user.profile_image ? (
+                                                <div
+                                                    className="relative inline-block overflow-hidden bg-gray-50"
+                                                    style={{ width: '3cm', height: '4cm' }}
+                                                >
+                                                    <img
+                                                        src={
+                                                            (user.profile_image &&
+                                                                (user.profile_image.match(/^https?:\/\//)
+                                                                    ? user.profile_image
+                                                                    : `/storage/${user.profile_image}`)) ||
+                                                            ''
+                                                        }
+                                                        alt="current"
+                                                        className="h-full w-full object-cover"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        className="absolute top-1 right-1 rounded bg-white/80 p-0.5 text-red-600 hover:bg-white"
+                                                        onClick={() => {
+                                                            // mark for removal and clear any selected file preview
+                                                            if (fileInputRef.current) fileInputRef.current.value = '';
+                                                            try {
+                                                                if (preview) URL.revokeObjectURL(preview);
+                                                            } catch {}
+                                                            setPreview(null);
+                                                            setData('profile_image', null);
+                                                            setData('remove_profile_image', true);
+                                                        }}
+                                                        title="既存画像を削除"
+                                                    >
+                                                        <svg
+                                                            className="h-4 w-4"
+                                                            viewBox="0 0 24 24"
+                                                            fill="none"
+                                                            stroke="currentColor"
+                                                            strokeWidth="2"
+                                                        >
+                                                            <path d="M6 18L18 6M6 6l12 12" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                    </div>
                                 </div>
                             </CardContent>
                             <CardFooter className="flex justify-end gap-4">

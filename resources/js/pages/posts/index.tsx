@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { BreadcrumbItem } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
+import PushPin from '@mui/icons-material/PushPin';
 import { Edit, Plus, Trash } from 'lucide-react';
 import { useCallback, useEffect, useState, type MouseEvent } from 'react';
 
@@ -51,6 +52,7 @@ export default function PostsIndex() {
     const [mobileType, setMobileType] = useState<string | null>(null);
     const [mobileAudience, setMobileAudience] = useState<string | null>(null);
     const [queryParams, setQueryParams] = useState<QueryParams>({});
+    const [activeTab, setActiveTab] = useState<'all' | 'pinned'>('all');
     // rolesList may be used to map role id to name; keep as unknown[] to avoid any
     const [_rolesList, setRolesList] = useState<unknown[]>([]);
     const page = usePage();
@@ -97,6 +99,35 @@ export default function PostsIndex() {
         },
         [currentUserId],
     );
+
+    // Pin/unpin helpers
+    const togglePin = async (postId: number, pinned: boolean) => {
+        try {
+            const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+            if (!pinned) {
+                // pin
+                const res = await fetch(`/api/posts/${postId}/pin`, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'X-CSRF-TOKEN': token, Accept: 'application/json' },
+                });
+                if (!res.ok) throw new Error('pin failed');
+            } else {
+                // unpin
+                const res = await fetch(`/api/posts/${postId}/pin`, {
+                    method: 'DELETE',
+                    credentials: 'same-origin',
+                    headers: { 'X-CSRF-TOKEN': token, Accept: 'application/json' },
+                });
+                if (!res.ok) throw new Error('unpin failed');
+            }
+            // update local state
+            setPosts((prev: any[]) => prev.map((p) => (p.id === postId ? { ...p, pinned_by_current_user: !p.pinned_by_current_user } : p)));
+        } catch (e) {
+            console.error(e);
+            alert('ピン操作に失敗しました');
+        }
+    };
 
     // loadInitial is called once on mount
     useEffect(() => {
@@ -265,7 +296,25 @@ export default function PostsIndex() {
                         </Link>
                     </CardHeader>
                     <CardContent>
-                        <div>
+                            <div>
+                                {/* Tabs: All / Pinned */}
+                                <div className="mb-4 flex items-center gap-2">
+                                    <Button
+                                        variant={activeTab === 'all' ? undefined : 'ghost'}
+                                        onClick={() => setActiveTab('all')}
+                                        aria-pressed={activeTab === 'all'}
+                                    >
+                                        全体
+                                    </Button>
+                                    <Button
+                                        variant={activeTab === 'pinned' ? undefined : 'ghost'}
+                                        onClick={() => setActiveTab('pinned')}
+                                        aria-pressed={activeTab === 'pinned'}
+                                    >
+                                        ピン止め
+                                    </Button>
+                                </div>
+
                             {/* Desktop/table view (hidden on small screens) */}
                             <div className="hidden md:block">
                                 <Table>
@@ -305,7 +354,7 @@ export default function PostsIndex() {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {posts.map((post: any) => {
+                                        {((activeTab === 'pinned' ? (posts as any[]).filter((p) => p.pinned_by_current_user) : (posts as any[]))).map((post: any) => {
                                             // ...existing code...
 
                                             const formatDateTime = (iso: string | undefined) => {
@@ -380,6 +429,22 @@ export default function PostsIndex() {
                                                                         </div>
                                                                     ) : null}
                                                                     <div className="flex min-w-0 items-center gap-2">
+                                                                        {/* pin icon on the left */}
+                                                                        {currentUserId ? (
+                                                                            <button
+                                                                                onClick={(e: MouseEvent) => {
+                                                                                    e.stopPropagation();
+                                                                                    togglePin(post.id, Boolean(post.pinned_by_current_user));
+                                                                                }}
+                                                                                aria-label={post.pinned_by_current_user ? 'ピンを外す' : 'ピンする'}
+                                                                                className="flex items-center justify-center rounded p-0.5"
+                                                                            >
+                                                                                <PushPin
+                                                                                    className={`h-5 w-3 ${post.pinned_by_current_user ? 'text-yellow-500' : 'text-gray-400'}`}
+                                                                                />
+                                                                            </button>
+                                                                        ) : null}
+
                                                                         <Link
                                                                             href={route('posts.show', post.id)}
                                                                             onClick={(e: MouseEvent) => e.stopPropagation()}
@@ -523,29 +588,31 @@ export default function PostsIndex() {
                                                     <TableCell>{post.user ? post.user.name : '—'}</TableCell>
                                                     <TableCell>{formatDateTime(post.updated_at)}</TableCell>
                                                     <TableCell className="text-right">
-                                                        {postOwnerId && currentUserId && Number(postOwnerId) === currentUserId ? (
-                                                            <div className="inline-flex justify-end gap-2">
-                                                                <Button
-                                                                    variant="outline"
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        onEdit(e);
-                                                                    }}
-                                                                >
-                                                                    <Edit className="mr-2 h-4 w-4" /> 編集
-                                                                </Button>
-                                                                <Button
-                                                                    size="sm"
-                                                                    variant="destructive"
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        onDelete(e);
-                                                                    }}
-                                                                >
-                                                                    <Trash className="mr-2 h-4 w-4" /> 削除
-                                                                </Button>
-                                                            </div>
-                                                        ) : null}
+                                                        <div className="inline-flex items-center justify-end gap-2">
+                                                            {postOwnerId && currentUserId && Number(postOwnerId) === currentUserId ? (
+                                                                <div className="inline-flex justify-end gap-2">
+                                                                    <Button
+                                                                        variant="outline"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            onEdit(e);
+                                                                        }}
+                                                                    >
+                                                                        <Edit className="mr-2 h-4 w-4" /> 編集
+                                                                    </Button>
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="destructive"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            onDelete(e);
+                                                                        }}
+                                                                    >
+                                                                        <Trash className="mr-2 h-4 w-4" /> 削除
+                                                                    </Button>
+                                                                </div>
+                                                            ) : null}
+                                                        </div>
                                                     </TableCell>
                                                 </TableRow>
                                             );
@@ -634,7 +701,7 @@ export default function PostsIndex() {
                                 </div>
                             </div>
                             <div className="space-y-3 md:hidden">
-                                {posts.map((post: any) => {
+                                {((activeTab === 'pinned' ? (posts as any[]).filter((p) => p.pinned_by_current_user) : (posts as any[]))).map((post: any) => {
                                     const postOwnerId = post?.user?.id ?? post?.user_id ?? null;
                                     const isDraft = post.is_public === false || Number(post.is_public) === 0 || post.is_public === '0';
                                     const isOwnDraft = Boolean(isDraft && postOwnerId && currentUserId && Number(postOwnerId) === currentUserId);
@@ -665,6 +732,19 @@ export default function PostsIndex() {
                                                 </div>
                                                 <div className="ml-2 flex items-center gap-1">
                                                     {/* Icon-only actions on mobile */}
+                                                    {currentUserId ? (
+                                                        <button
+                                                            onClick={(e: MouseEvent) => {
+                                                                e.stopPropagation();
+                                                                togglePin(post.id, Boolean(post.pinned_by_current_user));
+                                                            }}
+                                                            aria-label={post.pinned_by_current_user ? 'ピンを外す' : 'ピンする'}
+                                                            className="p-2 rounded"
+                                                        >
+                                                            <PushPin className={`h-4 w-4 ${post.pinned_by_current_user ? 'text-yellow-500' : 'text-gray-400'}`} />
+                                                        </button>
+                                                    ) : null}
+
                                                     {postOwnerId && currentUserId && Number(postOwnerId) === currentUserId ? (
                                                         <>
                                                             <Link
