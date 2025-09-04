@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 // types are intentionally typed as any in this file to avoid strict type dependency
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { Car, Edit, Eye, LoaderCircle, Plus, Trash } from 'lucide-react';
+import { Car, Download, Edit, Eye, LoaderCircle, Plus, Trash } from 'lucide-react';
 import { Fragment, ReactNode, useEffect, useState } from 'react';
 // dialog modal removed: details now open on a separate page
 
@@ -138,6 +138,41 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
         }
     };
 
+    // download helper: if same-origin or relative path, use anchor download; otherwise fetch blob then download
+    const downloadImage = async (src: string, filename?: string) => {
+        try {
+            const isRelative = src.startsWith('/');
+            const origin = window.location.origin;
+            const isSameOrigin = src.startsWith(origin) || isRelative;
+            const name = filename || `${(Math.random() + 1).toString(36).substring(7)}.jpg`;
+
+            if (isSameOrigin) {
+                const a = document.createElement('a');
+                a.href = src;
+                a.download = name;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                return;
+            }
+
+            const res = await fetch(src, { mode: 'cors' });
+            if (!res.ok) throw new Error('network');
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = name;
+            document.body.appendChild(a);
+            a.click();
+            URL.revokeObjectURL(url);
+            a.remove();
+        } catch (err) {
+            console.error(err);
+            alert('画像のダウンロードに失敗しました');
+        }
+    };
+
     // 詳細は別ページへ遷移します
 
     // 権限チェック関数
@@ -215,87 +250,139 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                             </div>
                                         )}
                                     </div>
+
                                     {expandedIds.includes(user.id) && (
-                                        <div className="mt-3 space-y-1 text-sm text-muted-foreground">
-                                            <div className="grid gap-2">
-                                                <div className="flex">
-                                                    <div className="w-36 text-sm text-muted-foreground">採用条件</div>
-                                                    <div className="flex-1">
-                                                        {user.employment_condition === 'dormitory'
-                                                            ? '寮'
-                                                            : user.employment_condition === 'commute'
-                                                              ? '通勤'
-                                                              : '—'}
+                                        <div className="mt-3 flex flex-col gap-2 text-sm text-muted-foreground md:flex-row">
+                                            <div className="flex-1">
+                                                <div className="grid gap-2">
+                                                    <div className="flex">
+                                                        <div className="w-36 text-sm text-muted-foreground">採用条件</div>
+                                                        <div className="flex-1">
+                                                            {user.employment_condition === 'dormitory'
+                                                                ? '寮'
+                                                                : user.employment_condition === 'commute'
+                                                                  ? '通勤'
+                                                                  : '—'}
+                                                        </div>
                                                     </div>
-                                                </div>
-                                                <div className="flex">
-                                                    <div className="w-36 text-sm text-muted-foreground">通勤方法</div>
-                                                    <div className="flex-1">{user.commute_method || '—'}</div>
-                                                </div>
-                                                <div className="flex">
-                                                    <div className="w-36 text-sm text-muted-foreground">基本出勤時間</div>
-                                                    <div className="flex-1">
-                                                        {formatTime(user.default_start_time)} 〜 {formatTime(user.default_end_time)}
+
+                                                    <div className="flex">
+                                                        <div className="w-36 text-sm text-muted-foreground">通勤方法</div>
+                                                        <div className="flex-1">{user.commute_method || '—'}</div>
                                                     </div>
-                                                </div>
-                                                <div className="flex">
-                                                    <div className="w-36 text-sm text-muted-foreground">週休希望日数</div>
-                                                    <div className="flex-1">
-                                                        {user.preferred_week_days_count != null ? `${user.preferred_week_days_count}日` : '—'}
+
+                                                    <div className="flex">
+                                                        <div className="w-36 text-sm text-muted-foreground">基本出勤時間</div>
+                                                        <div className="flex-1">
+                                                            {formatTime(user.default_start_time)} 〜 {formatTime(user.default_end_time)}
+                                                        </div>
                                                     </div>
-                                                </div>
-                                                <div className="flex">
-                                                    <div className="w-36 text-sm text-muted-foreground">固定休希望</div>
-                                                    <div className="flex-1">
-                                                        {(Array.isArray(user.preferred_week_days)
-                                                            ? user.preferred_week_days
-                                                            : user.preferred_week_days
-                                                              ? JSON.parse(user.preferred_week_days)
-                                                              : []
-                                                        )
-                                                            .map(
-                                                                (d: string) =>
-                                                                    ({ Mon: '月', Tue: '火', Wed: '水', Thu: '木', Fri: '金', Sat: '土', Sun: '日' })[
-                                                                        d
-                                                                    ] || d,
+
+                                                    <div className="flex">
+                                                        <div className="w-36 text-sm text-muted-foreground">週休希望日数</div>
+                                                        <div className="flex-1">
+                                                            {user.preferred_week_days_count != null ? `${user.preferred_week_days_count}日` : '—'}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex">
+                                                        <div className="w-36 text-sm text-muted-foreground">固定休希望</div>
+                                                        <div className="flex-1">
+                                                            {(Array.isArray(user.preferred_week_days)
+                                                                ? user.preferred_week_days
+                                                                : user.preferred_week_days
+                                                                  ? JSON.parse(user.preferred_week_days)
+                                                                  : []
                                                             )
-                                                            .join(' ') || '—'}
+                                                                .map(
+                                                                    (d: string) =>
+                                                                        ({
+                                                                            Mon: '月',
+                                                                            Tue: '火',
+                                                                            Wed: '水',
+                                                                            Thu: '木',
+                                                                            Fri: '金',
+                                                                            Sat: '土',
+                                                                            Sun: '日',
+                                                                        })[d] || d,
+                                                                )
+                                                                .join(' ') || '—'}
+                                                        </div>
                                                     </div>
-                                                </div>
-                                                <div className="flex">
-                                                    <div className="w-36 text-sm text-muted-foreground">勤務期間</div>
-                                                    <div className="flex-1">{user.employment_period || '—'}</div>
-                                                </div>
-                                                <div className="flex">
-                                                    <div className="w-36 text-sm text-muted-foreground">勤務備考</div>
-                                                    <div className="flex-1 whitespace-pre-line">{user.employment_notes || '—'}</div>
-                                                </div>
-                                                <div className="flex">
-                                                    <div className="w-36 text-sm text-muted-foreground">メモ</div>
-                                                    <div className="flex-1 whitespace-pre-line">{user.memo || '—'}</div>
-                                                </div>
-                                                <div className="mt-2 flex gap-2">
-                                                    {canViewUsers && (
-                                                        <Link href={route('users.show', user.id)} onClick={(e: any) => e.stopPropagation()}>
-                                                            <Button size="sm" variant="outline" className="p-2">
-                                                                <Eye className="mr-0 h-4 w-4 sm:mr-2" />
-                                                                <span className="hidden sm:inline">詳細</span>
+
+                                                    <div className="flex">
+                                                        <div className="w-36 text-sm text-muted-foreground">勤務期間</div>
+                                                        <div className="flex-1">{user.employment_period || '—'}</div>
+                                                    </div>
+
+                                                    <div className="flex">
+                                                        <div className="w-36 text-sm text-muted-foreground">勤務備考</div>
+                                                        <div className="flex-1 whitespace-pre-line">{user.employment_notes || '—'}</div>
+                                                    </div>
+
+                                                    <div className="flex">
+                                                        <div className="w-36 text-sm text-muted-foreground">メモ</div>
+                                                        <div className="flex-1 whitespace-pre-line">{user.memo || '—'}</div>
+                                                    </div>
+
+                                                    {user.profile_image
+                                                        ? (() => {
+                                                              const src = user.profile_image.match(/^https?:\/\//)
+                                                                  ? user.profile_image
+                                                                  : `/storage/${user.profile_image}`;
+                                                              return (
+                                                                  <div className="ml-4 w-48 flex-shrink-0">
+                                                                      <div className="relative">
+                                                                          <img
+                                                                              src={src}
+                                                                              alt={`${user.name || 'user'} profile`}
+                                                                              className="h-24 w-18 cursor-pointer rounded object-cover"
+                                                                              onClick={(e) => {
+                                                                                  e.stopPropagation();
+                                                                                  downloadImage(src, `${user.name || 'profile'}.jpg`);
+                                                                              }}
+                                                                          />
+                                                                          <button
+                                                                              type="button"
+                                                                              onClick={(e) => {
+                                                                                  e.stopPropagation();
+                                                                                  downloadImage(src, `${user.name || 'profile'}.jpg`);
+                                                                              }}
+                                                                              className="absolute right-0 bottom-0 m-1 rounded bg-white p-1 shadow"
+                                                                              aria-label="ダウンロード"
+                                                                          >
+                                                                              <Download className="h-4 w-4 text-gray-700" />
+                                                                          </button>
+                                                                      </div>
+                                                                  </div>
+                                                              );
+                                                          })()
+                                                        : null}
+
+                                                    <div className="mt-2 flex items-center justify-end gap-2">
+                                                        {canViewUsers && (
+                                                            <Link href={route('users.show', user.id)} onClick={(e: any) => e.stopPropagation()}>
+                                                                <Button size="sm" variant="outline" className="p-2">
+                                                                    <Eye className="mr-0 h-4 w-4 sm:mr-2" />
+                                                                    <span className="hidden sm:inline">詳細</span>
+                                                                </Button>
+                                                            </Link>
+                                                        )}
+                                                        {canUpdateUsers && (
+                                                            <Link href={route('users.edit', user.id)} onClick={(e: any) => e.stopPropagation()}>
+                                                                <Button variant="outline" size="sm" className="p-2">
+                                                                    <Edit className="mr-0 h-4 w-4 sm:mr-2" />
+                                                                    <span className="hidden sm:inline">編集</span>
+                                                                </Button>
+                                                            </Link>
+                                                        )}
+                                                        {canDeleteUsers && (
+                                                            <Button variant="destructive" size="sm" onClick={() => confirmAndDelete(user)}>
+                                                                <Trash className="h-4 w-4 sm:mr-2" />
+                                                                <span className="hidden sm:inline">削除</span>
                                                             </Button>
-                                                        </Link>
-                                                    )}
-                                                    {canUpdateUsers && (
-                                                        <Link href={route('users.edit', user.id)} onClick={(e: any) => e.stopPropagation()}>
-                                                            <Button variant="outline" size="sm" className="p-2">
-                                                                <Edit className="mr-0 h-4 w-4 sm:mr-2" />
-                                                                <span className="hidden sm:inline">編集</span>
-                                                            </Button>
-                                                        </Link>
-                                                    )}
-                                                    {canDeleteUsers && (
-                                                        <Button variant="destructive" size="sm" onClick={() => confirmAndDelete(user)}>
-                                                            削除
-                                                        </Button>
-                                                    )}
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -471,6 +558,41 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                                                     <div className="w-36 text-sm text-muted-foreground">メモ</div>
                                                                     <div className="flex-1 whitespace-pre-line">{user.memo || '—'}</div>
                                                                 </div>
+
+                                                                {/* プロフィール画像 (展開時の一番下に表示、3:4 長方形) */}
+                                                                {user.profile_image
+                                                                    ? (() => {
+                                                                          const src = user.profile_image.match(/^https?:\/\//)
+                                                                              ? user.profile_image
+                                                                              : `/storage/${user.profile_image}`;
+                                                                          return (
+                                                                              <div className="mt-3">
+                                                                                  <div className="relative inline-block">
+                                                                                      <img
+                                                                                          src={src}
+                                                                                          alt={`${user.name || 'user'} profile`}
+                                                                                          className="h-24 w-18 cursor-pointer rounded object-cover"
+                                                                                          onClick={(e) => {
+                                                                                              e.stopPropagation();
+                                                                                              downloadImage(src, `${user.name || 'profile'}.jpg`);
+                                                                                          }}
+                                                                                      />
+                                                                                      <button
+                                                                                          type="button"
+                                                                                          onClick={(e) => {
+                                                                                              e.stopPropagation();
+                                                                                              downloadImage(src, `${user.name || 'profile'}.jpg`);
+                                                                                          }}
+                                                                                          className="absolute right-0 bottom-0 m-1 rounded bg-white p-1 shadow"
+                                                                                          aria-label="ダウンロード"
+                                                                                      >
+                                                                                          <Download className="h-4 w-4 text-gray-700" />
+                                                                                      </button>
+                                                                                  </div>
+                                                                              </div>
+                                                                          );
+                                                                      })()
+                                                                    : null}
                                                             </div>
                                                         </div>
                                                     </TableCell>
