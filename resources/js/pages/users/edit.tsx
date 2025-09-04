@@ -475,7 +475,7 @@ export default function EditUserPage() {
                                 </div>
 
                                 <div>
-                                    <Label>従業員証用顔写真（4cm × 3cm）</Label>
+                                    <Label>従業員証用顔写真（3cm × 4cm）</Label>
                                     <div className="mt-2">
                                         <div className="flex items-center gap-3">
                                             <input
