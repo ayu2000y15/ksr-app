@@ -2,10 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 use App\Models\InventoryItem;
 
-class InventoryStock extends Model
+class InventoryStock extends BaseModel
 {
     protected $table = 'inventory_stock';
 

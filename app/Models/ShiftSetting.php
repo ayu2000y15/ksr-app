@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class ShiftSetting extends Model
+class ShiftSetting extends BaseModel
 {
     protected $fillable = [
         'apply_deadline_days',

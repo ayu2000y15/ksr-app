@@ -3,9 +3,9 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class FurnitureMaster extends Model
+class FurnitureMaster extends BaseModel
 {
     use HasFactory;
 

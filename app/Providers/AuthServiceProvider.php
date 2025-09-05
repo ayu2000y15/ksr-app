@@ -40,6 +40,7 @@ class AuthServiceProvider extends ServiceProvider
         \App\Models\InventoryItem::class => \App\Policies\InventoryPolicy::class,
         \App\Models\DailyNote::class => \App\Policies\DailyNotePolicy::class,
         \App\Models\Announcement::class => AnnouncementPolicy::class,
+        \Spatie\Activitylog\Models\Activity::class => \App\Policies\ActivityLogPolicy::class,
     ];
 
     /**

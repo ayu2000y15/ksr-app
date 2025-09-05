@@ -15,6 +15,7 @@ export function SidebarSettingsMenu({ isCollapsed, currentPath }: { isCollapsed:
         { title: 'デフォルトシフト設定', href: '/admin/default-shifts', icon: Clock, permission: 'default_shift.view' },
         { title: 'ユーザー別休暇上限設定', href: '/admin/user-shift-settings', icon: Sliders, permission: 'user_shift_setting.view' },
         { title: '休日登録', href: '/admin/holidays', icon: Calendar, permission: 'holiday.view' },
+        { title: '活動ログ', href: '/admin/activity-logs', icon: Calendar, permission: 'activitylog.view' },
     ];
     return (
         <SidebarMenu>

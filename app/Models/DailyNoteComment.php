@@ -2,10 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class DailyNoteComment extends Model
+class DailyNoteComment extends BaseModel
 {
     protected $table = 'daily_note_comments';
     protected $fillable = ['daily_note_id', 'user_id', 'body', 'quote_comment_id'];

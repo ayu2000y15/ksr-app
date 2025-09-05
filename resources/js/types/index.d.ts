@@ -373,6 +373,22 @@ export interface Attachment {
     updated_at: string;
 }
 
+// Spatie activity log entry
+export interface Activity {
+    id: number;
+    log_name?: string | null;
+    description: string;
+    subject_type?: string | null;
+    subject_id?: number | null;
+    causer_type?: string | null;
+    causer_id?: number | null;
+    properties?: Record<string, unknown>;
+    created_at: string;
+    updated_at: string;
+    // optional relation expanded by controller
+    causer?: User | { id?: number; name?: string } | null;
+}
+
 // --- 3. UI / layout helper types ---
 
 // ナビゲーション項目

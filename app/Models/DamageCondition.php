@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class DamageCondition extends Model
+class DamageCondition extends BaseModel
 {
     protected $fillable = ['condition', 'order_column'];
     public $timestamps = false;

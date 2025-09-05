@@ -2,10 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 use Illuminate\Support\Facades\Storage;
 
-class Attachment extends Model
+class Attachment extends BaseModel
 {
     protected $fillable = ['file_path', 'original_name'];
     // append computed size to JSON output

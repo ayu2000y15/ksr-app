@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class AnnouncementRead extends Model
+class AnnouncementRead extends BaseModel
 {
     protected $table = 'announcement_reads';
     protected $fillable = ['announcement_id', 'user_id', 'read_at'];

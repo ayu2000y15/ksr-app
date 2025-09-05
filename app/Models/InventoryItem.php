@@ -3,11 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 use App\Models\InventoryCategory;
 use App\Models\Supplier;
 
-class InventoryItem extends Model
+class InventoryItem extends BaseModel
 {
     use HasFactory;
 

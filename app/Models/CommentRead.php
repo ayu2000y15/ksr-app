@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class CommentRead extends Model
+class CommentRead extends BaseModel
 {
     protected $fillable = ['comment_id', 'user_id', 'read_at'];
 }

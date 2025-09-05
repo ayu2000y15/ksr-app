@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class PostRead extends Model
+class PostRead extends BaseModel
 {
     protected $fillable = ['post_id', 'user_id', 'read_at'];
 }

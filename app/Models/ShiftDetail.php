@@ -3,9 +3,9 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class ShiftDetail extends Model
+class ShiftDetail extends BaseModel
 {
     use HasFactory;
 

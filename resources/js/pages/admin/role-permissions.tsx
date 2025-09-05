@@ -116,6 +116,7 @@ export default function RolePermissionsPage() {
         user: 'ユーザー',
         role: 'ロール',
         permission: '権限',
+        activitylog: '活動ログ',
         shift: 'シフト管理',
         shift_application: '中抜け・休暇申請',
         default_shift: 'デフォルトシフト',
@@ -210,6 +211,8 @@ export default function RolePermissionsPage() {
         'task.delete': 'タスク削除',
         // announcements
         'announcement.create': 'お知らせ作成',
+        // activity log
+        'activitylog.view': '活動ログ閲覧',
     };
 
     const allSelected = permissions.length > 0 && permissions.every((p) => !!checked[p.id]);

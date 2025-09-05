@@ -3,9 +3,9 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class RoomOccupancy extends Model
+class RoomOccupancy extends BaseModel
 {
     use HasFactory;
 

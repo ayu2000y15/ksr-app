@@ -86,6 +86,9 @@ class PermissionsSeeder extends Seeder
             // announcements (お知らせ)
             'announcement.create',
 
+            // activity log
+            'activitylog.view',
+
             // per-user shift settings (ユーザー別休暇上限設定)
             'user_shift_setting.view',
             'user_shift_setting.create',
