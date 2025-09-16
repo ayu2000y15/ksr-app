@@ -2,11 +2,22 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import { Car } from 'lucide-react';
 
 export default function Show({ user, properties }: { user: any; properties: any[] }) {
-    const breadcrumbs = [{ title: 'ユーザー管理', href: route('users.index') }, { title: '詳細' }];
+    let breadcrumbs = [{ title: 'ユーザー管理', href: route('users.index') }, { title: '詳細' }];
+
+    const page = usePage();
+    const auth = (page.props as any).auth ?? {};
+    const permissions: string[] = auth?.permissions ?? [];
+    const isSuperAdmin: boolean = auth?.isSuperAdmin ?? (page.props as any)['auth.isSuperAdmin'] ?? false;
+    const canEdit = isSuperAdmin || (Array.isArray(permissions) && permissions.includes('user.update'));
+    const canViewUsers = isSuperAdmin || (Array.isArray(permissions) && permissions.includes('user.view'));
+
+    if (!canViewUsers) {
+        breadcrumbs = [{ title: '詳細' }];
+    }
 
     const weekdayMap = { Mon: '月', Tue: '火', Wed: '水', Thu: '木', Fri: '金', Sat: '土', Sun: '日' } as Record<string, string>;
 
@@ -47,9 +58,11 @@ export default function Show({ user, properties }: { user: any; properties: any[
                         <Button variant="outline" onClick={() => window.history.back()} title="前のページへ戻る">
                             戻る
                         </Button>
-                        <Link href={route('users.edit', user.id)}>
-                            <Button>編集</Button>
-                        </Link>
+                        {canEdit ? (
+                            <Link href={route('users.edit', user.id)}>
+                                <Button>編集</Button>
+                            </Link>
+                        ) : null}
                     </div>
                 </div>
 
@@ -126,7 +139,6 @@ export default function Show({ user, properties }: { user: any; properties: any[
                                                             <div className="text-sm text-muted-foreground">同居ユーザー</div>
                                                             <div className="mt-1 flex flex-wrap gap-2">
                                                                 {occ.cohabitants.map((c: any) => (
-                                                                     
                                                                     <Badge
                                                                         key={c.id}
                                                                         className="inline-flex items-center gap-2 bg-gray-200 text-black"

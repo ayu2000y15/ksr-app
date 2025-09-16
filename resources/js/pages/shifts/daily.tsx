@@ -129,7 +129,7 @@ export default function Daily() {
     }, []);
 
     const [mode, setMode] = useState<'shift' | 'break'>('shift');
-    const [breakType, setBreakType] = useState<'planned' | 'actual'>('planned');
+    const [breakType, setBreakType] = useState<'planned' | 'actual' | 'outing'>('planned');
     const [breakLocked, setBreakLocked] = useState<boolean>(true);
 
     // persist selected tab and break type across page reloads
@@ -140,8 +140,8 @@ export default function Daily() {
                 setMode(savedMode as 'shift' | 'break');
             }
             const savedBreakType = typeof window !== 'undefined' ? localStorage.getItem('daily.breakType') : null;
-            if (savedBreakType === 'planned' || savedBreakType === 'actual') {
-                setBreakType(savedBreakType as 'planned' | 'actual');
+            if (savedBreakType === 'planned' || savedBreakType === 'actual' || savedBreakType === 'outing') {
+                setBreakType(savedBreakType as 'planned' | 'actual' | 'outing');
             }
             const savedLocked = typeof window !== 'undefined' ? localStorage.getItem('daily.breakLocked') : null;
             if (savedLocked === '0' || savedLocked === '1') {
@@ -213,9 +213,10 @@ export default function Daily() {
             date: payload.date || date,
             start_time: payload.start_time,
             end_time: payload.end_time,
-            type: 'break',
-            // reflect the selected 種別: 'actual' -> actual, otherwise scheduled
-            status: payload.type === 'actual' ? 'actual' : 'scheduled',
+            // store 'outing' when in outing mode, otherwise 'break'
+            type: breakType === 'outing' ? 'outing' : 'break',
+            // outings are always scheduled by default; for breaks use payload.type to determine actual/scheduled
+            status: breakType === 'outing' ? 'scheduled' : payload.type === 'actual' ? 'actual' : 'scheduled',
             shift_detail_id: payload.shift_detail_id,
         } as any;
 
@@ -242,7 +243,10 @@ export default function Daily() {
                 if (existing) {
                     // If locked, prevent deletion via toggle
                     if (breakLocked) {
-                        setToast({ message: '休憩はロックされています。ロックを解除してください。', type: 'error' });
+                        setToast({
+                            message: (breakType === 'outing' ? '外出' : '休憩') + 'はロックされています。ロックを解除してください。',
+                            type: 'error',
+                        });
                         return;
                     }
 
@@ -256,11 +260,14 @@ export default function Daily() {
                     try {
                         await axios.delete(route('shift-details.destroy', existing.id));
                         setShiftDetails((prev) => prev.filter((p) => p.id !== existing.id));
-                        setToast({ message: `${body.status === 'actual' ? '実績' : '予定'}休憩を削除しました`, type: 'success' });
+                        setToast({
+                            message: `${body.status === 'actual' ? '実績' : '予定'}${breakType === 'outing' ? '外出' : '休憩'}を削除しました`,
+                            type: 'success',
+                        });
                         return;
                     } catch (e: any) {
                         console.error('failed to delete matched break', e);
-                        setToast({ message: '休憩の削除に失敗しました', type: 'error' });
+                        setToast({ message: (breakType === 'outing' ? '外出' : '休憩') + 'の削除に失敗しました', type: 'error' });
                         return;
                     }
                 }
@@ -271,17 +278,23 @@ export default function Daily() {
 
         try {
             if (breakLocked) {
-                setToast({ message: '休憩はロックされています。ロックを解除してください。', type: 'error' });
+                setToast({ message: (breakType === 'outing' ? '外出' : '休憩') + 'はロックされています。ロックを解除してください。', type: 'error' });
                 return;
             }
 
             const res = await axios.post(route('shift-details.store'), body);
             const created = res && res.data && (res.data.shiftDetail || res.data.shift_detail) ? res.data.shiftDetail || res.data.shift_detail : null;
             if (created) {
-                // add server-created break to local shiftDetails so UI updates immediately
+                // add server-created break/outing to local shiftDetails so UI updates immediately
                 setShiftDetails((prev) => [...prev, created]);
             }
-            setToast({ message: `${payload.type === 'actual' ? '休憩（実績）' : '休憩（予定）'} を登録しました`, type: 'success' });
+            const toastMsg =
+                breakType === 'outing'
+                    ? '外出を登録しました'
+                    : payload.type === 'actual'
+                      ? '休憩（実績）を登録しました'
+                      : '休憩（予定）を登録しました';
+            setToast({ message: toastMsg, type: 'success' });
             try {
                 if (typeof window !== 'undefined' && window.dispatchEvent) {
                     window.dispatchEvent(
@@ -320,6 +333,9 @@ export default function Daily() {
         return false;
     };
 
+    // selected type for break-like entries (either 'break' or 'outing')
+    const selectedBreakType = breakType === 'outing' ? 'outing' : 'break';
+
     return (
         <AppSidebarLayout breadcrumbs={breadcrumbs}>
             <Head title={`日間タイムライン ${displayDate || ''}`} />
@@ -336,7 +352,7 @@ export default function Daily() {
                             className={`rounded px-3 py-1 text-sm ${mode === 'break' ? 'bg-indigo-600 text-white' : 'bg-gray-100'}`}
                             onClick={() => setMode('break')}
                         >
-                            休憩登録
+                            休憩・外出登録
                         </button>
                     </div>
 
@@ -346,10 +362,14 @@ export default function Daily() {
                             <div
                                 role="status"
                                 className={`rounded px-4 py-2 text-sm font-medium ${
-                                    breakType === 'actual' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
+                                    breakType === 'actual'
+                                        ? 'bg-green-100 text-green-800'
+                                        : breakType === 'outing'
+                                          ? 'bg-pink-100 text-pink-800'
+                                          : 'bg-blue-100 text-blue-800'
                                 }`}
                             >
-                                休憩編集モード: {breakType === 'actual' ? '実績' : '予定'}
+                                休憩編集モード: {breakType === 'actual' ? '実績' : breakType === 'outing' ? '外出' : '予定'}
                             </div>
                         )}
                     </div>
@@ -423,6 +443,26 @@ export default function Daily() {
                                             )}
                                         </svg>
                                         <span>{breakType === 'actual' ? '実績' : '予定'}</span>
+                                    </span>
+                                </button>
+                                <button
+                                    className={`rounded px-2 py-1 text-sm ${breakType === 'outing' ? 'bg-pink-100 text-pink-800' : 'bg-gray-100'}`}
+                                    title={breakType === 'outing' ? '外出モード（クリックで予定に戻す）' : '外出モード（クリックで外出登録）'}
+                                    onClick={() => setBreakType((s) => (s === 'outing' ? 'planned' : 'outing'))}
+                                >
+                                    <span className="inline-flex items-center">
+                                        <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+                                            <path d="M12 2v6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                            <path
+                                                d="M7 8h10v10a2 2 0 01-2 2H9a2 2 0 01-2-2V8z"
+                                                stroke="currentColor"
+                                                strokeWidth="1.5"
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                fill="none"
+                                            />
+                                        </svg>
+                                        <span>外出</span>
                                     </span>
                                 </button>
                                 <button
@@ -516,7 +556,7 @@ export default function Daily() {
                         date={date}
                         shiftDetails={shiftDetails}
                         initialInterval={30}
-                        breaks={(shiftDetails || []).filter((s: any) => (s.type ?? '') === 'break')}
+                        breaks={(shiftDetails || []).filter((s: any) => String(s.type ?? '') === String(selectedBreakType))}
                         onCreateBreak={handleCreateBreak}
                         onBarClick={(id: number) => {
                             setShiftDetails((prev) => prev.map((p) => (p.id === id ? { ...p, _openEdit: true } : { ...p, _openEdit: false })));
@@ -531,16 +571,17 @@ export default function Daily() {
                         date={date}
                         shiftDetails={shiftDetails}
                         initialInterval={15}
-                        breakType={breakType}
+                        breakType={breakType === 'outing' ? 'planned' : (breakType as 'planned' | 'actual')}
                         locked={breakLocked}
                         onRequireUnlock={promptToUnlock}
                         onCreateBreak={handleCreateBreak}
-                        breaks={(shiftDetails || []).filter((s: any) => (s.type ?? '') === 'break')}
+                        breaks={(shiftDetails || []).filter((s: any) => String(s.type ?? '') === String(selectedBreakType))}
                         canDeleteBreak={canDeleteBreak}
                         onDeleteBreak={(id: number) => {
                             setShiftDetails((prev) => prev.filter((p) => p.id !== id));
                             setToast({ message: '削除しました', type: 'success' });
                         }}
+                        outingMode={breakType === 'outing'}
                     />
                 )}
 
@@ -886,6 +927,7 @@ export default function Daily() {
                                                     start_time: s.start_time,
                                                     end_time: s.end_time,
                                                     status: s.status ?? 'scheduled',
+                                                    type: s.type ?? 'break',
                                                     user_name: s.user ? s.user.name : '—',
                                                 }))
                                                 .slice()
@@ -912,7 +954,8 @@ export default function Daily() {
                                                 );
                                             }
 
-                                            const statusLabel = (st?: string | null) => {
+                                            const statusLabel = (st?: string | null, tp?: string | null) => {
+                                                if (tp === 'outing') return '外出';
                                                 if (!st) return '予定';
                                                 if (st === 'actual') return '実績';
                                                 if (st === 'scheduled') return '予定';
@@ -990,7 +1033,7 @@ export default function Daily() {
                                                                     <option value="absent">欠席</option>
                                                                 </select>
                                                             ) : (
-                                                                statusLabel(b.status)
+                                                                statusLabel(b.status, (b as any).type)
                                                             )}
                                                         </TableCell>
                                                         <TableCell className="text-right">
@@ -1114,11 +1157,13 @@ export default function Daily() {
                                                                                                 }),
                                                                                             );
                                                                                     } else {
-                                                                                        setShiftDetails((prev) =>
-                                                                                            prev.map((p) =>
-                                                                                                p.id === b.id ? { ...p, end_time: newEnd } : p,
-                                                                                            ),
-                                                                                        );
+                                                                                        if (typeof newEnd !== 'undefined' && newEnd !== null) {
+                                                                                            setShiftDetails((prev) =>
+                                                                                                prev.map((p) =>
+                                                                                                    p.id === b.id ? { ...p, end_time: newEnd } : p,
+                                                                                                ),
+                                                                                            );
+                                                                                        }
                                                                                         if (typeof window !== 'undefined' && window.dispatchEvent)
                                                                                             window.dispatchEvent(
                                                                                                 new CustomEvent('ksr.shiftDetail.toast', {
@@ -1172,11 +1217,13 @@ export default function Daily() {
                                                                                                 }),
                                                                                             );
                                                                                     } else {
-                                                                                        setShiftDetails((prev) =>
-                                                                                            prev.map((p) =>
-                                                                                                p.id === b.id ? { ...p, end_time: newEnd } : p,
-                                                                                            ),
-                                                                                        );
+                                                                                        if (typeof newEnd !== 'undefined' && newEnd !== null) {
+                                                                                            setShiftDetails((prev) =>
+                                                                                                prev.map((p) =>
+                                                                                                    p.id === b.id ? { ...p, end_time: newEnd } : p,
+                                                                                                ),
+                                                                                            );
+                                                                                        }
                                                                                         if (typeof window !== 'undefined' && window.dispatchEvent)
                                                                                             window.dispatchEvent(
                                                                                                 new CustomEvent('ksr.shiftDetail.toast', {

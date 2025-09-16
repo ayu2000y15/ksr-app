@@ -34,6 +34,8 @@ export default function BreakTimeline(props: {
     shiftDetails?: ShiftDetail[];
     initialInterval?: number;
     breakType?: 'planned' | 'actual';
+    // when true, the parent page is in 'outing' mode (breakType === 'outing')
+    outingMode?: boolean;
     locked?: boolean;
     onRequireUnlock?: () => void;
     onBarClick?: (id: number) => void;
@@ -151,8 +153,10 @@ export default function BreakTimeline(props: {
     const totalPixelWidth = timeSlots.length * columnWidth;
 
     const combinedBreaksMemo = useMemo(() => {
-        // exclude breaks whose status is 'absent' so they are not considered in break UI
-        const sdBreaks = (shiftDetails || []).filter((s) => String(s.type ?? '') === 'break' && String((s as any).status ?? '') !== 'absent');
+        // exclude breaks (or outings) whose status is 'absent' so they are not considered in break UI
+        const sdBreaks = (shiftDetails || []).filter(
+            (s) => (String(s.type ?? '') === 'break' || String(s.type ?? '') === 'outing') && String((s as any).status ?? '') !== 'absent',
+        );
         const rawCombined = [...(breaks || []).filter((b: Break) => String((b as any).status ?? '') !== 'absent'), ...sdBreaks];
         const m = new Map<string, Break>();
         for (const b of rawCombined) {
@@ -624,30 +628,49 @@ export default function BreakTimeline(props: {
                                                             zIndex: 5,
                                                         };
 
-                                                        // 3. ステータスに応じてスタイルを決定します
+                                                        // 3. ステータス / type に応じてスタイルを決定します
+                                                        const isOuting = String(b.type ?? '') === 'outing';
                                                         if (breakStatus === 'actual') {
-                                                            // 「実績」の場合：緑色で塗りつぶします
-                                                            breakStyle.backgroundColor = 'rgba(34, 197, 94, 0.55)';
+                                                            // 実績: 実績の色（通常は緑）
+                                                            if (isOuting) {
+                                                                breakStyle.backgroundColor = 'rgba(234, 88, 12, 0.65)';
+                                                            } else {
+                                                                breakStyle.backgroundColor = 'rgba(34, 197, 94, 0.55)';
+                                                            }
                                                         } else {
-                                                            // 「予定」の場合：グレーの斜線模様にします
-                                                            breakStyle.background = `repeating-linear-gradient(
-                                                                45deg,
-                                                                rgba(156, 163, 175, 0.4),
-                                                                rgba(156, 163, 175, 0.4) 10px,
-                                                                rgba(156, 163, 175, 0.5) 10px,
-                                                                rgba(156, 163, 175, 0.5) 20px
-                                                            )`;
+                                                            if (isOuting) {
+                                                                // 外出の実績はピンクで塗りつぶす
+                                                                breakStyle.backgroundColor = 'rgb(216, 27, 96,0.4)';
+                                                            } else {
+                                                                // 通常の予定休憩のグレー斜線
+                                                                breakStyle.background = `repeating-linear-gradient(
+                                                                    45deg,
+                                                                    rgba(156, 163, 175, 0.4),
+                                                                    rgba(156, 163, 175, 0.4) 10px,
+                                                                    rgba(156, 163, 175, 0.5) 10px,
+                                                                    rgba(156, 163, 175, 0.5) 20px
+                                                                )`;
+                                                            }
                                                         }
 
                                                         // decide whether this bar should receive pointer events
                                                         const barStatus = (b.status ?? 'scheduled') as string;
                                                         const currentType = props.breakType ?? 'planned';
-                                                        const deletionAllowedForThisBar =
+                                                        const isOutingBar = String(b.type ?? '') === 'outing';
+                                                        let deletionAllowedForThisBar =
                                                             !!props.canDeleteBreak &&
                                                             !!props.onDeleteBreak &&
                                                             ((currentType === 'actual' && barStatus === 'actual') ||
                                                                 (currentType === 'planned' && barStatus === 'scheduled')) &&
                                                             !locked;
+
+                                                        // If parent is in outing mode, disallow deleting non-outing scheduled breaks
+                                                        if (props.outingMode) {
+                                                            if (barStatus === 'scheduled' && !isOutingBar) deletionAllowedForThisBar = false;
+                                                        } else {
+                                                            // If not in outing mode, disallow deleting outing bars regardless of status
+                                                            if (isOutingBar) deletionAllowedForThisBar = false;
+                                                        }
 
                                                         // When in actual creation mode, treat scheduled breaks as transparent to clicks
                                                         // (visual remains the same); actual breaks still receive pointer events.

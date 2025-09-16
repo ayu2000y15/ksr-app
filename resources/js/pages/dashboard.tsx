@@ -131,9 +131,17 @@ function GanttBar({
                     const relLeft = bLeft - left;
 
                     const bStatus = String(b.status ?? '');
-                    let bgColor = 'rgba(34, 197, 94, 0.55)';
-                    if (bStatus === 'absent') bgColor = 'rgba(107,114,128,0.25)';
-                    else if (bStatus === 'scheduled') bgColor = 'rgba(156, 163, 175, 0.8)';
+                    const isOuting = String(b.type ?? '') === 'outing';
+                    let bgColor = '';
+                    if (bStatus === 'absent') {
+                        bgColor = 'rgba(107,114,128,0.25)';
+                    } else if (isOuting) {
+                        // outings: scheduled = lighter orange, actual = darker orange
+                        bgColor = bStatus === 'actual' ? 'rgba(234,88,12,0.65)' : 'rgb(216, 27, 96,0.4)';
+                    } else {
+                        // normal breaks: actual = green, scheduled = gray
+                        bgColor = bStatus === 'actual' ? 'rgba(34, 197, 94, 0.55)' : 'rgba(156, 163, 175, 0.8)';
+                    }
 
                     return (
                         <div
@@ -205,8 +213,20 @@ function GanttBar({
                           const be2 = parse(bb.end_time);
                           if (!bs2 || !be2) return null;
                           const statusLabel = String(bb.status ?? '');
-                          const prefix =
-                              statusLabel === 'scheduled' ? '予定' : statusLabel === 'actual' ? '実績' : statusLabel === 'absent' ? '欠勤' : '実績';
+                          const isOuting2 = String(bb.type ?? '') === 'outing';
+                          const prefix = isOuting2
+                              ? statusLabel === 'scheduled'
+                                  ? '外出'
+                                  : statusLabel === 'actual'
+                                    ? '外出（実績）'
+                                    : '外出'
+                              : statusLabel === 'scheduled'
+                                ? '休憩（予定）'
+                                : statusLabel === 'actual'
+                                  ? '休憩（実績）'
+                                  : statusLabel === 'absent'
+                                    ? '欠勤'
+                                    : '休憩（実績）';
                           const timeLabel2 = `${prefix}：${String(bs2.getHours()).padStart(2, '0')}:${String(bs2.getMinutes()).padStart(2, '0')}～${String(be2.getHours()).padStart(2, '0')}:${String(be2.getMinutes()).padStart(2, '0')}`;
                           const el = (
                               <div
@@ -492,13 +512,13 @@ export default function Dashboard() {
                 else if (raw && typeof raw === 'object') arr = Object.values(raw);
                 else arr = [];
 
-                const breaks = arr.filter((r: any) => String(r.type ?? '') === 'break');
-                const works = arr.filter((r: any) => {
+                // include both 'break' and 'outing' so outings will be displayed on gantt bars
+                const breaks = arr.filter((r: any) => {
                     const t = String(r.type ?? '');
-                    if (t === 'work') return true;
-                    if (t === 'break') return false;
-                    return Boolean(r.shift_type || r.start_time || r.end_time);
+                    return t === 'break' || t === 'outing';
                 });
+                // only include explicit work shifts in the left user list
+                const works = arr.filter((r: any) => String(r.type ?? '') === 'work');
 
                 const dateKey = new Date(currentDate);
                 dateKey.setHours(0, 0, 0, 0);

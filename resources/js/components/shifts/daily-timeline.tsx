@@ -135,20 +135,12 @@ export default function DailyTimeline(props: {
                 return { ...(sd as ShiftDetail), sMin, eMin, startRaw: sd.start_time ?? null, endRaw: sd.end_time ?? null } as Item;
             })
             .sort((a: Item, b: Item) => {
-                const rank = (sd: Item) => {
-                    const t = String(sd.shift_type ?? sd.type ?? '');
-                    if (t === 'day') return 0;
-                    if (t === 'night') return 2;
-                    return 1;
-                };
-                const ra = rank(a);
-                const rb = rank(b);
-                if (ra !== rb) return ra - rb;
-
+                // Primary sort: user ID ascending
                 const aUid = Number(a.user_id ?? (a.user && (a.user as { id?: number }).id) ?? 0);
                 const bUid = Number(b.user_id ?? (b.user && (b.user as { id?: number }).id) ?? 0);
                 if (aUid !== bUid) return aUid - bUid;
 
+                // Secondary: start time asc
                 const aStart = String(a.startRaw ?? '');
                 const bStart = String(b.startRaw ?? '');
                 if (aStart < bStart) return -1;
@@ -208,21 +200,22 @@ export default function DailyTimeline(props: {
             const t = String(it.shift_type ?? it.type ?? '');
             const uid = Number(it.user_id ?? (it.user && (it.user as { id?: number }).id) ?? NaN);
             if (!Number.isFinite(uid)) return;
-            // exclude shifts currently marked absent (absentMap keyed by shift id)
-            if (absentMap && it.id !== undefined && absentMap[Number(it.id)]) return;
+            // determine if this shift is currently marked absent (local optimistic state)
+            const isAbsent = it.id !== undefined && absentMap && absentMap[Number(it.id)];
+
+            // 出勤人数: 欠席は除外する
             if (t === 'day') {
-                day.add(uid);
-                // meal_ticket: treat missing as 1 (default) so only explicit 0 means no ticket
+                if (!isAbsent) day.add(uid);
+                // meal_ticket: 欠席に関係なくカウントする（明示的0のみ非対象）
                 const mt = (it as any).meal_ticket;
                 if (mt === undefined || mt === 1 || mt === '1') mealDay.add(uid);
             } else if (t === 'night') {
-                night.add(uid);
+                if (!isAbsent) night.add(uid);
                 const mt = (it as any).meal_ticket;
                 if (mt === undefined || mt === 1 || mt === '1') mealNight.add(uid);
             }
         });
 
-        // simple counts: sizes of day/night sets and meal-ticket-required sets
         return {
             dayCount: day.size,
             nightCount: night.size,

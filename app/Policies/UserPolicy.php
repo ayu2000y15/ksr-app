@@ -32,7 +32,11 @@ class UserPolicy
 
     public function view(User $user, User $model)
     {
+        // allow viewing own profile regardless of permissions
         try {
+            if ($user->id === $model->id) {
+                return true;
+            }
             return $user->hasPermissionTo('user.view');
         } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
             return false;

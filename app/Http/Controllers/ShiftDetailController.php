@@ -36,18 +36,19 @@ class ShiftDetailController extends Controller
             'date' => 'required|date',
             'start_time' => 'required|date_format:Y-m-d H:i:s',
             'end_time' => 'required|date_format:Y-m-d H:i:s|after:start_time',
-            'type' => 'nullable|in:work,break',
+            // allow 'outing' as a break-like type
+            'type' => 'nullable|in:work,break,outing',
             'status' => 'nullable|in:scheduled,actual,absent',
         ], $messages);
 
         // If this is a break, ensure the same user's breaks do not overlap the requested time range
         // NOTE: allow overlaps when the incoming status is 'actual' (実績 can overlap 予定)
-        if (isset($data['type']) && $data['type'] === 'break') {
+        if (isset($data['type']) && in_array($data['type'], ['break', 'outing'], true)) {
             $status = $data['status'] ?? 'scheduled';
             if ($status === 'actual') {
-                // If creating an actual break, ensure it does not overlap other actual breaks
+                // If creating an actual break/outing, ensure it does not overlap other actual breaks/outings
                 $existsOverlapActual = ShiftDetail::where('user_id', $data['user_id'])
-                    ->where('type', 'break')
+                    ->whereIn('type', ['break', 'outing'])
                     ->where('status', 'actual')
                     ->where(function ($q) use ($data) {
                         $q->where('start_time', '<', $data['end_time'])
@@ -66,9 +67,9 @@ class ShiftDetailController extends Controller
                     return Redirect::back()->withErrors(['start_time' => '実績の休憩が重複しています。'])->withInput();
                 }
             } else {
-                // For non-actual (scheduled) breaks, do not allow any overlap with existing breaks
+                // For non-actual (scheduled) breaks/outings, do not allow any overlap with existing breaks/outings
                 $existsOverlap = ShiftDetail::where('user_id', $data['user_id'])
-                    ->where('type', 'break')
+                    ->whereIn('type', ['break', 'outing'])
                     ->where(function ($q) use ($data) {
                         $q->where('start_time', '<', $data['end_time'])
                             ->where('end_time', '>', $data['start_time']);
@@ -145,7 +146,7 @@ class ShiftDetailController extends Controller
 
             // perform overlap checks if this is a break
             $resultingType = $shiftDetail->type;
-            if ($resultingType === 'break') {
+            if (in_array($resultingType, ['break', 'outing'], true)) {
                 $status = $shiftDetail->status ?? 'scheduled';
                 $userId = $shiftDetail->user_id;
                 $start = $shiftDetail->start_time;
@@ -153,7 +154,7 @@ class ShiftDetailController extends Controller
 
                 if ($status === 'actual') {
                     $existsOverlapActual = ShiftDetail::where('user_id', $userId)
-                        ->where('type', 'break')
+                        ->whereIn('type', ['break', 'outing'])
                         ->where('status', 'actual')
                         ->where('id', '<>', $shiftDetail->id)
                         ->where(function ($q) use ($start, $end) {
@@ -173,7 +174,7 @@ class ShiftDetailController extends Controller
                     }
                 } else {
                     $existsOverlap = ShiftDetail::where('user_id', $userId)
-                        ->where('type', 'break')
+                        ->whereIn('type', ['break', 'outing'])
                         ->where('id', '<>', $shiftDetail->id)
                         ->where(function ($q) use ($start, $end) {
                             $q->where('start_time', '<', $end)
@@ -209,12 +210,13 @@ class ShiftDetailController extends Controller
             'start_time' => 'required|date_format:Y-m-d H:i:s',
             'end_time' => 'required|date_format:Y-m-d H:i:s|after:start_time',
             'status' => 'nullable|in:scheduled,actual,absent',
-            'type' => 'nullable|in:work,break',
+            // allow 'outing' for updates as well
+            'type' => 'nullable|in:work,break,outing',
         ], $messages);
 
         // If the resulting record is a break, ensure no overlap with other breaks for the same user
         $resultingType = $data['type'] ?? $shiftDetail->type;
-        if ($resultingType === 'break') {
+        if (in_array($resultingType, ['break', 'outing'], true)) {
             $status = $data['status'] ?? $shiftDetail->status ?? 'scheduled';
             $userId = $shiftDetail->user_id;
             $start = $data['start_time'];
@@ -223,7 +225,7 @@ class ShiftDetailController extends Controller
             if ($status === 'actual') {
                 // When setting to actual, ensure it doesn't overlap other actual breaks
                 $existsOverlapActual = ShiftDetail::where('user_id', $userId)
-                    ->where('type', 'break')
+                    ->whereIn('type', ['break', 'outing'])
                     ->where('status', 'actual')
                     ->where('id', '<>', $shiftDetail->id)
                     ->where(function ($q) use ($start, $end) {
@@ -245,7 +247,7 @@ class ShiftDetailController extends Controller
             } else {
                 // For scheduled (or other non-actual) ensure no overlap with any break
                 $existsOverlap = ShiftDetail::where('user_id', $userId)
-                    ->where('type', 'break')
+                    ->whereIn('type', ['break', 'outing'])
                     ->where('id', '<>', $shiftDetail->id)
                     ->where(function ($q) use ($start, $end) {
                         $q->where('start_time', '<', $end)
