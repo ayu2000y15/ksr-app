@@ -138,6 +138,48 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
         }
     };
 
+    const weekdayMap: Record<string, string> = {
+        Mon: '月',
+        Tue: '火',
+        Wed: '水',
+        Thu: '木',
+        Fri: '金',
+        Sat: '土',
+        Sun: '日',
+    };
+
+    const orderedWeekdayCodes = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+    const normalizeToCode = (v: any): string | null => {
+        if (v === null || typeof v === 'undefined') return null;
+        const s = String(v).trim();
+        if (!s) return null;
+        if (orderedWeekdayCodes.includes(s)) return s;
+        // Japanese single char like '月'
+        const foundKey = Object.keys(weekdayMap).find((k) => weekdayMap[k] === s);
+        if (foundKey) return foundKey;
+        // try first three letters (e.g., Monday -> Mon)
+        const first3 = s.slice(0, 3);
+        const cap = first3.charAt(0).toUpperCase() + first3.slice(1).toLowerCase();
+        if (orderedWeekdayCodes.includes(cap)) return cap;
+        return null;
+    };
+
+    const getPreferredDayCodesFromUser = (user: any): string[] => {
+        const raw = Array.isArray(user.preferred_week_days)
+            ? user.preferred_week_days
+            : user.preferred_week_days
+              ? JSON.parse(user.preferred_week_days)
+              : [];
+        const codes = raw.map((d: any) => normalizeToCode(d)).filter((x: string | null): x is string => Boolean(x));
+        return Array.from(new Set(codes));
+    };
+
+    const getPreferredDaysOrdered = (user: any): string[] => {
+        const codes = getPreferredDayCodesFromUser(user);
+        return orderedWeekdayCodes.filter((c) => codes.includes(c));
+    };
+
     // download helper: if same-origin or relative path, use anchor download; otherwise fetch blob then download
     const downloadImage = async (src: string, filename?: string) => {
         try {
@@ -288,25 +330,10 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                                     <div className="flex">
                                                         <div className="w-36 text-sm text-muted-foreground">固定休希望</div>
                                                         <div className="flex-1">
-                                                            {(Array.isArray(user.preferred_week_days)
-                                                                ? user.preferred_week_days
-                                                                : user.preferred_week_days
-                                                                  ? JSON.parse(user.preferred_week_days)
-                                                                  : []
-                                                            )
-                                                                .map(
-                                                                    (d: string) =>
-                                                                        ({
-                                                                            Mon: '月',
-                                                                            Tue: '火',
-                                                                            Wed: '水',
-                                                                            Thu: '木',
-                                                                            Fri: '金',
-                                                                            Sat: '土',
-                                                                            Sun: '日',
-                                                                        })[d] || d,
-                                                                )
-                                                                .join(' ') || '—'}
+                                                            {(() => {
+                                                                const ordered = getPreferredDaysOrdered(user);
+                                                                return ordered.length > 0 ? ordered.map((d) => weekdayMap[d] || d).join(' ') : '—';
+                                                            })()}
                                                         </div>
                                                     </div>
 
@@ -522,25 +549,12 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                                                 <div className="flex">
                                                                     <div className="w-36 text-sm text-muted-foreground">固定休希望</div>
                                                                     <div className="flex-1">
-                                                                        {(Array.isArray(user.preferred_week_days)
-                                                                            ? user.preferred_week_days
-                                                                            : user.preferred_week_days
-                                                                              ? JSON.parse(user.preferred_week_days)
-                                                                              : []
-                                                                        )
-                                                                            .map(
-                                                                                (d: string) =>
-                                                                                    ({
-                                                                                        Mon: '月',
-                                                                                        Tue: '火',
-                                                                                        Wed: '水',
-                                                                                        Thu: '木',
-                                                                                        Fri: '金',
-                                                                                        Sat: '土',
-                                                                                        Sun: '日',
-                                                                                    })[d] || d,
-                                                                            )
-                                                                            .join(' ') || '—'}
+                                                                        {(() => {
+                                                                            const ordered = getPreferredDaysOrdered(user);
+                                                                            return ordered.length > 0
+                                                                                ? ordered.map((d) => weekdayMap[d] || d).join(' ')
+                                                                                : '—';
+                                                                        })()}
                                                                     </div>
                                                                 </div>
 

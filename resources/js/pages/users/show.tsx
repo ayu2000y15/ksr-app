@@ -27,6 +27,30 @@ export default function Show({ user, properties }: { user: any; properties: any[
           ? JSON.parse(user.preferred_week_days)
           : [];
 
+    // Ensure preferred days are displayed in Mon..Sun order (月,火,...日)
+    const orderedWeekdayCodes = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const normalizeToCode = (v: any): string | null => {
+        if (!v && v !== 0) return null;
+        const s = String(v).trim();
+        if (!s) return null;
+        // already an English short code
+        if (orderedWeekdayCodes.includes(s)) return s;
+        // already a Japanese single-char day like '月'
+        const foundKey = Object.keys(weekdayMap).find((k) => weekdayMap[k] === s);
+        if (foundKey) return foundKey;
+        // try English full name -> take first three letters
+        const first3 = s.slice(0, 3);
+        const cap = first3.charAt(0).toUpperCase() + first3.slice(1).toLowerCase();
+        if (orderedWeekdayCodes.includes(cap)) return cap;
+        return null;
+    };
+
+    const preferredDayCodes = Array.isArray(preferredDays)
+        ? Array.from(new Set(preferredDays.map((d: any) => normalizeToCode(d)).filter((x: string | null): x is string => Boolean(x))))
+        : [];
+
+    const preferredDaysOrdered = orderedWeekdayCodes.filter((c) => preferredDayCodes.includes(c));
+
     const formatDate = (iso?: string | null) => {
         if (!iso) return '—';
         try {
@@ -96,7 +120,9 @@ export default function Show({ user, properties }: { user: any; properties: any[
                             </div>
                             <div>
                                 <div className="text-sm text-muted-foreground">固定休希望</div>
-                                <div className="font-medium">{preferredDays.map((d: string) => weekdayMap[d] || d).join(' ') || '—'}</div>
+                                <div className="font-medium">
+                                    {preferredDaysOrdered.length > 0 ? preferredDaysOrdered.map((d) => weekdayMap[d] || d).join(' ') : '—'}
+                                </div>
                             </div>
                             <div>
                                 <div className="text-sm text-muted-foreground">勤務期間</div>
