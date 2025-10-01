@@ -452,6 +452,14 @@ export default function PostShow() {
                     credentials: 'include',
                     headers: { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json', 'X-XSRF-TOKEN': xsrf },
                 });
+                try {
+                    // notify other parts of the app (dashboard) that this post was read
+                    if (typeof window !== 'undefined' && post?.id) {
+                        window.dispatchEvent(new CustomEvent('postRead', { detail: post.id }));
+                    }
+                } catch (err) {
+                    // ignore dispatch errors
+                }
                 const res = await fetch(`/api/posts/${post.id}/views`, { credentials: 'include', headers: { Accept: 'application/json' } });
                 if (res.ok) {
                     const payload = await res.json().catch(() => null);
