@@ -14,6 +14,44 @@ import { Textarea } from '@/components/ui/textarea';
 import Toast from '@/components/ui/toast';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 
+// Render plain text content but convert URLs to clickable links
+function renderContentWithLinks(content?: string) {
+    if (!content) return null;
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = content.split(urlRegex);
+    const nodes: any[] = [];
+
+    parts.forEach((part, idx) => {
+        if (!part) return;
+        if (urlRegex.test(part)) {
+            urlRegex.lastIndex = 0;
+            nodes.push(
+                <a
+                    key={`link-${idx}`}
+                    href={part}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-block w-full max-w-full truncate overflow-hidden whitespace-nowrap text-sky-600 underline hover:text-sky-800"
+                >
+                    {part}
+                </a>,
+            );
+        } else {
+            const lines = part.split('\n');
+            lines.forEach((line, i) => {
+                nodes.push(
+                    <span key={`text-${idx}-${i}`} className="break-words">
+                        {line}
+                    </span>,
+                );
+                if (i < lines.length - 1) nodes.push(<br key={`br-${idx}-${i}`} />);
+            });
+        }
+    });
+
+    return nodes;
+}
+
 type Assignee = { id: number; name: string };
 
 type Task = {
@@ -778,166 +816,100 @@ export default function TasksIndexPage() {
                                     {tasks.map((t) => {
                                         const isExpanded = expanded.includes(t.id);
                                         return (
-                                            <div key={`m-${t.id}`} className={`rounded border p-3 ${isExpanded ? 'bg-gray-50' : ''}`}>
+                                            <div key={`m-${t.id}`} className={`rounded border p-2 ${isExpanded ? 'bg-gray-50' : ''}`}>
                                                 <div
-                                                    className="flex cursor-pointer items-start justify-between gap-3"
+                                                    className="flex cursor-pointer items-start gap-2"
                                                     onClick={() => {
                                                         setExpanded((prev) =>
                                                             prev.includes(t.id) ? prev.filter((x) => x !== t.id) : [...prev, t.id],
                                                         );
                                                     }}
                                                 >
-                                                    <div className="flex-1">
-                                                        <div className="text-sm text-gray-600">
-                                                            # {t.id} ・ {getUserName(t.user_id)}
-                                                        </div>
-                                                        <div className="mt-1 flex items-center gap-2">
-                                                            {t.category ? (
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        setFilterCategoryId((prev) =>
-                                                                            prev === t.category!.id ? null : t.category!.id,
-                                                                        );
-                                                                    }}
-                                                                    className="inline-block rounded px-2 py-0.5 text-xs"
-                                                                    style={getCategoryStyle(t.category)}
-                                                                >
-                                                                    {t.category.name}
-                                                                </button>
-                                                            ) : null}
-                                                            {renderStatusBadge(t.status, () =>
-                                                                setFilterStatus((prev: string | null) =>
-                                                                    prev === (t.status ?? null) ? null : (t.status ?? null),
-                                                                ),
-                                                            )}
-                                                        </div>
-                                                        <div className="mt-1 font-medium">{t.title}</div>
-                                                        <div className="mt-1 text-sm text-gray-500">
-                                                            <div className="flex items-center gap-2">
-                                                                <div>
-                                                                    {formatDateTime(t.start_at)}～{formatDateTime(t.end_at)}
-                                                                </div>
-                                                                <div className="text-xs text-gray-500">
-                                                                    {t.status === '完了' ? null : getDeadlineBadge(t.end_at, t.start_at)}
-                                                                </div>
-                                                            </div>
-                                                            <div className="mt-1 text-sm">
-                                                                {t.assignees && t.assignees.length > 0 ? (
-                                                                    t.assignees.map((a: Assignee) => (
-                                                                        <button
-                                                                            key={`a-m-${a.id}-${t.id}`}
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                setFilterAssigneeId((prev) => (prev === a.id ? null : a.id));
-                                                                            }}
-                                                                            className="mr-2 inline-block rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-800"
-                                                                        >
-                                                                            {a.name}
-                                                                        </button>
-                                                                    ))
-                                                                ) : (
-                                                                    <span className="text-sm text-gray-500">担当者なし</span>
-                                                                )}
-                                                                {/* mobile: show audience and role badges under assignees */}
-                                                                <div className="mt-2">
-                                                                    {(() => {
-                                                                        const aud = (t as any).audience;
-                                                                        const roles = ((t as any).roles || (t as any).role || []) as Array<{
-                                                                            id?: number;
-                                                                            name?: string;
-                                                                        }>;
-                                                                        if (aud === 'all') {
-                                                                            return (
-                                                                                <button
-                                                                                    onClick={(e) => {
-                                                                                        e.stopPropagation();
-                                                                                        setActiveAudience('all');
-                                                                                        fetchTasks();
-                                                                                    }}
-                                                                                    className="inline-flex items-center gap-2 rounded bg-green-100 px-2 py-0.5 text-xs text-green-800"
-                                                                                >
-                                                                                    全体公開
-                                                                                </button>
-                                                                            );
-                                                                        }
-                                                                        if (aud === 'restricted') {
-                                                                            return (
-                                                                                <div>
-                                                                                    <button
-                                                                                        onClick={(e) => {
-                                                                                            e.stopPropagation();
-                                                                                            setActiveAudience('restricted');
-                                                                                            fetchTasks();
-                                                                                        }}
-                                                                                        className="inline-flex items-center gap-2 rounded bg-purple-100 px-2 py-0.5 text-xs text-purple-800"
-                                                                                    >
-                                                                                        限定公開
-                                                                                    </button>
-                                                                                    <div className="mt-1 flex flex-wrap gap-1">
-                                                                                        {roles && roles.length > 0 ? (
-                                                                                            roles.map((r) => (
-                                                                                                <button
-                                                                                                    key={r.id || r.name}
-                                                                                                    onClick={(e) => {
-                                                                                                        e.stopPropagation();
-                                                                                                        setActiveRole(String(r.name ?? r.id));
-                                                                                                        fetchTasks();
-                                                                                                    }}
-                                                                                                    className="cursor-pointer rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-800"
-                                                                                                >
-                                                                                                    {r.name}
-                                                                                                </button>
-                                                                                            ))
-                                                                                        ) : (
-                                                                                            <span className="text-sm text-gray-500">
-                                                                                                (対象未指定)
-                                                                                            </span>
-                                                                                        )}
-                                                                                    </div>
-                                                                                </div>
-                                                                            );
-                                                                        }
-                                                                        return null;
-                                                                    })()}
-                                                                </div>
-                                                            </div>
+                                                    <div className="flex w-14 flex-shrink-0 items-center gap-2 md:w-28">
+                                                        {(t.category && t.category.color) || (t as any).category_color ? (
+                                                            <div
+                                                                aria-hidden
+                                                                className="w-1 flex-shrink-0 self-stretch rounded"
+                                                                style={{
+                                                                    background: (() => {
+                                                                        const raw = (t.category && t.category.color) || (t as any).category_color;
+                                                                        if (!raw) return undefined;
+                                                                        const s = String(raw).trim();
+                                                                        if (s.startsWith('#')) return s;
+                                                                        if (/^[0-9a-fA-F]{6}$/.test(s)) return `#${s}`;
+                                                                        return s;
+                                                                    })(),
+                                                                }}
+                                                            />
+                                                        ) : (
+                                                            <div className="w-1 flex-shrink-0" />
+                                                        )}
+                                                        <div className="self-center truncate text-xs md:text-sm md:font-medium">
+                                                            {t.category && t.category.name ? t.category.name : 'カテゴリなし'}
                                                         </div>
                                                     </div>
-                                                    <div className="flex shrink-0 flex-col items-end gap-2">
-                                                        <div className="flex gap-2">
-                                                            <Button
-                                                                variant="outline"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    startEdit(t);
-                                                                }}
-                                                                disabled={!taskPerm.update}
-                                                            >
-                                                                <Edit className="h-4 w-4 sm:mr-2" />
-                                                                <span className="hidden sm:inline">編集</span>
-                                                            </Button>
-                                                            {taskPerm.delete && (
-                                                                <Button
-                                                                    size="sm"
-                                                                    variant="destructive"
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        handleDelete(t.id);
-                                                                    }}
-                                                                    className="p-2"
-                                                                >
-                                                                    <Trash className="h-4 w-4 md:mr-2" />
-                                                                    <span className="hidden sm:inline">削除</span>
-                                                                </Button>
-                                                            )}
+
+                                                    <div className="flex-1">
+                                                        <div className="flex min-w-0 items-center justify-between">
+                                                            <div className="min-w-0 text-xs font-medium break-words break-all whitespace-normal text-gray-800 md:text-sm">
+                                                                <div className="break-words break-all">{t.title}</div>
+                                                                <div className="mt-1 text-xs text-muted-foreground">
+                                                                    {t.assignees && t.assignees.length > 0
+                                                                        ? t.assignees.map((a: Assignee) => a.name).join(', ')
+                                                                        : '担当者なし'}
+                                                                </div>
+                                                            </div>
+                                                            <div className="ml-2 text-right text-xs text-muted-foreground">
+                                                                <div>
+                                                                    {renderStatusBadge(t.status, () =>
+                                                                        setFilterStatus((prev: string | null) =>
+                                                                            prev === (t.status ?? null) ? null : (t.status ?? null),
+                                                                        ),
+                                                                    )}
+                                                                </div>
+                                                                <div className="mt-1">
+                                                                    {formatDateTime(t.start_at)}～{formatDateTime(t.end_at)}
+                                                                </div>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
+                                                <div className="flex shrink-0 flex-col items-end gap-2">
+                                                    <div className="flex gap-2">
+                                                        <Button
+                                                            variant="outline"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                startEdit(t);
+                                                            }}
+                                                            disabled={!taskPerm.update}
+                                                        >
+                                                            <Edit className="h-4 w-4 sm:mr-2" />
+                                                            <span className="hidden sm:inline">編集</span>
+                                                        </Button>
+                                                        {taskPerm.delete && (
+                                                            <Button
+                                                                size="sm"
+                                                                variant="destructive"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleDelete(t.id);
+                                                                }}
+                                                                className="p-2"
+                                                            >
+                                                                <Trash className="h-4 w-4 md:mr-2" />
+                                                                <span className="hidden sm:inline">削除</span>
+                                                            </Button>
+                                                        )}
+                                                    </div>
+                                                </div>
+
                                                 {isExpanded && (
                                                     <div className="mt-3">
                                                         <div className="mb-2 font-medium">内容</div>
-                                                        <div className="whitespace-pre-wrap text-gray-700">{t.description || '-'}</div>
+                                                        <div className="text-gray-700">
+                                                            {t.description ? renderContentWithLinks(t.description) : '-'}
+                                                        </div>
                                                     </div>
                                                 )}
                                             </div>

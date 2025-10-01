@@ -7,6 +7,7 @@ use App\Models\PostItem;
 use App\Models\Tag;
 use App\Models\Attachment;
 use App\Models\Poll;
+use App\Models\Announcement;
 use App\Models\PollVote;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -53,7 +54,8 @@ class PostController extends Controller
                 }
             });
         // サーバー側ソート: ?sort=column&direction=asc|desc を受け付ける
-        $sortable = ['title', 'audience', 'type', 'updated_at', 'user'];
+        // allow sorting by id as well (frontend may request ?sort=id)
+        $sortable = ['id', 'title', 'audience', 'type', 'updated_at', 'user'];
         $sort = $request->query('sort');
         $direction = strtolower($request->query('direction', 'desc')) === 'asc' ? 'asc' : 'desc';
         if (!empty($sort) && in_array($sort, $sortable)) {
@@ -301,6 +303,18 @@ class PostController extends Controller
                 'audience' => $data['audience'] ?? 'all',
                 'type' => $data['type'] ?? 'board',
             ]);
+            // create an announcement for new posts
+            try {
+                $link = url('/posts/' . $post->id);
+                Announcement::create([
+                    'user_id' => $user->id,
+                    'title' => '【新規】' . ($data['title'] ?? '') . ' が投稿されました',
+                    'content' => 'ページはこちら' . $link,
+                ]);
+            } catch (\Exception $e) {
+                // do not fail the whole request for announcement creation; log and continue
+                logger()->warning('Failed to create announcement for post', ['post_id' => $post->id, 'error' => $e->getMessage()]);
+            }
             if ($post->type === 'poll') {
                 $pollData = $data['poll'];
                 $poll = $post->poll()->create([

@@ -887,8 +887,19 @@ export default function PostShow() {
                                         </div>
                                         <div className="mt-1 truncate text-sm text-muted-foreground">
                                             <span>{post?.user?.name || '—'}</span>
-                                            <span className="mx-1.5">·</span>
-                                            <span>{post?.updated_at ? new Date(post.updated_at).toLocaleString() : '—'}</span>
+                                            <br></br>
+                                            <span className="text-xs">
+                                                最終更新日時：
+                                                {post?.updated_at
+                                                    ? new Date(post.updated_at).toLocaleString('ja-JP', {
+                                                          year: 'numeric',
+                                                          month: 'numeric',
+                                                          day: 'numeric',
+                                                          hour: '2-digit',
+                                                          minute: '2-digit',
+                                                      })
+                                                    : '—'}
+                                            </span>
                                         </div>
                                     </div>
                                     <div className="hidden h-10 self-center border-l border-gray-200 sm:block"></div>
@@ -937,7 +948,6 @@ export default function PostShow() {
                                         </Button>
                                     )}
                                     {post?.user &&
-                                        currentUserId &&
                                         currentUserId === post.user.id &&
                                         // 投稿が poll タイプで、かつ有効期限が過ぎている場合は編集を不可にする
                                         (() => {

@@ -197,27 +197,33 @@ export default function PostCreate() {
         fetch('/api/roles', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
             .then((r) => r.json())
             .then((d) => {
-                const roles = (d || []) as Array<{ id: number; name: string }>;
+                // API may return either an array of roles or an object like { roles: [...] }
+                const roles = (d && Array.isArray(d) ? d : d?.roles) || [];
                 try {
-                    type InertiaPage = { props?: { auth?: { user?: { id?: number; name?: string; roles?: Array<{ id: number; name: string }> } } } };
+                    type InertiaPage = {
+                        props?: { auth?: { user?: { id?: number; name?: string; roles?: Array<{ id?: number; name?: string }> } } };
+                    };
                     const page = (window as unknown as { page?: any }).page as InertiaPage | undefined;
                     const currentUser = page?.props?.auth?.user || null;
-                    const currentRoleNames = Array.isArray(currentUser?.roles)
-                        ? currentUser.roles.map((rr: { id: number; name: string }) => rr.name)
-                        : [];
-                    // システム管理者はすべて見る
-                    if (currentRoleNames.includes('システム管理者')) {
-                        setAvailableRoles(roles);
+                    // If server didn't include roles on the shared auth.user, fall back to showing all roles
+                    if (!Array.isArray(currentUser?.roles)) {
+                        setAvailableRoles(roles as Array<{ id: number; name: string }>);
                     } else {
-                        // 一般ユーザーは自分が所属するロールのみ表示
-                        const currentRoleIds = Array.isArray(currentUser?.roles)
-                            ? currentUser.roles.map((rr: { id: number; name: string }) => rr.id)
-                            : [];
-                        const filtered = roles.filter((r) => currentRoleIds.includes(r.id));
-                        setAvailableRoles(filtered);
+                        const currentRoleNames = currentUser.roles.map((rr: any) => rr.name);
+                        if (currentRoleNames.includes('システム管理者')) {
+                            setAvailableRoles(roles as Array<{ id: number; name: string }>);
+                        } else {
+                            const currentRoleIds = currentUser.roles.map((rr: any) => rr.id);
+                            setAvailableRoles(
+                                (roles as Array<{ id?: number; name?: string }>).filter((r) => currentRoleIds.includes(r.id)) as Array<{
+                                    id: number;
+                                    name: string;
+                                }>,
+                            );
+                        }
                     }
                 } catch {
-                    setAvailableRoles(roles);
+                    setAvailableRoles(roles as Array<{ id: number; name: string }>);
                 }
             })
             .catch(() => setAvailableRoles([]));

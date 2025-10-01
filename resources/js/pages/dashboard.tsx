@@ -14,6 +14,34 @@ import { CalendarIcon, Car, ChevronLeft, ChevronRight, Edit, Plus, Trash } from 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+// Minimal local types to reduce `any` usage in this file.
+type Assignee = { id?: number; name?: string };
+type BreakItem = { start_time?: string | undefined; end_time?: string | undefined; status?: string | undefined; type?: string | undefined };
+type Shift = {
+    id?: number;
+    start_time?: string | null;
+    end_time?: string | null;
+    date?: string | null;
+    shift_type?: string | null;
+    type?: string | null;
+    status?: string | null;
+    breaks?: BreakItem[];
+    user?: any;
+    [key: string]: any;
+};
+type Task = {
+    id?: number;
+    title?: string;
+    status?: string | null;
+    category?: { name?: string; color?: string } | string | null;
+    category_color?: string | null;
+    assignees?: any[];
+    description?: string | null;
+    start?: string | null;
+    end?: string | null;
+    [key: string]: any;
+};
+
 // パンくずリストの定義
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -60,7 +88,7 @@ function GanttBar({
     visualOffsetMinutes,
     currentDate,
 }: {
-    shift: any;
+    shift: Shift;
     isAbsent?: boolean;
     visualOffsetMinutes: number;
     currentDate: Date;
@@ -277,14 +305,20 @@ function GanttBar({
 
 export default function Dashboard() {
     const [currentDate, setCurrentDate] = useState(new Date());
-    const [shifts, setShifts] = useState<any[]>([]);
+    const [shifts, setShifts] = useState<Shift[]>([]);
     const [hasTransportRequestForDate, setHasTransportRequestForDate] = useState(false);
     const [ganttWidth, setGanttWidth] = useState(900);
     const [ganttOffset, setGanttOffset] = useState(300);
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
     const page = usePage<SharedData>();
+    // Use a typed view of shared page props to avoid sprinkling `any` casts.
     const { auth } = page.props as any;
-    const shiftConfig = (page.props as any)?.shift ?? { application_deadline_days: 0 };
+    // compatibility: support nested `auth.isSuperAdmin` or top-level shared 'auth.isSuperAdmin'
+    const isSuperAdmin: boolean = Boolean((auth && (auth.isSuperAdmin ?? page.props['auth.isSuperAdmin'])) ?? false);
+    // permissions: keep as any for compatibility with various shapes from server
+    const permissions: any = (auth && auth.permissions) ?? page.props['auth.permissions'] ?? [];
+    const nestedPermissions: any = (auth && auth.permissions) ?? page.props['auth.permissions'] ?? null;
+    const shiftConfig = (page.props && (page.props as any).shift) ?? { application_deadline_days: 0 };
     const deadlineDays = Number(shiftConfig.application_deadline_days) || 0;
     const maxSelectableDate: Date | null =
         deadlineDays > 0
@@ -295,11 +329,6 @@ export default function Dashboard() {
                   return d;
               })()
             : null;
-    const permissions: string[] = page.props?.auth?.permissions ?? [];
-    const isSuperAdmin: boolean = page.props?.auth?.isSuperAdmin ?? (page.props as any)['auth.isSuperAdmin'] ?? false;
-    const nestedPermissions = (page.props as unknown as { permissions?: Record<string, any> } | undefined)?.permissions;
-
-    // whether the current user can create announcements
     const canCreateAnnouncements = (() => {
         try {
             if (isSuperAdmin) return true;
@@ -358,6 +387,10 @@ export default function Dashboard() {
     type ToastState = { message: string; type: 'success' | 'error' } | null;
     const [toast, setToast] = useState<ToastState>(null);
     const [announcements, setAnnouncements] = useState<any[]>([]);
+    const [unreadPosts, setUnreadPosts] = useState<any[]>([]);
+    // 今日の予定（タスク）を表示するための state
+    const [todayTasks, setTodayTasks] = useState<Task[]>([]);
+    const [expandedTaskId, setExpandedTaskId] = useState<number | null>(null);
     const [createOpen, setCreateOpen] = useState(false);
     const [expandedAnnouncementId, setExpandedAnnouncementId] = useState<number | null>(null);
     const [editingAnnouncement, setEditingAnnouncement] = useState<any | null>(null);
@@ -373,9 +406,9 @@ export default function Dashboard() {
                 const res = await axios.get('/api/active-users');
                 const list = (res.data && res.data.users) || res.data || [];
                 if (Array.isArray(list) && auth && auth.user && auth.user.id != null) {
-                    const me = list.find((u: any) => Number(u.id) === Number(auth.user.id));
+                    const me = list.find((u: unknown) => Number((u as any).id) === Number((auth as any).user.id));
                     if (me && typeof me.has_car !== 'undefined') {
-                        setHasCarFlag(Boolean(me.has_car === 1 || me.has_car === true));
+                        setHasCarFlag(Boolean((me as any).has_car === 1 || (me as any).has_car === true));
                         return;
                     }
                 }
@@ -408,6 +441,88 @@ export default function Dashboard() {
         loadAnnouncements(1, false);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // load recent board posts and show unread ones (limit small number)
+    useEffect(() => {
+        (async () => {
+            try {
+                // request recent posts, filter to boards and unread
+                const res = await axios.get('/api/posts', { params: { type: 'board', per_page: 8 } });
+                const items = (res.data && (res.data.data || res.data)) || [];
+                const arr = Array.isArray(items) ? items : items.data || [];
+                const unread = (arr as any[]).filter((p) => {
+                    try {
+                        return !(p.viewed_by_current_user === true || p.viewed_by_current_user === 1 || p.viewByCurrentUser === true);
+                    } catch {
+                        return false;
+                    }
+                });
+                setUnreadPosts(unread.slice(0, 5));
+            } catch {
+                setUnreadPosts([]);
+            }
+        })();
+    }, []);
+
+    // load tasks for the currently selected date on dashboard (only if user can view tasks)
+    useEffect(() => {
+        if (!canViewTasks) {
+            setTodayTasks([]);
+            return;
+        }
+        (async () => {
+            try {
+                const pad = (n: number) => String(n).padStart(2, '0');
+                // use the selected currentDate (not system today) so switching dates reloads tasks
+                const d = new Date(currentDate);
+                const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+                // request tasks that overlap the selected date; API accepts params.month in many pages, but we use date filter here
+                const res = await axios.get('/api/tasks', { params: { date: iso, per_page: 50 } });
+                const items = (res.data && (res.data.tasks || res.data)) || [];
+                // normalize to expected shape
+                const mapped = Array.isArray(items)
+                    ? items.map((t: any) => ({
+                          id: t.id,
+                          title: t.title,
+                          category: t.category || null,
+                          assignees: t.assignees || t.user_ids || [],
+                          status: t.status || null,
+                          description: t.description || null,
+                          start_at: t.start_at || null,
+                          end_at: t.end_at || null,
+                      }))
+                    : [];
+
+                // Build day boundaries based on the selected date
+                const todayStart = new Date(d);
+                todayStart.setHours(0, 0, 0, 0);
+                const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000 - 1);
+
+                const filtered = mapped.filter((t: any) => {
+                    try {
+                        const s = t.start_at ? new Date(String(t.start_at).replace(' ', 'T')) : null;
+                        const e = t.end_at ? new Date(String(t.end_at).replace(' ', 'T')) : null;
+                        if (s && e) {
+                            // overlap: s <= todayEnd && e >= todayStart
+                            return s.getTime() <= todayEnd.getTime() && e.getTime() >= todayStart.getTime();
+                        }
+                        if (s && !e) {
+                            // include only if start date equals selected date
+                            const sd = new Date(s.getFullYear(), s.getMonth(), s.getDate());
+                            return sd.getTime() === todayStart.getTime();
+                        }
+                        return false;
+                    } catch {
+                        return false;
+                    }
+                });
+
+                setTodayTasks(filtered);
+            } catch (e) {
+                setTodayTasks([]);
+            }
+        })();
+    }, [canViewTasks, currentDate]);
 
     useEffect(() => {
         const compute = () => {
@@ -652,6 +767,135 @@ export default function Dashboard() {
         setIsCalendarOpen(false);
     };
 
+    // format helpers
+    const normalizeIso = (raw?: string | null) => {
+        if (!raw) return null;
+        try {
+            let s = String(raw).trim();
+            if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(s)) s = s.replace(' ', 'T');
+            const d = new Date(s);
+            if (isNaN(d.getTime())) return null;
+            return d;
+        } catch {
+            return null;
+        }
+    };
+
+    // format a Date-like string into 'HH:MM'
+    // format a Date-like string into 'HH:MM'
+    const formatTime = (raw?: string | null) => {
+        const d = normalizeIso(raw);
+        if (!d) return '未設定';
+        const hh = String(d.getHours()); // no leading zero
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        return `${hh}:${mm}`;
+    };
+
+    // format a Date-like string into 'YYYY/MM/DD'
+    // format a Date-like string into 'YYYY/MM/DD'
+    const formatDateOnly = (raw?: string | null) => {
+        const d = normalizeIso(raw);
+        if (!d) return '';
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1); // no leading zero
+        const dd = String(d.getDate()); // no leading zero
+        return `${yyyy}/${mm}/${dd}`;
+    };
+
+    // format a Date-like string into 'YYYY/MM/DD HH:MM'
+    // format a Date-like string into 'YYYY/MM/DD HH:MM'
+    const formatDateTime = (raw?: string | null) => {
+        const d = normalizeIso(raw);
+        if (!d) return '未設定';
+        const m = String(d.getMonth() + 1); // no leading zero
+        const dd = String(d.getDate()); // no leading zero
+        const hh = String(d.getHours()); // no leading zero
+        const min = String(d.getMinutes()).padStart(2, '0');
+        return `${m}/${dd} ${hh}:${min}`;
+    };
+
+    // format task row time according to rules:
+    // - if only start: show "M/D"
+    // - if start and end on same day: show "M/D H:mm - H:mm"
+    // - if start and end on different days: show "M/D H:mm - M/D H:mm"
+    const formatTaskRowTime = (task: any) => {
+        const s = normalizeIso(task.start_at);
+        const e = normalizeIso(task.end_at);
+        if (!s) return '';
+        const sm = String(s.getMonth() + 1);
+        const sd = String(s.getDate());
+        const sh = String(s.getHours());
+        const smin = String(s.getMinutes()).padStart(2, '0');
+        if (!e) {
+            return `${sm}/${sd}`;
+        }
+        const eh = String(e.getHours());
+        const emin = String(e.getMinutes()).padStart(2, '0');
+        const sameDay = s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth() && s.getDate() === e.getDate();
+        if (sameDay) {
+            return `${sm}/${sd} ${sh}:${smin} - ${eh}:${emin}`;
+        }
+        const em = String(e.getMonth() + 1);
+        const ed = String(e.getDate());
+        return `${sm}/${sd} ${sh}:${smin} - ${em}/${ed} ${eh}:${emin}`;
+    };
+
+    // render task status as a localized badge
+    const renderTaskStatusBadge = (status?: any) => {
+        const s = status == null ? '' : String(status).trim();
+        const key = s.toLowerCase();
+        let label = s || '未設定';
+        let variant: 'default' | 'outline' = 'outline';
+        let extra = '';
+
+        switch (key) {
+            case 'completed':
+            case 'done':
+            case '完了':
+                label = '完了';
+                variant = 'default';
+                extra = 'bg-green-100 text-green-800';
+                break;
+            case 'in_progress':
+            case 'in-progress':
+            case '進行中':
+            case 'ongoing':
+                label = '進行中';
+                variant = 'default';
+                extra = 'bg-yellow-100 text-yellow-800';
+                break;
+            case 'not_started':
+            case 'pending':
+            case '未着手':
+                label = '未着手';
+                variant = 'outline';
+                extra = 'bg-gray-100 text-gray-800';
+                break;
+            case 'cancelled':
+            case 'canceled':
+            case 'キャンセル':
+                label = 'キャンセル';
+                variant = 'outline';
+                extra = 'bg-red-100 text-red-800';
+                break;
+            default:
+                if (!s) {
+                    label = '未設定';
+                } else {
+                    // keep original text for unknown statuses
+                    label = s;
+                }
+                variant = 'outline';
+                extra = '';
+        }
+
+        return (
+            <Badge variant={variant} className={`text-xs font-medium ${extra}`}>
+                {label}
+            </Badge>
+        );
+    };
+
     //【修正】今日の日付かどうかを判定し、表示を切り替える
     let formattedDate;
     const today = new Date();
@@ -699,23 +943,6 @@ export default function Dashboard() {
             <Head title="ダッシュボード" />
             <div className="p-4 sm:p-6 lg:p-8">
                 <style>{`.hide-scrollbar::-webkit-scrollbar{display:none}.hide-scrollbar{-ms-overflow-style:none;scrollbar-width:none;}`}</style>
-                {/* お知らせカード上部: タスクカレンダーへのショートカット */}
-                <div className="mb-4 flex items-center justify-end">
-                    {canViewTasks && (
-                        <Button
-                            variant="outline"
-                            onClick={() => {
-                                try {
-                                    router.get(route('tasks.calendar'));
-                                } catch {
-                                    window.location.href = route('tasks.calendar');
-                                }
-                            }}
-                        >
-                            タスクカレンダー
-                        </Button>
-                    )}
-                </div>
                 <div className="mb-6">
                     <Card>
                         <CardHeader className="flex-row items-center justify-between">
@@ -778,7 +1005,7 @@ export default function Dashboard() {
                                                             }
                                                         }
                                                     }}
-                                                    className="flex cursor-pointer items-start gap-4 py-3 hover:bg-gray-50"
+                                                    className="flex cursor-pointer items-start gap-2 py-2 hover:bg-gray-50 md:gap-4"
                                                 >
                                                     <div className="flex-shrink-0 text-xs text-indigo-600 md:w-28 md:text-sm md:font-medium">
                                                         {dateLabel}
@@ -889,9 +1116,199 @@ export default function Dashboard() {
                                     <div className="text-sm text-muted-foreground">これ以上、お知らせはありません</div>
                                 )}
                             </div>
+                            <div className="my-3">
+                                {unreadPosts.length > 0 ? (
+                                    <div className="mb-3 rounded border border-gray-200 bg-yellow-50 p-3">
+                                        <p className="text-bold mb-2 text-sm">
+                                            <i className="fa-solid fa-triangle-exclamation mr-2"></i>未読の掲示板があります
+                                        </p>
+                                        <ul className="space-y-1">
+                                            {unreadPosts.map((p) => (
+                                                <li key={p.id}>
+                                                    <button
+                                                        onClick={() => (window.location.href = route('posts.show', p.id) as unknown as string)}
+                                                        className="w-full truncate text-left text-sm text-sky-600 hover:underline"
+                                                    >
+                                                        {'#' + p.id + ' ' + (p.title || '（タイトルなし）')}
+                                                    </button>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                ) : null}
+                            </div>
                         </CardContent>
                     </Card>
                 </div>
+
+                {/* Today's Tasks card */}
+                {canViewTasks && (
+                    <div className="mb-6">
+                        <Card>
+                            <CardHeader className="flex flex-wrap items-center justify-between md:flex-row">
+                                <div className="flex items-center gap-2">
+                                    <CardTitle className="text-ms sm:text-xl">{formattedDate} の予定</CardTitle>
+                                    {canViewTasks && (
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => {
+                                                try {
+                                                    router.get(route('tasks.calendar'));
+                                                } catch {
+                                                    window.location.href = route('tasks.calendar');
+                                                }
+                                            }}
+                                        >
+                                            カレンダー
+                                        </Button>
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="text-sm text-muted-foreground">{todayTasks.length} 件</div>
+                                    <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
+                                        <PopoverTrigger asChild>
+                                            <Button variant="outline" size="icon">
+                                                <CalendarIcon className="h-4 w-4" />
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0">
+                                            <Calendar
+                                                mode="single"
+                                                selected={currentDate}
+                                                onSelect={(date) => {
+                                                    if (!date) {
+                                                        handleDateSelect(date);
+                                                        return;
+                                                    }
+                                                    if (maxSelectableDate) {
+                                                        const d = new Date(date);
+                                                        d.setHours(0, 0, 0, 0);
+                                                        if (d.getTime() > maxSelectableDate.getTime()) {
+                                                            return;
+                                                        }
+                                                    }
+                                                    handleDateSelect(date);
+                                                }}
+                                                initialFocus
+                                                locale={ja}
+                                                toDate={maxSelectableDate ?? undefined}
+                                                disabled={maxSelectableDate ? { after: maxSelectableDate } : undefined}
+                                            />
+                                        </PopoverContent>
+                                    </Popover>
+                                    <Button variant="outline" onClick={goToToday}>
+                                        本日
+                                    </Button>
+                                    <Button variant="outline" size="icon" onClick={goToPreviousDay}>
+                                        <ChevronLeft className="h-4 w-4" />
+                                    </Button>
+                                    {!(
+                                        maxSelectableDate &&
+                                        (() => {
+                                            const d = new Date(currentDate);
+                                            d.setHours(0, 0, 0, 0);
+                                            return d.getTime() >= maxSelectableDate.getTime();
+                                        })()
+                                    ) && (
+                                        <Button variant="outline" size="icon" onClick={goToNextDay}>
+                                            <ChevronRight className="h-4 w-4" />
+                                        </Button>
+                                    )}
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                {todayTasks.length === 0 ? (
+                                    <div className="text-sm text-muted-foreground">この日の予定はありません</div>
+                                ) : (
+                                    <div>
+                                        {todayTasks.map((t) => {
+                                            const expanded = expandedTaskId === Number(t.id);
+                                            return (
+                                                <div key={t.id} className="border-b border-gray-100">
+                                                    <div
+                                                        role="button"
+                                                        tabIndex={0}
+                                                        aria-expanded={expanded}
+                                                        onClick={async () => {
+                                                            const next = expanded ? null : Number(t.id);
+                                                            setExpandedTaskId(next);
+                                                            // optionally mark as viewed or fetch details if needed
+                                                            if (next) {
+                                                                try {
+                                                                    // fetch detail to ensure up-to-date description/status
+                                                                    const res = await axios.get(`/api/tasks/${t.id}`);
+                                                                    const detail = res.data || {};
+                                                                    setTodayTasks((cur) =>
+                                                                        cur.map((it) => (Number(it.id) === Number(t.id) ? { ...it, ...detail } : it)),
+                                                                    );
+                                                                } catch {}
+                                                            }
+                                                        }}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                                const next = expanded ? null : Number(t.id);
+                                                                setExpandedTaskId(next);
+                                                            }
+                                                        }}
+                                                        className="flex cursor-pointer items-start gap-2 py-3 hover:bg-gray-50 md:gap-4"
+                                                    >
+                                                        <div className="flex w-14 flex-shrink-0 items-center gap-2 md:w-28">
+                                                            {/* color swatch */}
+                                                            {(t.category && t.category.color) || t.category_color ? (
+                                                                <div
+                                                                    aria-hidden
+                                                                    className="w-1 flex-shrink-0 self-stretch rounded"
+                                                                    style={{
+                                                                        background: ((): string | undefined => {
+                                                                            const raw = (t.category && t.category.color) || t.category_color;
+                                                                            if (!raw) return undefined;
+                                                                            const s = String(raw).trim();
+                                                                            if (s.startsWith('#')) return s;
+                                                                            if (/^[0-9a-fA-F]{6}$/.test(s)) return `#${s}`;
+                                                                            return s;
+                                                                        })(),
+                                                                    }}
+                                                                />
+                                                            ) : (
+                                                                <div className="w-1 flex-shrink-0" />
+                                                            )}
+                                                            <div className="self-center truncate text-xs md:text-sm md:font-medium">
+                                                                {t.category && t.category.name ? t.category.name : 'カテゴリなし'}
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <div className="flex min-w-0 items-center justify-between">
+                                                                <div className="min-w-0 text-xs font-medium break-words break-all whitespace-normal text-gray-800 md:text-sm">
+                                                                    <div className="break-words break-all">{t.title}</div>
+                                                                    <div className="mt-1 text-xs text-muted-foreground">
+                                                                        {Array.isArray(t.assignees) && t.assignees.length > 0
+                                                                            ? t.assignees.map((a: any) => a.name || a).join(', ')
+                                                                            : t.assignees && t.assignees.name
+                                                                              ? t.assignees.name
+                                                                              : '担当者なし'}
+                                                                    </div>
+                                                                </div>
+                                                                <div className="ml-2 text-right text-xs text-muted-foreground">
+                                                                    <div>{renderTaskStatusBadge(t.status)}</div>
+                                                                    <div className="mt-1">{formatTaskRowTime(t)}</div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    {expanded && (
+                                                        <div className="px-2 pt-1 pb-4 text-sm text-gray-700">
+                                                            <div>{t.description ? renderContentWithLinks(t.description) : '詳細はありません'}</div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
+                )}
 
                 {/* Create Announcement Modal */}
                 {createOpen && (
@@ -923,7 +1340,7 @@ export default function Dashboard() {
                     <Card>
                         <CardHeader className="flex flex-wrap items-center justify-between md:flex-row">
                             <div className="flex items-center gap-2">
-                                <CardTitle className="text-ms sm:text-xl">{formattedDate}</CardTitle>
+                                <CardTitle className="text-ms sm:text-xl">{formattedDate}のシフト</CardTitle>
                                 {canViewShifts && (
                                     <>
                                         <Button

@@ -368,6 +368,11 @@ export default function PostsIndex() {
                                         <TableRow>
                                             <TableHead> </TableHead>
                                             <TableHead>
+                                                <SortableHeader sort_key="id" queryParams={queryParams}>
+                                                    ID
+                                                </SortableHeader>
+                                            </TableHead>
+                                            <TableHead>
                                                 <SortableHeader sort_key="type" queryParams={queryParams}>
                                                     投稿タイプ
                                                 </SortableHeader>
@@ -538,6 +543,7 @@ export default function PostsIndex() {
                                                                 </button>
                                                             ) : null}
                                                         </TableCell>
+                                                        <TableCell className="text-xs text-gray-600">#{post.id}</TableCell>
                                                         <TableCell>
                                                             {post.type ? (
                                                                 post.type === 'board' ? (
@@ -626,17 +632,21 @@ export default function PostsIndex() {
                                                                                 }
                                                                                 return null;
                                                                             })()}
-                                                                            {/* 投票済みバッジ（下書きバッジの隣に配置） */}
-                                                                            {isPollPost && hasVoted ? (
-                                                                                <span className="ml-2 inline-flex rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
-                                                                                    投票済み
-                                                                                </span>
-                                                                            ) : null}
-                                                                            {/* 未投票なら期限を表示 */}
-                                                                            {isPollPost && !hasVoted && post?.poll?.expires_at ? (
-                                                                                <div className="ml-2 text-sm text-red-600">
-                                                                                    {formatExpiryDateWithTime(post.poll.expires_at)} まで
-                                                                                </div>
+                                                                            {/* 投票ステータス表示（期限切れなら投票終了、それ以外は投票済み／期限表示） */}
+                                                                            {isPollPost ? (
+                                                                                pollExpired ? (
+                                                                                    <span className="ml-2 inline-flex rounded px-2 py-0.5 text-xs font-medium text-gray-600">
+                                                                                        投票終了
+                                                                                    </span>
+                                                                                ) : hasVoted ? (
+                                                                                    <span className="ml-2 inline-flex rounded px-2 py-0.5 text-xs font-medium text-emerald-600">
+                                                                                        投票済み
+                                                                                    </span>
+                                                                                ) : post?.poll?.expires_at ? (
+                                                                                    <div className="ml-2 text-sm text-red-600">
+                                                                                        {formatExpiryDateWithTime(post.poll.expires_at)} まで
+                                                                                    </div>
+                                                                                ) : null
                                                                             ) : null}
                                                                         </div>
                                                                     </div>
@@ -869,17 +879,18 @@ export default function PostsIndex() {
                                                 <div className="flex items-start justify-between">
                                                     <div className="min-w-0">
                                                         <div className="flex items-center gap-2">
-                                                            <h3 className="truncate text-sm font-medium">{post.title || '(無題)'}</h3>
+                                                            <span className="text-xs text-gray-600">#{post.id} </span>
                                                             {isDraft ? (
                                                                 <span className="ml-1 rounded bg-yellow-100 px-2 py-0.5 text-xs text-yellow-800">
                                                                     下書き
                                                                 </span>
                                                             ) : null}
                                                         </div>
+                                                        <div>
+                                                            <h3 className="mt-1 truncate text-sm font-medium">{post.title || '(無題)'}</h3>
+                                                        </div>
                                                         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                                                             <span>{post.user ? post.user.name : '—'}</span>
-                                                            <span>·</span>
-                                                            <span>{formatDateTime(post.updated_at)}</span>
                                                         </div>
                                                     </div>
                                                     <div className="ml-2 flex items-center gap-1">
@@ -1000,9 +1011,17 @@ export default function PostsIndex() {
                                                             }
 
                                                             if (post?.type === 'poll') {
+                                                                // expired -> show closed
+                                                                if (pollExpiredMobile) {
+                                                                    return (
+                                                                        <span className="ml-1 rounded px-2 py-0.5 text-xs text-gray-600">
+                                                                            投票終了
+                                                                        </span>
+                                                                    );
+                                                                }
                                                                 if (mobileHasVoted) {
                                                                     return (
-                                                                        <span className="ml-1 rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">
+                                                                        <span className="ml-1 rounded px-2 py-0.5 text-xs text-emerald-600">
                                                                             投票済み
                                                                         </span>
                                                                     );
@@ -1011,7 +1030,7 @@ export default function PostsIndex() {
                                                                 const expIso = post?.poll?.expires_at || post?.poll_summary?.expires_at;
                                                                 const expiryStr = formatExpiryDateWithTime(expIso);
                                                                 return expiryStr ? (
-                                                                    <span className="ml-1 text-xs text-muted-foreground">{expiryStr} まで</span>
+                                                                    <span className="ml-1 text-xs text-red-600">{expiryStr} まで</span>
                                                                 ) : null;
                                                             }
                                                             return null;
