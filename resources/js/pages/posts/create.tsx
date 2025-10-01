@@ -28,6 +28,14 @@ export default function PostCreate() {
         type: 'board',
         title: '',
         body: '',
+        poll: {
+            description: '',
+            expires_at: '',
+            option_type: 'text',
+            allow_multiple_votes: false,
+            is_anonymous: false,
+            options: [{ value: '' }, { value: '' }],
+        },
     });
     const [submitting, setSubmitting] = useState(false);
     const [attachments, setAttachments] = useState<File[]>([]);
@@ -139,6 +147,28 @@ export default function PostCreate() {
         return mb.toFixed(2) + ' MB';
     }
 
+    // 投票選択肢を更新するヘルパー関数
+    const handlePollOptionChange = (index: number, value: string) => {
+        const newOptions = [...data.poll.options];
+        newOptions[index].value = value;
+        setData('poll', { ...data.poll, options: newOptions });
+    };
+
+    // 投票選択肢を追加するヘルパー関数
+    const addPollOption = () => {
+        setData('poll', {
+            ...data.poll,
+            options: [...data.poll.options, { value: '' }],
+        });
+    };
+
+    // 投票選択肢を削除するヘルパー関数
+    const removePollOption = (index: number) => {
+        if (data.poll.options.length <= 2) return; // 最低2つは必須
+        const newOptions = data.poll.options.filter((_, i) => i !== index);
+        setData('poll', { ...data.poll, options: newOptions });
+    };
+
     // build previews when attachments change
     useEffect(() => {
         // revoke old urls
@@ -170,7 +200,7 @@ export default function PostCreate() {
                 const roles = (d || []) as Array<{ id: number; name: string }>;
                 try {
                     type InertiaPage = { props?: { auth?: { user?: { id?: number; name?: string; roles?: Array<{ id: number; name: string }> } } } };
-                    declare const page: InertiaPage | undefined;
+                    const page = (window as unknown as { page?: any }).page as InertiaPage | undefined;
                     const currentUser = page?.props?.auth?.user || null;
                     const currentRoleNames = Array.isArray(currentUser?.roles)
                         ? currentUser.roles.map((rr: { id: number; name: string }) => rr.name)
@@ -200,143 +230,93 @@ export default function PostCreate() {
     const submit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         setServerErrors({});
-        const form = new FormData();
-        form.append('type', data.type || 'board');
-        form.append('title', data.title);
-        const rawHtml = bodyHtml && bodyHtml.length > 0 ? bodyHtml : data.body || '';
 
-        // transform plain-text #tags and @mentions into spans so class attributes are stored
-        const transformHtmlForSave = (raw: string) => {
-            const container = document.createElement('div');
-            container.innerHTML = raw || '';
-            const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
-            const nodes: Node[] = [];
-            let n: Node | null = walker.nextNode();
-            while (n) {
-                nodes.push(n);
-                n = walker.nextNode();
-            }
-            nodes.forEach((tn) => {
-                const v = tn.nodeValue || '';
-                if (!v) return;
-                if (/#([^\s#@]+)|@([^\s@#]+)/.test(v)) {
-                    const frag = document.createDocumentFragment();
-                    let lastIndex = 0;
-                    const re = /(#([^\s#@]+))|(@([^\s@#]+))/g;
-                    let m: RegExpExecArray | null;
-                    while ((m = re.exec(v))) {
-                        const before = v.slice(lastIndex, m.index);
-                        if (before) frag.appendChild(document.createTextNode(before));
-                        if (m[1]) {
-                            const span = document.createElement('span');
-                            span.className = 'hashtag';
-                            span.textContent = m[1];
-                            frag.appendChild(span);
-                        } else if (m[3]) {
-                            const span = document.createElement('span');
-                            span.className = 'mention';
-                            span.textContent = m[3];
-                            frag.appendChild(span);
-                        }
-                        lastIndex = re.lastIndex;
-                    }
-                    const rest = v.slice(lastIndex);
-                    if (rest) frag.appendChild(document.createTextNode(rest));
-                    tn.parentNode?.replaceChild(frag, tn);
-                }
-            });
-            return container.innerHTML;
-        };
-
-        const transformedHtml = transformHtmlForSave(rawHtml);
         // client-side validation: for board posts, body is required
+        const rawHtml = bodyHtml && bodyHtml.length > 0 ? bodyHtml : data.body || '';
+        const strip = (s: string) => s.replace(/<[^>]*>/g, '').trim();
         if ((data.type || 'board') === 'board') {
-            if (!transformedHtml || transformedHtml.replace(/<[^>]*>/g, '').trim() === '') {
-                setServerErrors((prev) => {
-                    const copy = { ...prev } as Record<string, string[]>;
-                    copy.body = ['本文は必須です'];
-                    return copy;
-                });
+            if (!rawHtml || strip(rawHtml) === '') {
+                setServerErrors((prev) => ({ ...(prev || {}), body: ['本文は必須です'] }));
                 return;
             }
         }
+
+        // FormDataの準備
+        const form = new FormData();
+        form.append('type', data.type);
+        form.append('title', data.title);
         form.append('is_public', isPublic ? '1' : '0');
         form.append('audience', audience);
-        // include manual items and manualTag in FormData when post type is manual
-        if (data.type === 'manual') {
-            try {
-                form.append('manual_tag', manualTag || '');
-                manualItems.forEach((it, i) => {
-                    form.append(`items[${i}][text]`, it.text || '');
-                    form.append(`items[${i}][order]`, String(i));
-                });
-            } catch (e) {
-                // safe-guard: if manualItems are not available in this scope, continue
-            }
-        }
+
         if (audience === 'restricted') {
             selectedRoles.forEach((id) => form.append('roles[]', String(id)));
             selectedUsers.forEach((id) => form.append('users[]', String(id)));
         }
 
-        // send body and top-level attachments only for board posts
-        if ((data.type || 'board') === 'board') {
-            form.append('body', transformedHtml);
+        // --- タイプに応じたデータ処理 ---
+
+        if (data.type === 'board') {
+            form.append('body', bodyHtml);
             attachments.forEach((f) => form.append('attachments[]', f));
-        }
-        // for manual posts, do NOT save manualTag into body; tags[] are appended below
-        // extract simple tags from plain text: #tag (stops at whitespace/#/@)
-        try {
-            // convert HTML to plain text to avoid capturing tags like </p>
-            const tmp = document.createElement('div');
-            tmp.innerHTML = rawHtml;
-            const text = tmp.textContent || tmp.innerText || '';
-            const re = /#([^\s#@]+)/g;
-            let m: RegExpExecArray | null = null;
-            const seen = new Set<string>();
-            while ((m = re.exec(text))) {
-                const t = m[1];
-                if (t) {
-                    const clean = t.trim();
-                    if (clean && !seen.has(clean)) {
-                        seen.add(clean);
-                        form.append('tags[]', clean);
+            // 本文からタグを抽出
+            try {
+                const tmp = document.createElement('div');
+                tmp.innerHTML = bodyHtml;
+                const text = tmp.textContent || tmp.innerText || '';
+                const re = /#([^\s#@]+)/g;
+                let m: RegExpExecArray | null = null;
+                const seen = new Set<string>();
+                while ((m = re.exec(text))) {
+                    if (m[1] && !seen.has(m[1].trim())) {
+                        const cleanTag = m[1].trim();
+                        seen.add(cleanTag);
+                        form.append('tags[]', cleanTag);
                     }
                 }
-            }
-        } catch {
-            // ignore
-        }
-        // If manual type, also parse comma-separated manualTag into tags[] so server treats them like board tags
-        if ((data.type || 'board') === 'manual') {
-            if (manualTag && manualTag.trim()) {
-                const parts = manualTag
-                    .split(/[,，\s]+/) // allow comma, fullwidth comma, and whitespace
-                    .map((t) => t.trim())
-                    .filter((t) => t.length > 0);
-                parts.forEach((t) => form.append('tags[]', t));
-            }
+            } catch {}
         }
 
-        // if manual type, append items and their files; otherwise do not send manual items
-        if ((data.type || 'board') === 'manual') {
+        if (data.type === 'manual') {
             manualItems.forEach((it, i) => {
-                form.append(`items[${i}][order]`, String(i + 1));
                 form.append(`items[${i}][content]`, it.text || '');
                 (it.files || []).forEach((f) => form.append(`item_attachments[${i}][]`, f));
             });
+            // 手動タグ入力欄からタグを追加
+            if (manualTag && manualTag.trim()) {
+                manualTag
+                    .split(/[,，\s]+/)
+                    .filter(Boolean)
+                    .forEach((t) => form.append('tags[]', t.trim()));
+            }
         }
 
-        try {
-            // DEBUG: dump FormData entries to console to verify body/manual_tag are being sent
-            try {
-                console.log('[posts.create] FormData entries before submit:', Array.from((form as any).entries ? (form as any).entries() : []));
-            } catch (e) {}
+        // ★★★ ここからが投票データの追加部分です ★★★
+        if (data.type === 'poll') {
+            // include poll description (nullable)
+            form.append('poll[description]', data.poll.description || '');
+            // fallback key in case server expects non-nested field
+            form.append('poll_description', data.poll.description || '');
+            form.append('poll[expires_at]', data.poll.expires_at || '');
+            form.append('poll[option_type]', data.poll.option_type);
+            form.append('poll[allow_multiple_votes]', data.poll.allow_multiple_votes ? '1' : '0');
+            form.append('poll[is_anonymous]', data.poll.is_anonymous ? '1' : '0');
+            data.poll.options.forEach((option, index) => {
+                form.append(`poll[options][${index}][value]`, option.value);
+            });
+            // 投票の場合も手動タグ入力欄をtags[]として送信
+            if (manualTag && manualTag.trim()) {
+                manualTag
+                    .split(/[,，\s]+/)
+                    .filter(Boolean)
+                    .forEach((t) => form.append('tags[]', t.trim()));
+            }
+        }
 
+        // --- サーバーへの送信処理 ---
+        try {
             setSubmitting(true);
             const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-            const submitUrl = '/api/posts';
-            const res = await fetch(submitUrl, {
+            const res = await fetch(route('posts.store'), {
                 method: 'POST',
                 credentials: 'same-origin',
                 body: form,
@@ -347,52 +327,26 @@ export default function PostCreate() {
                 },
             });
 
-            const contentType = (res.headers.get('content-type') || '').toLowerCase();
-
-            // Debug logging: always log response metadata and body when possible
-            try {
-                console.log('[posts.create] response meta', { status: res.status, statusText: res.statusText, url: res.url, contentType });
-                if (contentType.includes('application/json')) {
-                    const payload = await res
-                        .clone()
-                        .json()
-                        .catch(() => null);
-                    console.log('[posts.create] response json', payload);
-                } else {
-                    const text = await res
-                        .clone()
-                        .text()
-                        .catch(() => null);
-                    console.log('[posts.create] response text', text && text.slice ? text.slice(0, 2000) : text);
-                }
-            } catch (logErr) {
-                console.error('[posts.create] failed to log response', logErr);
-            }
-
-            // handle validation errors (JSON)
-            if (res.status === 422 && contentType.includes('application/json')) {
+            if (res.status === 422) {
                 const payload = await res.json();
                 setServerErrors(payload.errors || {});
                 return;
             }
 
-            // If server returned HTML (debug page / 419), show text for easier debugging
-            if (!contentType.includes('application/json')) {
-                const text = await res.text();
-                alert('投稿に失敗しました（非JSON応答）: ' + text.slice(0, 1000));
-                return;
-            }
-
             if (!res.ok) {
-                // JSON error
-                const payload = await res.json();
-                alert('投稿に失敗しました: ' + (payload.message || JSON.stringify(payload)));
+                const text = await res.text();
+                alert('投稿に失敗しました: ' + text.slice(0, 500));
                 return;
             }
 
-            // success - navigate to posts index
             reset();
-            window.location.href = route('posts.index');
+            // リダイレクト時に通知メッセージをクエリで渡す
+            try {
+                const notice = encodeURIComponent(`「${data.title || '(無題)'}」を投稿しました`);
+                window.location.href = route('posts.index') + `?notice=${notice}`;
+            } catch {
+                window.location.href = route('posts.index');
+            }
         } catch (err) {
             console.error(err);
             alert('通信エラーが発生しました');
@@ -437,6 +391,7 @@ export default function PostCreate() {
                                         >
                                             <option value="board">掲示板</option>
                                             <option value="manual">マニュアル</option>
+                                            <option value="poll">投票</option>
                                         </select>
                                     </div>
                                 </div>
@@ -638,6 +593,130 @@ export default function PostCreate() {
                                     </div>
                                 )}
 
+                                {data.type === 'poll' && (
+                                    <div className="space-y-6 rounded-md border bg-muted/30 p-4">
+                                        <h3 className="font-medium">投票設定</h3>
+                                        <div>
+                                            <Label htmlFor="poll_description">説明 (任意)</Label>
+                                            <Textarea
+                                                id="poll_description"
+                                                rows={3}
+                                                value={data.poll.description || ''}
+                                                onChange={(e) => setData('poll', { ...data.poll, description: e.target.value })}
+                                                className="mt-1"
+                                            />
+                                        </div>
+                                        <div>
+                                            <Label htmlFor="expires_at">投票期限 (任意)</Label>
+                                            <Input
+                                                id="expires_at"
+                                                type="datetime-local"
+                                                value={data.poll.expires_at}
+                                                onChange={(e) => setData('poll', { ...data.poll, expires_at: e.target.value })}
+                                            />
+                                            <InputError message={errors['poll.expires_at']} className="mt-2" />
+                                        </div>
+                                        <div>
+                                            <Label>選択肢の形式</Label>
+                                            <div className="mt-2 flex gap-4">
+                                                <label className="flex items-center gap-2">
+                                                    <input
+                                                        type="radio"
+                                                        value="text"
+                                                        checked={data.poll.option_type === 'text'}
+                                                        onChange={() => setData('poll', { ...data.poll, option_type: 'text' })}
+                                                    />{' '}
+                                                    テキスト
+                                                </label>
+                                                <label className="flex items-center gap-2">
+                                                    <input
+                                                        type="radio"
+                                                        value="date"
+                                                        checked={data.poll.option_type === 'date'}
+                                                        onChange={() => setData('poll', { ...data.poll, option_type: 'date' })}
+                                                    />{' '}
+                                                    日付
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <Label>投票方式</Label>
+                                            <div className="mt-2 flex gap-4">
+                                                <label className="flex items-center gap-2">
+                                                    <input
+                                                        type="radio"
+                                                        name="allow_multiple_votes"
+                                                        checked={!data.poll.allow_multiple_votes}
+                                                        onChange={() => setData('poll', { ...data.poll, allow_multiple_votes: false })}
+                                                    />{' '}
+                                                    1つだけ選択
+                                                </label>
+                                                <label className="flex items-center gap-2">
+                                                    <input
+                                                        type="radio"
+                                                        name="allow_multiple_votes"
+                                                        checked={data.poll.allow_multiple_votes}
+                                                        onChange={() => setData('poll', { ...data.poll, allow_multiple_votes: true })}
+                                                    />{' '}
+                                                    複数選択可
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <Label>記名方式</Label>
+                                            <div className="mt-2 flex gap-4">
+                                                <label className="flex items-center gap-2">
+                                                    <input
+                                                        type="radio"
+                                                        name="is_anonymous"
+                                                        checked={!data.poll.is_anonymous}
+                                                        onChange={() => setData('poll', { ...data.poll, is_anonymous: false })}
+                                                    />{' '}
+                                                    公開
+                                                </label>
+                                                <label className="flex items-center gap-2">
+                                                    <input
+                                                        type="radio"
+                                                        name="is_anonymous"
+                                                        checked={data.poll.is_anonymous}
+                                                        onChange={() => setData('poll', { ...data.poll, is_anonymous: true })}
+                                                    />{' '}
+                                                    匿名
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <Label>選択肢 (最低2つ)</Label>
+                                            <div className="mt-1 space-y-2">
+                                                {data.poll.options.map((option, index) => (
+                                                    <div key={index} className="flex items-center gap-2">
+                                                        <Input
+                                                            type={data.poll.option_type === 'date' ? 'date' : 'text'}
+                                                            value={option.value}
+                                                            onChange={(e) => handlePollOptionChange(index, e.target.value)}
+                                                            required
+                                                        />
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() => removePollOption(index)}
+                                                            disabled={data.poll.options.length <= 2}
+                                                            className="h-8 w-8"
+                                                        >
+                                                            <X className="h-4 w-4 text-red-500" />
+                                                        </Button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <InputError message={errors['poll.options']} className="mt-2" />
+                                            <Button type="button" variant="outline" size="sm" className="mt-2" onClick={addPollOption}>
+                                                選択肢を追加
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {data.type === 'board' && (
                                     <>
                                         <div>
@@ -741,7 +820,7 @@ export default function PostCreate() {
                                     </>
                                 )}
 
-                                {data.type === 'manual' && (
+                                {(data.type === 'manual' || data.type === 'poll') && (
                                     <div>
                                         <Label htmlFor="manual_tag">タグ</Label>
                                         <Input

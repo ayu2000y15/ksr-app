@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { Head, Link, usePage } from '@inertiajs/react';
+import axios from 'axios';
 // Ensure the emoji-picker web component is registered at runtime by importing the module for its side-effects.
 import 'emoji-picker-element';
 import { Edit, Globe, Plus, Printer, Smile, Tag, Trash } from 'lucide-react';
@@ -14,6 +15,291 @@ const breadcrumbs = [
     { title: '掲示板', href: route('posts.index') },
     { title: '投稿詳細', href: '' },
 ];
+
+// --- 投票表示コンポーネント (新規追加) ---
+const PollDisplay = ({ initialPostData }: { initialPostData: Post }) => {
+    const { auth } = usePage().props as any;
+    const [post, setPost] = useState<Post>(initialPostData);
+    const poll = post.poll;
+
+    const [selectedOptions, setSelectedOptions] = useState<number[]>([]);
+    const [submitting, setSubmitting] = useState(false);
+
+    // current user id (may be undefined if not logged in)
+    const currentUserId = auth?.user?.id ?? null;
+    // determine if current user is system admin (roles may vary; check common names)
+    const isAdmin = !!(
+        auth?.user &&
+        Array.isArray(auth.user.roles) &&
+        auth.user.roles.some((r: any) => r && (r.name === 'システム管理者' || r.name === 'System Administrator' || r.name === 'admin'))
+    );
+
+    // 投票が終了しているか
+    const isExpired = useMemo(() => {
+        return poll?.expires_at ? new Date(poll.expires_at) < new Date() : false;
+    }, [poll?.expires_at]);
+
+    // ★修正点1: サーバーから渡されるhas_votedフラグを優先的に使用する
+    // これにより、投票者リストが見えなくても自分が投票済みか判定できる
+    const hasVoted = useMemo(() => {
+        if (!poll?.options) return false;
+        // サーバーからの `has_voted` フラグがあればそれを使用
+        if (typeof poll?.has_voted === 'boolean') {
+            return poll.has_voted;
+        }
+        // サーバー側の votes 配列に現在ユーザーの投票が記録されているか確認
+        const votedOnServer = poll.options.some((opt: any) =>
+            (opt.votes || []).some((vote: any) => {
+                if (!vote) return false;
+                if (vote.user_id && currentUserId) return Number(vote.user_id) === Number(currentUserId);
+                if (vote.user && vote.user.id && currentUserId) return Number(vote.user.id) === Number(currentUserId);
+                return false;
+            }),
+        );
+        // 匿名投票などでサーバーがユーザーを紐付けられない場合のフォールバックとしてlocalStorageを確認
+        let votedLocal = false;
+        try {
+            if (typeof window !== 'undefined' && poll && poll.id) {
+                votedLocal = !!localStorage.getItem(`poll_voted_${poll.id}`);
+            }
+        } catch (e) {
+            votedLocal = false;
+        }
+        return votedOnServer || votedLocal;
+    }, [poll?.options, currentUserId, poll?.id, poll]);
+
+    // 全体の投票数
+    const totalVotes = useMemo(() => {
+        if (!poll?.options) return 0;
+        return poll.options.reduce((sum, opt) => sum + (opt.votes_count ?? opt.votes?.length ?? 0), 0);
+    }, [poll?.options]);
+
+    // 投票ボタンが押された時の処理
+    const handleVote = async () => {
+        if (selectedOptions.length === 0 || !poll) return;
+        setSubmitting(true);
+        try {
+            const response = await axios.post(route('polls.vote', poll.id), {
+                option_ids: selectedOptions,
+            });
+            // 投票成功時はローカルにも投票済みフラグを保存してから必ずページをリロードし、
+            // サーバーから最新の投票情報（投票者名含む）を取得する
+            try {
+                if (typeof window !== 'undefined' && poll && poll.id) {
+                    // 投票した選択肢の id 配列を保存する
+                    try {
+                        localStorage.setItem(`poll_voted_${poll.id}`, JSON.stringify(selectedOptions));
+                    } catch (e) {
+                        // 保存失敗しても処理は続ける
+                    }
+                }
+            } catch (e) {}
+            try {
+                window.location.reload();
+                return;
+            } catch (e) {
+                // reload に失敗した場合のみ state を更新して続行
+                setPost(response.data);
+            }
+        } catch (error) {
+            console.error('投票に失敗しました:', error);
+            alert('投票エラーが発生しました。');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    // 有効期限を m/d (短縮曜日) 形式で返す
+    const formatExpiryDate = (iso?: string) => {
+        if (!iso) return '';
+        try {
+            const d = new Date(iso);
+            if (isNaN(d.getTime())) return '';
+            const monthDay = d.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' });
+            const weekday = d.toLocaleDateString('ja-JP', { weekday: 'short' });
+            return `${monthDay} (${weekday})`;
+        } catch (e) {
+            return '';
+        }
+    };
+
+    // 有効期限を m/d (短縮曜日) HH:MM 形式で返す
+    const formatExpiryDateWithTime = (iso?: string) => {
+        if (!iso) return '';
+        try {
+            const d = new Date(iso);
+            if (isNaN(d.getTime())) return '';
+            const monthDay = d.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' });
+            const weekday = d.toLocaleDateString('ja-JP', { weekday: 'short' });
+            const time = d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+            return `${monthDay} (${weekday}) ${time}`;
+        } catch (e) {
+            return '';
+        }
+    };
+
+    const handleOptionChange = (optionId: number) => {
+        if (poll?.allow_multiple_votes) {
+            setSelectedOptions((prev) => (prev.includes(optionId) ? prev.filter((id) => id !== optionId) : [...prev, optionId]));
+        } else {
+            setSelectedOptions([optionId]);
+        }
+    };
+
+    if (!poll) return null;
+
+    return (
+        <div className="my-6 space-y-4 rounded-lg border p-4">
+            <div className="flex flex-col items-start justify-between">
+                <div className="flex w-full items-center justify-between">
+                    <h3 className="text-lg font-bold">
+                        投票 {/* カード上部に期限を表示 (m/d (曜) HH:MM) */}
+                        {poll?.expires_at ? (
+                            <span className="ml-2 text-xs text-red-600">{formatExpiryDateWithTime(poll.expires_at)} まで</span>
+                        ) : (
+                            <span className="ml-2 text-xs text-gray-500">期限なし</span>
+                        )}
+                    </h3>
+                    <div className="flex items-center gap-3">
+                        {isExpired && <Badge variant="destructive">この投票は終了しました</Badge>}
+                        {/* 単一のやり直すボタン: 投票済み && 期限内 */}
+                        {!isExpired && hasVoted && (
+                            <button
+                                type="button"
+                                className="text-sm text-blue-600 hover:underline"
+                                onClick={async () => {
+                                    if (!poll) return;
+                                    try {
+                                        const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+                                        const res = await axios.post(
+                                            route('polls.reset', poll.id),
+                                            {},
+                                            { withCredentials: true, headers: { 'X-CSRF-TOKEN': token } },
+                                        );
+                                        if (res && res.data) {
+                                            setPost(res.data);
+                                            try {
+                                                if (typeof window !== 'undefined') localStorage.removeItem(`poll_voted_${poll.id}`);
+                                            } catch (e) {}
+                                        }
+                                    } catch (err: any) {
+                                        console.error('投票のやり直しに失敗しました', err);
+                                        const message = err?.response?.data?.message || err?.message || '投票のやり直しに失敗しました。';
+                                        alert(message);
+                                    }
+                                }}
+                            >
+                                投票をやり直す
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            <div className="space-y-3">
+                {poll.options.map((option) => {
+                    const votesCount = option.votes_count ?? option.votes?.length ?? 0;
+                    const percentage = totalVotes > 0 ? (votesCount / totalVotes) * 100 : 0;
+                    // このオプションに現在ユーザーが投票しているかどうか
+                    const userVotedThis = (() => {
+                        try {
+                            // まずはサーバー側の votes に現在のユーザーが含まれているか確認
+                            if (currentUserId && option.votes && option.votes.length > 0) {
+                                return option.votes.some((v: any) => {
+                                    if (!v) return false;
+                                    if (v.user_id && currentUserId) return Number(v.user_id) === Number(currentUserId);
+                                    if (v.user && v.user.id && currentUserId) return Number(v.user.id) === Number(currentUserId);
+                                    return false;
+                                });
+                            }
+
+                            // 次に localStorage に保存した選択肢ID配列を確認して、当該 option.id が含まれているかだけを判定する
+                            if (typeof window !== 'undefined' && poll && poll.id) {
+                                const raw = localStorage.getItem(`poll_voted_${poll.id}`);
+                                if (raw) {
+                                    try {
+                                        const arr = JSON.parse(raw);
+                                        if (Array.isArray(arr)) return arr.includes(option.id);
+                                    } catch (e) {
+                                        // 旧仕様で '1' を保存している場合は無視する（全選択肢ハイライトはしない）
+                                    }
+                                }
+                            }
+                        } catch (err) {
+                            // 判定失敗時は安全のため false を返す
+                        }
+                        return false;
+                    })();
+
+                    // 結果表示モード (投票済み or 期限切れ)
+                    if (isExpired || hasVoted) {
+                        return (
+                            <div key={option.id} className="relative">
+                                <div className="mb-1 flex items-center justify-between text-sm">
+                                    <span className={`flex items-center gap-2 font-medium ${userVotedThis ? 'font-semibold text-emerald-700' : ''}`}>
+                                        <span>{option.value}</span>
+                                        {userVotedThis && (
+                                            <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
+                                                投票済み
+                                            </span>
+                                        )}
+                                    </span>
+                                    <span>
+                                        {votesCount}票 ({percentage.toFixed(1)}%)
+                                    </span>
+                                </div>
+                                <div className="h-4 w-full rounded-full bg-gray-200">
+                                    <div
+                                        className={`h-4 rounded-full ${userVotedThis ? 'bg-emerald-600' : 'bg-blue-600'}`}
+                                        style={{ width: `${percentage}%` }}
+                                    ></div>
+                                </div>
+                                {/* ★修正点2: option.votesが存在する場合のみ投票者リストを表示 */}
+                                {/* これで匿名投票の権限制御が機能する */}
+                                {option.votes &&
+                                    option.votes.length > 0 &&
+                                    // 非匿名なら全員に表示。匿名の場合は投稿者（post.user.id）または管理者のみ表示。
+                                    (!poll.is_anonymous ||
+                                    (post?.user && currentUserId && Number(post.user.id) === Number(currentUserId)) ||
+                                    isAdmin ? (
+                                        <div className="mt-1 pl-2 text-xs text-gray-500">
+                                            投票者:{' '}
+                                            {option.votes
+                                                .map((v: any) => v.user?.name)
+                                                .filter(Boolean)
+                                                .join(', ')}
+                                        </div>
+                                    ) : null)}
+                            </div>
+                        );
+                    }
+
+                    // 投票フォームモード
+                    return (
+                        <label key={option.id} className="flex cursor-pointer items-center gap-3 rounded border p-3 hover:bg-gray-50">
+                            <input
+                                type={poll.allow_multiple_votes ? 'checkbox' : 'radio'}
+                                name="poll_option"
+                                checked={selectedOptions.includes(option.id)}
+                                onChange={() => handleOptionChange(option.id)}
+                                className={poll.allow_multiple_votes ? 'rounded' : 'rounded-full'}
+                            />
+                            <span>{option.value}</span>
+                        </label>
+                    );
+                })}
+            </div>
+
+            {!isExpired && !hasVoted && (
+                <div className="flex items-center justify-end">
+                    <Button onClick={handleVote} disabled={submitting || selectedOptions.length === 0}>
+                        {submitting ? '投票中...' : '投票する'}
+                    </Button>
+                </div>
+            )}
+        </div>
+    );
+};
 
 // Note: we avoid adding a JSX intrinsic for <emoji-picker> and instead create the
 // web component programmatically at runtime. This prevents TSX/JSX typing errors
@@ -645,32 +931,78 @@ export default function PostShow() {
                                     )}
                                 </div>
                                 <div className="flex flex-shrink-0 items-center gap-2">
-                                    <Button variant="outline" onClick={handlePrint}>
-                                        <Printer className="mr-2 h-4 w-4" /> 印刷
-                                    </Button>
-                                    {post?.user && currentUserId && currentUserId === post.user.id && (
-                                        <>
-                                            <Link href={post ? route('posts.edit', post.id) : '#'}>
-                                                <Button variant="outline">
-                                                    <Edit className="mr-2 h-4 w-4" /> 編集
-                                                </Button>
-                                            </Link>
-                                            <Button size="sm" variant="destructive" onClick={handleDelete}>
-                                                <Trash className="mr-2 h-4 w-4" /> 削除
-                                            </Button>
-                                        </>
+                                    {post?.type !== 'poll' && (
+                                        <Button variant="outline" onClick={handlePrint}>
+                                            <Printer className="mr-2 h-4 w-4" /> 印刷
+                                        </Button>
                                     )}
+                                    {post?.user &&
+                                        currentUserId &&
+                                        currentUserId === post.user.id &&
+                                        // 投稿が poll タイプで、かつ有効期限が過ぎている場合は編集を不可にする
+                                        (() => {
+                                            const isPoll = post?.type === 'poll';
+                                            let pollExpired = false;
+                                            try {
+                                                if (isPoll && post?.poll?.expires_at) {
+                                                    const exp = new Date(post.poll.expires_at);
+                                                    if (!isNaN(exp.getTime())) {
+                                                        pollExpired = exp < new Date();
+                                                    }
+                                                }
+                                            } catch {
+                                                // ignore parsing errors and treat as not expired
+                                                pollExpired = false;
+                                            }
+
+                                            return (
+                                                <>
+                                                    {!pollExpired && (
+                                                        <Link href={post ? route('posts.edit', post.id) : '#'}>
+                                                            <Button variant="outline">
+                                                                <Edit className="mr-2 h-4 w-4" /> 編集
+                                                            </Button>
+                                                        </Link>
+                                                    )}
+                                                    <Button size="sm" variant="destructive" onClick={handleDelete}>
+                                                        <Trash className="mr-2 h-4 w-4" /> 削除
+                                                    </Button>
+                                                </>
+                                            );
+                                        })()}
                                 </div>
                             </div>
                         </CardHeader>
-                        <CardContent className="space-y-6 pt-6">
-                            <div className="prose dark:prose-invert max-w-none">
-                                {(() => {
-                                    const raw = post?.body || '';
-                                    // render HTML or plain text, but ensure text nodes are linkified
-                                    return <div className="post-body text-sm whitespace-pre-wrap">{renderHtmlWithLinks(raw)}</div>;
-                                })()}
-                            </div>
+                        <CardContent className="space-y-6">
+                            {post.type === 'board' && (
+                                <div className="prose dark:prose-invert max-w-none">
+                                    <div className="post-body text-sm whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: post.body || '' }} />
+                                </div>
+                            )}
+                            {post.type === 'poll' && (
+                                <>
+                                    <div className="prose max-w-none text-sm">
+                                        {/* Show poll description if present. Escape HTML and preserve newlines as <br/> */}
+                                        {post?.poll?.description ? (
+                                            <div
+                                                className="poll-description text-sm whitespace-pre-wrap text-gray-700"
+                                                // description is user-provided plain text; escape and preserve newlines
+                                                dangerouslySetInnerHTML={{
+                                                    __html: (function () {
+                                                        try {
+                                                            const esc = escapeHtml(String(post.poll.description || ''));
+                                                            return esc.replace(/\r?\n/g, '<br/>');
+                                                        } catch (e) {
+                                                            return '';
+                                                        }
+                                                    })(),
+                                                }}
+                                            />
+                                        ) : null}
+                                    </div>
+                                    <PollDisplay initialPostData={post} />
+                                </>
+                            )}
                             {post?.type === 'manual' ? (
                                 <div className="space-y-6">
                                     {manualItems.map(

@@ -81,4 +81,10 @@ class User extends BaseAuthenticatable
     {
         return $this->belongsToMany(\App\Models\Post::class, 'post_user_pins')->withTimestamps();
     }
+
+    // 投票機能用のリレーションを追加
+    public function pollVotes()
+    {
+        return $this->hasMany(\App\Models\PollVote::class);
+    }
 }

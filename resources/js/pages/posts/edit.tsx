@@ -28,12 +28,92 @@ export default function PostEdit() {
 
     // ...existing code...
 
+    // DB の日時 (例: '2025-10-01 12:34:56' や ISO 文字列) を
+    // <input type="datetime-local"> に入れられる形式 'YYYY-MM-DDTHH:MM' に変換する
+    const toDateTimeLocal = (v: any) => {
+        // Show DB time in Japan timezone (Asia/Tokyo) in the datetime-local input.
+        if (!v && v !== 0) return '';
+        try {
+            const s = String(v).trim();
+
+            // If the string already has an explicit timezone offset or 'Z', keep it.
+            const hasTZ = /[zZ]|[+-]\d{2}:?\d{2}$/.test(s);
+
+            // Try to extract date and time
+            const dateMatch = s.match(/(\d{4}-\d{2}-\d{2})/);
+            const timeMatch = s.match(/(\d{2}:\d{2})(?::\d{2})?/);
+
+            let isoCandidate: string | null = null;
+            if (dateMatch && timeMatch) {
+                // If original string included timezone info, use it; otherwise treat the DB time as JST (+09:00)
+                if (hasTZ) {
+                    // Prefer full ISO-like if present
+                    const isoLike = s.replace(' ', 'T');
+                    isoCandidate = isoLike;
+                } else {
+                    isoCandidate = `${dateMatch[1]}T${timeMatch[1]}:00+09:00`;
+                }
+            } else if (dateMatch) {
+                // only date: return date at 00:00 JST
+                isoCandidate = `${dateMatch[1]}T00:00:00+09:00`;
+            } else {
+                // fallback: attempt to parse directly
+                isoCandidate = s;
+            }
+
+            const d = new Date(isoCandidate);
+            if (isNaN(d.getTime())) return '';
+
+            // Format the date/time in Asia/Tokyo and return as 'YYYY-MM-DDTHH:MM'
+            const fmt = new Intl.DateTimeFormat('ja-JP', {
+                timeZone: 'Asia/Tokyo',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+            });
+            const parts = fmt.formatToParts(d);
+            const map: Record<string, string> = {};
+            parts.forEach((p) => {
+                if (p.type !== 'literal') map[p.type] = p.value;
+            });
+            if (map.year && map.month && map.day && map.hour && map.minute) {
+                return `${map.year}-${map.month}-${map.day}T${map.hour}:${map.minute}`;
+            }
+            return '';
+        } catch {
+            return '';
+        }
+    };
+
     // initialPost may be provided via Inertia page props
 
     const { data, setData, processing, errors, reset } = useForm({
         type: initialPost?.type || 'board',
         title: initialPost?.title || '',
         body: initialPost?.body || '',
+        // poll 用の初期値を create.tsx に合わせて用意
+        poll: initialPost?.poll
+            ? {
+                  expires_at: toDateTimeLocal(initialPost.poll.expires_at || ''),
+                  option_type: initialPost.poll.option_type || 'text',
+                  allow_multiple_votes: !!initialPost.poll.allow_multiple_votes,
+                  is_anonymous: !!initialPost.poll.is_anonymous,
+                  description: initialPost.poll.description || '',
+                  options: Array.isArray(initialPost.poll.options)
+                      ? initialPost.poll.options.map((o: any) => ({ id: o.id, value: o.value }))
+                      : [{ value: '' }, { value: '' }],
+              }
+            : {
+                  description: '',
+                  expires_at: '',
+                  option_type: 'text',
+                  allow_multiple_votes: false,
+                  is_anonymous: false,
+                  options: [{ value: '' }, { value: '' }],
+              },
     });
     const [submitting, setSubmitting] = useState(false);
 
@@ -212,6 +292,29 @@ export default function PostEdit() {
         return mb.toFixed(2) + ' MB';
     }
 
+    // 投票選択肢を更新するヘルパー関数 (create.tsx と同等)
+    const handlePollOptionChange = (index: number, value: string) => {
+        const newOptions = [...(data.poll?.options || [])];
+        newOptions[index] = { ...(newOptions[index] || {}), value };
+        setData('poll', { ...(data.poll || {}), options: newOptions });
+    };
+
+    // 投票選択肢を追加するヘルパー関数
+    const addPollOption = () => {
+        setData('poll', {
+            ...(data.poll || { option_type: 'text', options: [] }),
+            options: [...(data.poll?.options || []), { value: '' }],
+        });
+    };
+
+    // 投票選択肢を削除するヘルパー関数
+    const removePollOption = (index: number) => {
+        const opts = (data.poll?.options || []).slice();
+        if (opts.length <= 2) return; // 最低2つは必須
+        opts.splice(index, 1);
+        setData('poll', { ...(data.poll || {}), options: opts });
+    };
+
     useEffect(() => {
         // fetch roles and users for selection (match posts/create behavior)
         fetch('/api/roles', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
@@ -220,7 +323,7 @@ export default function PostEdit() {
                 const roles = (d || []) as Array<{ id: number; name: string }>;
                 try {
                     type InertiaPage = { props?: { auth?: { user?: { id?: number; name?: string; roles?: Array<{ id: number; name: string }> } } } };
-                    declare const page: InertiaPage | undefined;
+                    const page = (window as unknown as { page?: any }).page as InertiaPage | undefined;
                     const currentUser = page?.props?.auth?.user || null;
 
                     const currentRoleNames = Array.isArray(currentUser?.roles)
@@ -273,6 +376,20 @@ export default function PostEdit() {
             setData('body', initialPost.body || '');
             // Ensure the post type is applied to the form (fix: manual posts previously showed as board)
             setData('type', initialPost.type || 'board');
+            // 初期投稿に poll データがあればフォームに反映する
+            if (initialPost.poll) {
+                setData('poll', {
+                    expires_at: toDateTimeLocal(initialPost.poll.expires_at || ''),
+                    option_type: initialPost.poll.option_type || 'text',
+                    allow_multiple_votes: !!initialPost.poll.allow_multiple_votes,
+                    is_anonymous: !!initialPost.poll.is_anonymous,
+                    // include saved description so textarea shows existing value
+                    description: initialPost.poll.description || '',
+                    options: Array.isArray(initialPost.poll.options)
+                        ? initialPost.poll.options.map((o: any) => ({ id: o.id, value: o.value }))
+                        : [{ value: '' }, { value: '' }],
+                });
+            }
         } catch (e) {
             // ignore
         }
@@ -365,9 +482,18 @@ export default function PostEdit() {
         const rolesToSend = audience === 'restricted' ? selectedRoles : [];
         const usersToSend = audience === 'restricted' ? selectedUsers : [];
 
+        // client-side validation: for board posts, body is required
+        const rawHtml = bodyHtml && bodyHtml.length > 0 ? bodyHtml : data.body || '';
+        const strip = (s: string) => s.replace(/<[^>]*>/g, '').trim();
+        if ((data.type || 'board') === 'board') {
+            if (!rawHtml || strip(rawHtml) === '') {
+                setServerErrors((prev) => ({ ...(prev || {}), body: ['本文は必須です'] }));
+                return;
+            }
+        }
+
         const form = new FormData();
         form.append('title', data.title);
-        const rawHtml = bodyHtml && bodyHtml.length > 0 ? bodyHtml : data.body || '';
 
         const transformHtmlForSave = (raw: string) => {
             const container = document.createElement('div');
@@ -456,6 +582,30 @@ export default function PostEdit() {
             }
         } catch {
             // ignore
+        }
+        // 投票データを送信する（編集時も対応）
+        if ((data.type || 'board') === 'poll') {
+            // include description
+            form.append('poll[description]', (data.poll && data.poll.description) || '');
+            // fallback key
+            form.append('poll_description', (data.poll && data.poll.description) || '');
+            form.append('poll[expires_at]', data.poll.expires_at || '');
+            form.append('poll[option_type]', data.poll.option_type || 'text');
+            form.append('poll[allow_multiple_votes]', data.poll.allow_multiple_votes ? '1' : '0');
+            form.append('poll[is_anonymous]', data.poll.is_anonymous ? '1' : '0');
+            (data.poll.options || []).forEach((option: any, index: number) => {
+                if (option && option.id) {
+                    form.append(`poll[options][${index}][id]`, String(option.id));
+                }
+                form.append(`poll[options][${index}][value]`, option.value || '');
+            });
+            // 投票でも手動タグ入力欄を tags[] として送信
+            if (manualTag && manualTag.trim()) {
+                manualTag
+                    .split(/[,，\s]+/)
+                    .filter(Boolean)
+                    .forEach((t) => form.append('tags[]', t.trim()));
+            }
         }
         // send attachments/body only for board posts; send manual items only for manual posts
         if ((data.type || 'board') === 'board') {
@@ -799,7 +949,129 @@ export default function PostEdit() {
                                     </div>
                                 )}
 
-                                {!isManual && (
+                                {data.type === 'poll' && (
+                                    <div className="space-y-6 rounded-md border bg-muted/30 p-4">
+                                        <h3 className="font-medium">投票設定</h3>
+                                        <div>
+                                            <Label htmlFor="poll_description">説明 (任意)</Label>
+                                            <Textarea
+                                                id="poll_description"
+                                                rows={3}
+                                                value={data.poll?.description || ''}
+                                                onChange={(e) => setData('poll', { ...(data.poll || {}), description: e.target.value })}
+                                                className="mt-1"
+                                            />
+                                        </div>
+                                        <div>
+                                            <Label htmlFor="expires_at">投票期限 (任意)</Label>
+                                            <Input
+                                                id="expires_at"
+                                                type="datetime-local"
+                                                value={data.poll?.expires_at || ''}
+                                                onChange={(e) => setData('poll', { ...(data.poll || {}), expires_at: e.target.value })}
+                                            />
+                                            <InputError message={errors['poll.expires_at']} className="mt-2" />
+                                        </div>
+
+                                        <div>
+                                            <Label>選択肢の形式</Label>
+                                            <div className="mt-2 flex gap-4">
+                                                <label className="flex items-center gap-2">
+                                                    <input
+                                                        type="radio"
+                                                        value="text"
+                                                        checked={(data.poll?.option_type || 'text') === 'text'}
+                                                        onChange={() => setData('poll', { ...(data.poll || {}), option_type: 'text' })}
+                                                    />{' '}
+                                                    テキスト
+                                                </label>
+                                                <label className="flex items-center gap-2">
+                                                    <input
+                                                        type="radio"
+                                                        value="date"
+                                                        checked={data.poll?.option_type === 'date'}
+                                                        onChange={() => setData('poll', { ...(data.poll || {}), option_type: 'date' })}
+                                                    />{' '}
+                                                    日付
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <Label>投票方式</Label>
+                                            <div className="mt-2 flex gap-4">
+                                                <label className="flex items-center gap-2">
+                                                    <input
+                                                        type="radio"
+                                                        name="allow_multiple_votes"
+                                                        checked={!data.poll?.allow_multiple_votes}
+                                                        onChange={() => setData('poll', { ...(data.poll || {}), allow_multiple_votes: false })}
+                                                    />{' '}
+                                                    1つだけ選択
+                                                </label>
+                                                <label className="flex items-center gap-2">
+                                                    <input
+                                                        type="radio"
+                                                        name="allow_multiple_votes"
+                                                        checked={!!data.poll?.allow_multiple_votes}
+                                                        onChange={() => setData('poll', { ...(data.poll || {}), allow_multiple_votes: true })}
+                                                    />{' '}
+                                                    複数選択可
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <Label>記名方式</Label>
+                                            <div className="mt-2 flex gap-4">
+                                                <label className="flex items-center gap-2">
+                                                    <input
+                                                        type="radio"
+                                                        name="is_anonymous"
+                                                        checked={!data.poll?.is_anonymous}
+                                                        onChange={() => setData('poll', { ...(data.poll || {}), is_anonymous: false })}
+                                                    />{' '}
+                                                    公開
+                                                </label>
+                                                <label className="flex items-center gap-2">
+                                                    <input
+                                                        type="radio"
+                                                        name="is_anonymous"
+                                                        checked={!!data.poll?.is_anonymous}
+                                                        onChange={() => setData('poll', { ...(data.poll || {}), is_anonymous: true })}
+                                                    />{' '}
+                                                    匿名
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <Label>選択肢 (最低2つ)</Label>
+                                            {(data.poll?.options || []).map((opt: any, idx: number) => (
+                                                <div key={idx} className="mt-2 flex items-center gap-2">
+                                                    <Input value={opt?.value || ''} onChange={(e) => handlePollOptionChange(idx, e.target.value)} />
+                                                    <button
+                                                        type="button"
+                                                        className="text-sm text-red-500"
+                                                        onClick={() => removePollOption(idx)}
+                                                        title="削除"
+                                                    >
+                                                        <X className="h-4 w-4 text-red-500" />
+                                                    </button>
+                                                </div>
+                                            ))}
+
+                                            <div className="mt-2">
+                                                <button type="button" className="rounded bg-indigo-600 px-3 py-1 text-white" onClick={addPollOption}>
+                                                    選択肢を追加
+                                                </button>
+                                            </div>
+                                            <InputError message={errors['poll.options']} className="mt-2" />
+                                        </div>
+                                    </div>
+                                )}
+
+                                {data.type === 'board' && (
                                     <>
                                         <div>
                                             <Label htmlFor="body">本文</Label>
@@ -935,7 +1207,7 @@ export default function PostEdit() {
                                     </>
                                 )}
 
-                                {isManual && (
+                                {(isManual || data.type === 'poll') && (
                                     <div>
                                         <Label htmlFor="manual_tag">タグ</Label>
                                         <Input

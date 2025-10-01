@@ -63,4 +63,10 @@ class Post extends BaseModel
     {
         return $this->belongsToMany(\App\Models\User::class, 'post_user_pins')->withTimestamps();
     }
+
+    // 投票機能用のリレーションを追加
+    public function poll()
+    {
+        return $this->hasOne(\App\Models\Poll::class);
+    }
 }

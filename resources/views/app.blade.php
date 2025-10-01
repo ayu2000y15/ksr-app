@@ -19,7 +19,8 @@
             }
         })();
     </script>
-
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
+        integrity="..." crossorigin="anonymous" />
     {{-- Inline style to set the HTML background color based on our theme in app.css --}}
     <style>
         html {

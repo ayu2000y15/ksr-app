@@ -133,12 +133,28 @@ export interface BreakTime {
 export interface Post {
     id: number;
     user_id: number;
-    type: 'board' | 'manual';
+    type: 'board' | 'manual' | 'poll';
     title: string;
     body: string;
     is_public: boolean;
     created_at: string;
     updated_at: string;
+    user?: User;
+
+    // 投票リレーションを追加
+    poll?: Poll;
+    // 既存の他のリレーション...
+    tags?: Tag[];
+    roles?: Role[];
+    allowedUsers?: User[];
+    reactions?: Reaction[];
+    views?: PostView[]; // PostViewという型を仮定
+    pinned_by_current_user?: boolean;
+}
+
+// PostViewの仮定義
+export interface PostView {
+    user_id: number;
     user?: User;
 }
 
@@ -149,6 +165,36 @@ export interface PostItem {
     content: string | null;
     created_at: string;
     updated_at: string;
+}
+
+export interface Poll {
+    id: number;
+    post_id: number;
+    expires_at: string | null;
+    description: string | null;
+    option_type: 'text' | 'date';
+    allow_multiple_votes: boolean;
+    is_anonymous: boolean;
+    options: PollOption[];
+    // ユーザーが投票済みかどうかのフラグをコントローラーで付与することを想定
+    voted_by_current_user?: boolean;
+}
+
+export interface PollOption {
+    id: number;
+    poll_id: number;
+    value: string;
+    order: number;
+    // 投票者情報 (ポリシーによってnullになる)
+    votes: PollVote[] | null;
+    // 投票数 (ポリシーによってvotesがnullの場合のフォールバック)
+    votes_count?: number;
+}
+
+export interface PollVote {
+    id: number;
+    user_id: number;
+    user?: User;
 }
 
 export interface Comment {

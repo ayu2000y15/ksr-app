@@ -56,6 +56,16 @@ export default function PostsIndex() {
     // rolesList may be used to map role id to name; keep as unknown[] to avoid any
     const [_rolesList, setRolesList] = useState<unknown[]>([]);
     const page = usePage();
+    // notice クエリを読み取って一度だけ表示する
+    const [noticeMessage, setNoticeMessage] = useState<string | null>(() => {
+        try {
+            const params = new URLSearchParams(window.location.search);
+            const n = params.get('notice');
+            return n ? decodeURIComponent(n) : null;
+        } catch {
+            return null;
+        }
+    });
     const currentUserId = Number((page.props as any).auth?.user?.id) || null;
 
     const loadInitial = useCallback(
@@ -194,6 +204,7 @@ export default function PostsIndex() {
         if (!t) return '';
         if (t === 'board') return '掲示板';
         if (t === 'manual') return 'マニュアル';
+        if (t === 'poll') return '投票';
         return t;
     };
 
@@ -208,6 +219,21 @@ export default function PostsIndex() {
         const hh = String(d.getHours());
         const mi = String(d.getMinutes()).padStart(2, '0');
         return `${y}/${m}/${dd} ${hh}:${mi}`;
+    };
+
+    // 有効期限を m/d (短縮曜日) HH:MM 形式で返す
+    const formatExpiryDateWithTime = (iso?: string) => {
+        if (!iso) return '';
+        try {
+            const d = new Date(iso);
+            if (Number.isNaN(d.getTime())) return '';
+            const monthDay = d.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' });
+            const weekday = d.toLocaleDateString('ja-JP', { weekday: 'short' });
+            const time = d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+            return `${monthDay} (${weekday}) ${time}`;
+        } catch {
+            return '';
+        }
     };
 
     const loadMore = () => {
@@ -229,6 +255,26 @@ export default function PostsIndex() {
             <Head title="掲示板・マニュアル" />
 
             <div className="p-4 sm:p-6 lg:p-8">
+                {noticeMessage ? (
+                    <div className="mb-4 rounded border-l-4 border-green-300 bg-green-50 p-4 text-sm">
+                        <div className="flex items-center justify-between">
+                            <div className="text-green-700">{noticeMessage}</div>
+                            <button
+                                className="text-green-700 underline"
+                                onClick={() => {
+                                    setNoticeMessage(null);
+                                    // URLからnoticeクエリを消す
+                                    const params = new URLSearchParams(window.location.search);
+                                    params.delete('notice');
+                                    const newUrl = params.toString() ? `${window.location.pathname}?${params.toString()}` : window.location.pathname;
+                                    window.history.replaceState({}, '', newUrl);
+                                }}
+                            >
+                                閉じる
+                            </button>
+                        </div>
+                    </div>
+                ) : null}
                 <div className="mb-6">
                     <HeadingSmall title="掲示板・マニュアル" description="掲示板の投稿一覧・作成" />
                 </div>
@@ -320,6 +366,12 @@ export default function PostsIndex() {
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
+                                            <TableHead> </TableHead>
+                                            <TableHead>
+                                                <SortableHeader sort_key="type" queryParams={queryParams}>
+                                                    投稿タイプ
+                                                </SortableHeader>
+                                            </TableHead>
                                             <TableHead>
                                                 <SortableHeader sort_key="title" queryParams={queryParams}>
                                                     タイトル
@@ -328,11 +380,6 @@ export default function PostsIndex() {
                                             <TableHead>
                                                 <SortableHeader sort_key="audience" queryParams={queryParams}>
                                                     閲覧範囲
-                                                </SortableHeader>
-                                            </TableHead>
-                                            <TableHead>
-                                                <SortableHeader sort_key="type" queryParams={queryParams}>
-                                                    投稿タイプ
                                                 </SortableHeader>
                                             </TableHead>
                                             <TableHead>
@@ -392,6 +439,19 @@ export default function PostsIndex() {
                                                         });
                                                         if (!res.ok) throw new Error('削除失敗');
                                                         setPosts((prev) => prev.filter((p) => p.id !== post.id));
+                                                        // show notice banner with deleted title
+                                                        try {
+                                                            const msg = `「${post.title || '(無題)'}」を削除しました`;
+                                                            setNoticeMessage(msg);
+                                                            const params = new URLSearchParams(window.location.search);
+                                                            params.set('notice', encodeURIComponent(msg));
+                                                            const newUrl = params.toString()
+                                                                ? `${window.location.pathname}?${params.toString()}`
+                                                                : window.location.pathname;
+                                                            window.history.replaceState({}, '', newUrl);
+                                                        } catch (e) {
+                                                            // ignore
+                                                        }
                                                     } catch (err) {
                                                         console.error(err);
                                                         alert('削除に失敗しました');
@@ -405,6 +465,55 @@ export default function PostsIndex() {
                                                 );
                                                 const roles = post.roles || post.role || [];
                                                 const allowedUsers = post.allowedUsers || post.allowed_users || post.allowed_user || [];
+                                                // poll 投稿で有効期限が過ぎているか判定する
+                                                const isPollPost = post?.type === 'poll';
+                                                let pollExpired = false;
+                                                try {
+                                                    if (isPollPost && post?.poll?.expires_at) {
+                                                        const exp = new Date(post.poll.expires_at);
+                                                        if (!isNaN(exp.getTime())) pollExpired = exp < new Date();
+                                                    }
+                                                } catch {
+                                                    pollExpired = false;
+                                                }
+                                                // 投票済み判定（サーバ提供フラグがあれば優先、それがなければ votes 配列・localStorage を確認）
+                                                let hasVoted = false;
+                                                try {
+                                                    if (isPollPost && post?.poll) {
+                                                        const p = post.poll;
+                                                        if (typeof p.has_voted === 'boolean') {
+                                                            hasVoted = p.has_voted;
+                                                        } else if (Array.isArray(p.options)) {
+                                                            hasVoted = p.options.some(
+                                                                (opt: any) =>
+                                                                    Array.isArray(opt.votes) &&
+                                                                    opt.votes.some((v: any) => {
+                                                                        if (!v) return false;
+                                                                        if (v.user_id && currentUserId)
+                                                                            return Number(v.user_id) === Number(currentUserId);
+                                                                        if (v.user && v.user.id && currentUserId)
+                                                                            return Number(v.user.id) === Number(currentUserId);
+                                                                        return false;
+                                                                    }),
+                                                            );
+                                                        }
+                                                        if (!hasVoted) {
+                                                            try {
+                                                                if (typeof window !== 'undefined' && p && p.id) {
+                                                                    const raw = localStorage.getItem(`poll_voted_${p.id}`);
+                                                                    if (raw) {
+                                                                        const arr = JSON.parse(raw);
+                                                                        if (Array.isArray(arr) && arr.length > 0) hasVoted = true;
+                                                                    }
+                                                                }
+                                                            } catch {
+                                                                // ignore
+                                                            }
+                                                        }
+                                                    }
+                                                } catch {
+                                                    hasVoted = false;
+                                                }
 
                                                 return (
                                                     <TableRow
@@ -412,6 +521,62 @@ export default function PostsIndex() {
                                                         className={`cursor-pointer hover:bg-gray-50 ${isOwnDraft ? 'bg-gray-100' : ''}`}
                                                         onClick={onRowClick}
                                                     >
+                                                        <TableCell>
+                                                            {/* pin icon on the left */}
+                                                            {currentUserId ? (
+                                                                <button
+                                                                    onClick={(e: MouseEvent) => {
+                                                                        e.stopPropagation();
+                                                                        togglePin(post.id, Boolean(post.pinned_by_current_user));
+                                                                    }}
+                                                                    aria-label={post.pinned_by_current_user ? 'ピンを外す' : 'ピンする'}
+                                                                    className="flex items-center justify-center rounded p-0.5"
+                                                                >
+                                                                    <PushPin
+                                                                        className={`h-5 w-3 ${post.pinned_by_current_user ? 'text-yellow-500' : 'text-gray-400'}`}
+                                                                    />
+                                                                </button>
+                                                            ) : null}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            {post.type ? (
+                                                                post.type === 'board' ? (
+                                                                    <Link
+                                                                        href={route('posts.index') + '?type=board'}
+                                                                        onClick={(e: MouseEvent) => e.stopPropagation()}
+                                                                        className="inline-flex transform cursor-pointer items-center rounded transition duration-150 hover:bg-blue-200 hover:opacity-95 hover:shadow-sm"
+                                                                    >
+                                                                        <Badge className="bg-blue-100 text-blue-800">掲示板</Badge>
+                                                                    </Link>
+                                                                ) : post.type === 'manual' ? (
+                                                                    <Link
+                                                                        href={route('posts.index') + '?type=manual'}
+                                                                        onClick={(e: MouseEvent) => e.stopPropagation()}
+                                                                        className="inline-flex transform cursor-pointer items-center rounded transition duration-150 hover:bg-sky-200 hover:opacity-95 hover:shadow-sm"
+                                                                    >
+                                                                        <Badge className="bg-pink-100 text-pink-800">マニュアル</Badge>
+                                                                    </Link>
+                                                                ) : post.type === 'poll' ? (
+                                                                    <Link
+                                                                        href={route('posts.index') + '?type=poll'}
+                                                                        onClick={(e: MouseEvent) => e.stopPropagation()}
+                                                                        className="inline-flex transform cursor-pointer items-center rounded transition duration-150 hover:bg-sky-200 hover:opacity-95 hover:shadow-sm"
+                                                                    >
+                                                                        <Badge className="bg-teal-100 text-teal-800">投票</Badge>
+                                                                    </Link>
+                                                                ) : (
+                                                                    <Link
+                                                                        href={route('posts.index') + '?type=' + encodeURIComponent(post.type)}
+                                                                        onClick={(e: MouseEvent) => e.stopPropagation()}
+                                                                        className="inline-flex transform cursor-pointer items-center rounded transition duration-150 hover:bg-gray-300 hover:opacity-95 hover:shadow-sm"
+                                                                    >
+                                                                        <Badge variant="outline">{post.type}</Badge>
+                                                                    </Link>
+                                                                )
+                                                            ) : (
+                                                                <Badge variant="outline">—</Badge>
+                                                            )}
+                                                        </TableCell>
                                                         <TableCell className="font-medium">
                                                             {/* Determine if current user has a view record for this post */}
                                                             {(() => {
@@ -427,32 +592,16 @@ export default function PostsIndex() {
                                                                     <div className="flex flex-col">
                                                                         {isReadByMe ? (
                                                                             <div className="mb-1">
-                                                                                <Badge className="bg-gray-100 text-gray-800">既読</Badge>
+                                                                                <Badge className="bg-gray-100 p-0.5 text-[10px] text-gray-400">
+                                                                                    既読
+                                                                                </Badge>
                                                                             </div>
                                                                         ) : null}
                                                                         <div className="flex min-w-0 items-center gap-2">
-                                                                            {/* pin icon on the left */}
-                                                                            {currentUserId ? (
-                                                                                <button
-                                                                                    onClick={(e: MouseEvent) => {
-                                                                                        e.stopPropagation();
-                                                                                        togglePin(post.id, Boolean(post.pinned_by_current_user));
-                                                                                    }}
-                                                                                    aria-label={
-                                                                                        post.pinned_by_current_user ? 'ピンを外す' : 'ピンする'
-                                                                                    }
-                                                                                    className="flex items-center justify-center rounded p-0.5"
-                                                                                >
-                                                                                    <PushPin
-                                                                                        className={`h-5 w-3 ${post.pinned_by_current_user ? 'text-yellow-500' : 'text-gray-400'}`}
-                                                                                    />
-                                                                                </button>
-                                                                            ) : null}
-
                                                                             <Link
                                                                                 href={route('posts.show', post.id)}
                                                                                 onClick={(e: MouseEvent) => e.stopPropagation()}
-                                                                                className="max-w-[48ch] break-words whitespace-normal text-blue-600 hover:underline"
+                                                                                className="max-w-[48ch] break-words whitespace-normal text-black hover:underline"
                                                                             >
                                                                                 {post.title || '(無題)'}
                                                                             </Link>
@@ -477,6 +626,18 @@ export default function PostsIndex() {
                                                                                 }
                                                                                 return null;
                                                                             })()}
+                                                                            {/* 投票済みバッジ（下書きバッジの隣に配置） */}
+                                                                            {isPollPost && hasVoted ? (
+                                                                                <span className="ml-2 inline-flex rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
+                                                                                    投票済み
+                                                                                </span>
+                                                                            ) : null}
+                                                                            {/* 未投票なら期限を表示 */}
+                                                                            {isPollPost && !hasVoted && post?.poll?.expires_at ? (
+                                                                                <div className="ml-2 text-sm text-red-600">
+                                                                                    {formatExpiryDateWithTime(post.poll.expires_at)} まで
+                                                                                </div>
+                                                                            ) : null}
                                                                         </div>
                                                                     </div>
                                                                 );
@@ -542,37 +703,7 @@ export default function PostsIndex() {
                                                                 <span className="ml-2 text-xs text-yellow-700">(非公開)</span>
                                                             ) : null}
                                                         </TableCell>
-                                                        <TableCell>
-                                                            {post.type ? (
-                                                                post.type === 'board' ? (
-                                                                    <Link
-                                                                        href={route('posts.index') + '?type=board'}
-                                                                        onClick={(e: MouseEvent) => e.stopPropagation()}
-                                                                        className="inline-flex transform cursor-pointer items-center rounded transition duration-150 hover:bg-blue-200 hover:opacity-95 hover:shadow-sm"
-                                                                    >
-                                                                        <Badge className="bg-blue-100 text-blue-800">掲示板</Badge>
-                                                                    </Link>
-                                                                ) : post.type === 'manual' ? (
-                                                                    <Link
-                                                                        href={route('posts.index') + '?type=manual'}
-                                                                        onClick={(e: MouseEvent) => e.stopPropagation()}
-                                                                        className="inline-flex transform cursor-pointer items-center rounded transition duration-150 hover:bg-sky-200 hover:opacity-95 hover:shadow-sm"
-                                                                    >
-                                                                        <Badge className="bg-sky-100 text-sky-800">マニュアル</Badge>
-                                                                    </Link>
-                                                                ) : (
-                                                                    <Link
-                                                                        href={route('posts.index') + '?type=' + encodeURIComponent(post.type)}
-                                                                        onClick={(e: MouseEvent) => e.stopPropagation()}
-                                                                        className="inline-flex transform cursor-pointer items-center rounded transition duration-150 hover:bg-gray-300 hover:opacity-95 hover:shadow-sm"
-                                                                    >
-                                                                        <Badge variant="outline">{post.type}</Badge>
-                                                                    </Link>
-                                                                )
-                                                            ) : (
-                                                                <Badge variant="outline">—</Badge>
-                                                            )}
-                                                        </TableCell>
+
                                                         <TableCell>
                                                             <div className="flex flex-wrap gap-1">
                                                                 {(post.tags || []).map((t: { id?: number; name: string }) => (
@@ -595,15 +726,18 @@ export default function PostsIndex() {
                                                             <div className="inline-flex items-center justify-end gap-2">
                                                                 {postOwnerId && currentUserId && Number(postOwnerId) === currentUserId ? (
                                                                     <div className="inline-flex justify-end gap-2">
-                                                                        <Button
-                                                                            variant="outline"
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                onEdit(e);
-                                                                            }}
-                                                                        >
-                                                                            <Edit className="mr-2 h-4 w-4" /> 編集
-                                                                        </Button>
+                                                                        {/* 編集は poll かつ期限切れの場合は非表示にする */}
+                                                                        {!pollExpired && (
+                                                                            <Button
+                                                                                variant="outline"
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    onEdit(e);
+                                                                                }}
+                                                                            >
+                                                                                <Edit className="mr-2 h-4 w-4" /> 編集
+                                                                            </Button>
+                                                                        )}
                                                                         <Button
                                                                             size="sm"
                                                                             variant="destructive"
@@ -646,6 +780,7 @@ export default function PostsIndex() {
                                             <option value="">タイプ</option>
                                             <option value="board">掲示板</option>
                                             <option value="manual">マニュアル</option>
+                                            <option value="poll">投票</option>
                                         </select>
                                     </div>
                                     <div className="flex flex-wrap items-center gap-2">
@@ -713,11 +848,22 @@ export default function PostsIndex() {
                                         const isOwnDraft = Boolean(isDraft && postOwnerId && currentUserId && Number(postOwnerId) === currentUserId);
                                         const roles = post.roles || post.role || [];
                                         const allowedUsers = post.allowedUsers || post.allowed_users || post.allowed_user || [];
+                                        // mobile list: poll expiry判定
+                                        const isPollPostMobile = post?.type === 'poll';
+                                        let pollExpiredMobile = false;
+                                        try {
+                                            if (isPollPostMobile && post?.poll?.expires_at) {
+                                                const exp = new Date(post.poll.expires_at);
+                                                if (!isNaN(exp.getTime())) pollExpiredMobile = exp < new Date();
+                                            }
+                                        } catch {
+                                            pollExpiredMobile = false;
+                                        }
 
                                         return (
                                             <div
                                                 key={post.id}
-                                                className={`flex w-full flex-col gap-2 rounded border p-3 shadow-sm ${isDraft ? 'bg-gray-300' : 'bg-white'}`}
+                                                className={`relative flex w-full flex-col gap-2 rounded border p-3 shadow-sm ${isDraft ? 'bg-gray-300' : 'bg-white'}`}
                                                 onClick={() => (window.location.href = route('posts.show', post.id) as unknown as string)}
                                             >
                                                 <div className="flex items-start justify-between">
@@ -755,14 +901,17 @@ export default function PostsIndex() {
 
                                                         {postOwnerId && currentUserId && Number(postOwnerId) === currentUserId ? (
                                                             <>
-                                                                <Link
-                                                                    href={route('posts.edit', post.id)}
-                                                                    onClick={(e: MouseEvent) => e.stopPropagation()}
-                                                                >
-                                                                    <Button variant="outline" size="sm" className="p-2">
-                                                                        <Edit className="h-4 w-4" />
-                                                                    </Button>
-                                                                </Link>
+                                                                {/* モバイル: 編集は poll かつ期限切れの場合は非表示 */}
+                                                                {!pollExpiredMobile && (
+                                                                    <Link
+                                                                        href={route('posts.edit', post.id)}
+                                                                        onClick={(e: MouseEvent) => e.stopPropagation()}
+                                                                    >
+                                                                        <Button variant="outline" size="sm" className="p-2">
+                                                                            <Edit className="h-4 w-4" />
+                                                                        </Button>
+                                                                    </Link>
+                                                                )}
                                                                 <Button
                                                                     size="sm"
                                                                     variant="destructive"
@@ -798,23 +947,78 @@ export default function PostsIndex() {
                                                     </div>
                                                 </div>
 
+                                                {/* Mobile: show expiry or "投票済み" badge for poll posts */}
                                                 <div className="flex flex-wrap items-center gap-2 text-xs">
-                                                    {post.audience === 'all' ? (
-                                                        <Badge className="bg-green-100 text-green-800">全体公開</Badge>
-                                                    ) : post.audience === 'restricted' ? (
-                                                        <Badge className="bg-purple-100 text-purple-800">限定公開</Badge>
-                                                    ) : (
-                                                        <Badge variant="outline">—</Badge>
-                                                    )}
+                                                    {/* post.type (type badge) and poll/status shown here; audience icon moved to card bottom-right */}
                                                     {post.type ? (
                                                         post.type === 'board' ? (
                                                             <Badge className="bg-blue-100 text-blue-800">掲示板</Badge>
                                                         ) : post.type === 'manual' ? (
-                                                            <Badge className="bg-sky-100 text-sky-800">マニュアル</Badge>
+                                                            <Badge className="bg-pink-100 text-pink-800">マニュアル</Badge>
+                                                        ) : post.type === 'poll' ? (
+                                                            <Badge className="bg-teal-100 text-teal-800">投票</Badge>
                                                         ) : (
                                                             <Badge variant="outline">{post.type}</Badge>
                                                         )
                                                     ) : null}
+                                                    {(() => {
+                                                        try {
+                                                            const isPoll = post?.type === 'poll';
+                                                            // determine hasVoted similar to desktop logic
+                                                            let mobileHasVoted = false;
+                                                            if (isPoll && post?.poll) {
+                                                                const p = post.poll;
+                                                                if (typeof p.has_voted === 'boolean') {
+                                                                    mobileHasVoted = p.has_voted;
+                                                                } else if (Array.isArray(p.options)) {
+                                                                    mobileHasVoted = p.options.some(
+                                                                        (opt: any) =>
+                                                                            Array.isArray(opt.votes) &&
+                                                                            opt.votes.some((v: any) => {
+                                                                                if (!v) return false;
+                                                                                if (v.user_id && currentUserId)
+                                                                                    return Number(v.user_id) === Number(currentUserId);
+                                                                                if (v.user && v.user.id && currentUserId)
+                                                                                    return Number(v.user.id) === Number(currentUserId);
+                                                                                return false;
+                                                                            }),
+                                                                    );
+                                                                }
+                                                                if (!mobileHasVoted) {
+                                                                    try {
+                                                                        if (typeof window !== 'undefined' && p && p.id) {
+                                                                            const raw = localStorage.getItem(`poll_voted_${p.id}`);
+                                                                            if (raw) {
+                                                                                const arr = JSON.parse(raw);
+                                                                                if (Array.isArray(arr) && arr.length > 0) mobileHasVoted = true;
+                                                                            }
+                                                                        }
+                                                                    } catch {
+                                                                        // ignore
+                                                                    }
+                                                                }
+                                                            }
+
+                                                            if (post?.type === 'poll') {
+                                                                if (mobileHasVoted) {
+                                                                    return (
+                                                                        <span className="ml-1 rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">
+                                                                            投票済み
+                                                                        </span>
+                                                                    );
+                                                                }
+                                                                // not voted -> show expiry
+                                                                const expIso = post?.poll?.expires_at || post?.poll_summary?.expires_at;
+                                                                const expiryStr = formatExpiryDateWithTime(expIso);
+                                                                return expiryStr ? (
+                                                                    <span className="ml-1 text-xs text-muted-foreground">{expiryStr} まで</span>
+                                                                ) : null;
+                                                            }
+                                                            return null;
+                                                        } catch {
+                                                            return null;
+                                                        }
+                                                    })()}
                                                 </div>
 
                                                 <div className="flex flex-wrap items-center gap-2">
@@ -826,6 +1030,19 @@ export default function PostsIndex() {
                                                             {t.name}
                                                         </span>
                                                     ))}
+                                                </div>
+
+                                                {/* Audience icon fixed to bottom-right of the card */}
+                                                <div className="absolute right-2 bottom-2">
+                                                    {post.audience === 'all' ? (
+                                                        <span title="全体公開" className="inline-flex items-center">
+                                                            <i className="fa-solid fa-globe text-green-600" aria-hidden="true" />
+                                                        </span>
+                                                    ) : post.audience === 'restricted' ? (
+                                                        <span title="限定公開" className="inline-flex items-center">
+                                                            <i className="fa-solid fa-lock text-purple-600" aria-hidden="true" />
+                                                        </span>
+                                                    ) : null}
                                                 </div>
                                             </div>
                                         );

@@ -17,6 +17,8 @@ use App\Policies\ShiftApplicationPolicy;
 use App\Policies\UserShiftSettingPolicy;
 use App\Policies\DefaultShiftPolicy;
 use App\Policies\AnnouncementPolicy;
+use App\Models\Poll;
+use App\Policies\PollPolicy;
 
 class AuthServiceProvider extends ServiceProvider
 {
@@ -41,6 +43,7 @@ class AuthServiceProvider extends ServiceProvider
         \App\Models\DailyNote::class => \App\Policies\DailyNotePolicy::class,
         \App\Models\Announcement::class => AnnouncementPolicy::class,
         \Spatie\Activitylog\Models\Activity::class => \App\Policies\ActivityLogPolicy::class,
+        Poll::class => PollPolicy::class,
     ];
 
     /**
