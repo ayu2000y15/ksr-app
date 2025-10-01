@@ -303,18 +303,7 @@ class PostController extends Controller
                 'audience' => $data['audience'] ?? 'all',
                 'type' => $data['type'] ?? 'board',
             ]);
-            // create an announcement for new posts
-            try {
-                $link = url('/posts/' . $post->id);
-                Announcement::create([
-                    'user_id' => $user->id,
-                    'title' => '【新規】' . ($data['title'] ?? '') . ' が投稿されました',
-                    'content' => 'ページはこちら' . $link,
-                ]);
-            } catch (\Exception $e) {
-                // do not fail the whole request for announcement creation; log and continue
-                logger()->warning('Failed to create announcement for post', ['post_id' => $post->id, 'error' => $e->getMessage()]);
-            }
+
             if ($post->type === 'poll') {
                 $pollData = $data['poll'];
                 $poll = $post->poll()->create([

@@ -463,10 +463,21 @@ export default function Dashboard() {
         const fetchUnreadPosts = async () => {
             try {
                 // add a cache-busting timestamp to avoid stale CDN/server caches in production
-                const res = await axios.get('/api/posts', { params: { type: 'board', per_page: 8, _t: Date.now() } });
+                // NOTE: include polls as well as board posts; server `type` param accepts a single value,
+                // so omit it here and filter on the client to include both 'board' and 'poll' types.
+                const res = await axios.get('/api/posts', { params: { per_page: 8, _t: Date.now() } });
                 const items = (res.data && (res.data.data || res.data)) || [];
                 const arr = Array.isArray(items) ? items : items.data || [];
-                const unread = (arr as any[]).filter((p) => !isPostViewed(p));
+                // only consider board and poll posts for unread list
+                const visible = (arr as any[]).filter((p) => {
+                    try {
+                        const t = String(p.type ?? 'board');
+                        return t === 'board' || t === 'poll' || t === 'manual';
+                    } catch {
+                        return true;
+                    }
+                });
+                const unread = visible.filter((p) => !isPostViewed(p));
                 if (!mounted) return;
                 setUnreadPosts(unread.slice(0, 5));
             } catch {

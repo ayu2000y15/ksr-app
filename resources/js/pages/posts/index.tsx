@@ -596,11 +596,17 @@ export default function PostsIndex() {
                                                                         : false;
                                                                 return (
                                                                     <div className="flex flex-col">
-                                                                        {isReadByMe ? (
+                                                                        {currentUserId ? (
                                                                             <div className="mb-1">
-                                                                                <Badge className="bg-gray-100 p-0.5 text-[10px] text-gray-400">
-                                                                                    既読
-                                                                                </Badge>
+                                                                                {isReadByMe ? (
+                                                                                    <Badge className="bg-gray-100 p-0.5 text-[10px] text-gray-400">
+                                                                                        既読
+                                                                                    </Badge>
+                                                                                ) : (
+                                                                                    <Badge className="bg-sky-100 p-0.5 text-[10px] text-sky-800">
+                                                                                        未読
+                                                                                    </Badge>
+                                                                                )}
                                                                             </div>
                                                                         ) : null}
                                                                         <div className="flex min-w-0 items-center gap-2">
@@ -885,6 +891,30 @@ export default function PostsIndex() {
                                                                     下書き
                                                                 </span>
                                                             ) : null}
+                                                            {currentUserId
+                                                                ? (() => {
+                                                                      try {
+                                                                          const views = post.views || post.viewers || post.post_views || [];
+                                                                          const read = Array.isArray(views)
+                                                                              ? views.some((v: any) => {
+                                                                                    const uid = v?.user?.id ?? v?.user_id ?? v?.id ?? v;
+                                                                                    return Number(uid) === Number(currentUserId);
+                                                                                })
+                                                                              : false;
+                                                                          return read ? (
+                                                                              <Badge className="ml-2 bg-gray-100 p-0.5 text-[10px] text-gray-400">
+                                                                                  既読
+                                                                              </Badge>
+                                                                          ) : (
+                                                                              <Badge className="ml-2 bg-sky-100 p-0.5 text-[10px] text-sky-800">
+                                                                                  未読
+                                                                              </Badge>
+                                                                          );
+                                                                      } catch {
+                                                                          return null;
+                                                                      }
+                                                                  })()
+                                                                : null}
                                                         </div>
                                                         <div>
                                                             <h3 className="mt-1 truncate text-sm font-medium">{post.title || '(無題)'}</h3>
