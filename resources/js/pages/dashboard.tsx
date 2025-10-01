@@ -444,24 +444,69 @@ export default function Dashboard() {
 
     // load recent board posts and show unread ones (limit small number)
     useEffect(() => {
-        (async () => {
+        let mounted = true;
+
+        const isPostViewed = (p: any) => {
             try {
-                // request recent posts, filter to boards and unread
-                const res = await axios.get('/api/posts', { params: { type: 'board', per_page: 8 } });
+                return (
+                    p.viewed_by_current_user === true ||
+                    p.viewed_by_current_user === 1 ||
+                    p.viewedByCurrentUser === true ||
+                    p.viewByCurrentUser === true ||
+                    p.viewed_by_current_user === '1'
+                );
+            } catch {
+                return false;
+            }
+        };
+
+        const fetchUnreadPosts = async () => {
+            try {
+                // add a cache-busting timestamp to avoid stale CDN/server caches in production
+                const res = await axios.get('/api/posts', { params: { type: 'board', per_page: 8, _t: Date.now() } });
                 const items = (res.data && (res.data.data || res.data)) || [];
                 const arr = Array.isArray(items) ? items : items.data || [];
-                const unread = (arr as any[]).filter((p) => {
-                    try {
-                        return !(p.viewed_by_current_user === true || p.viewed_by_current_user === 1 || p.viewByCurrentUser === true);
-                    } catch {
-                        return false;
-                    }
-                });
+                const unread = (arr as any[]).filter((p) => !isPostViewed(p));
+                if (!mounted) return;
                 setUnreadPosts(unread.slice(0, 5));
             } catch {
+                if (!mounted) return;
                 setUnreadPosts([]);
             }
-        })();
+        };
+
+        // initial fetch
+        void fetchUnreadPosts();
+
+        // poll periodically (fallback if other pages don't notify)
+        const POLL_MS = 30_000; // 30s
+        const pollId = window.setInterval(fetchUnreadPosts, POLL_MS);
+
+        // when the tab becomes visible, refresh immediately
+        const onVisibility = () => {
+            if (document.visibilityState === 'visible') fetchUnreadPosts();
+        };
+        document.addEventListener('visibilitychange', onVisibility);
+
+        // listen to a global event so other pages/components can notify that a post was read
+        const onPostRead = (ev: Event) => {
+            try {
+                const custom = ev as CustomEvent;
+                const id = custom?.detail;
+                if (!id) return;
+                setUnreadPosts((cur) => cur.filter((p) => Number(p.id) !== Number(id)));
+            } catch {
+                // ignore
+            }
+        };
+        window.addEventListener('postRead', onPostRead as EventListener);
+
+        return () => {
+            mounted = false;
+            window.clearInterval(pollId);
+            document.removeEventListener('visibilitychange', onVisibility);
+            window.removeEventListener('postRead', onPostRead as EventListener);
+        };
     }, []);
 
     // load tasks for the currently selected date on dashboard (only if user can view tasks)
@@ -1120,7 +1165,7 @@ export default function Dashboard() {
                                 {unreadPosts.length > 0 ? (
                                     <div className="mb-3 rounded border border-gray-200 bg-yellow-50 p-3">
                                         <p className="text-bold mb-2 text-sm">
-                                            <i className="fa-solid fa-triangle-exclamation mr-2"></i>未読の掲示板があります
+                                            <i className="fa-solid fa-triangle-exclamation mr-2"></i>未読の投稿があります
                                         </p>
                                         <ul className="space-y-1">
                                             {unreadPosts.map((p) => (
