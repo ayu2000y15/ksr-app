@@ -34,7 +34,6 @@ class AnnouncementController extends Controller
         return response()->json(['announcements' => $announcements, 'total' => $total, 'page' => $page, 'per_page' => $perPage]);
     }
 
-    // mark an announcement as read for current user
     public function markRead(Request $request, $id)
     {
         $user = Auth::user();
