@@ -510,7 +510,7 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                                     <button
                                                         aria-label="ドラッグして並び替え"
                                                         onClick={(e) => e.stopPropagation()}
-                                                        className="inline-flex h-6 w-6 items-center justify-center rounded bg-gray-100 text-gray-600"
+                                                        className="hidden h-6 w-6 items-center justify-center rounded bg-gray-100 text-gray-600 md:inline-flex"
                                                     >
                                                         <GripVertical className="h-4 w-4" />
                                                     </button>
