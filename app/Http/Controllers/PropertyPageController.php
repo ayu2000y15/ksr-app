@@ -98,9 +98,9 @@ class PropertyPageController extends Controller
             ->toArray();
 
         // send minimal users list (id, name, gender, has_car) so frontend can render icons on initial SSR
-        $users = \App\Models\User::where('status', 'active')->orderBy('id')->get(['id', 'name', 'gender', 'has_car']);
+        $users = \App\Models\User::where('status', 'active')->orderBy('position')->orderBy('id')->get(['id', 'name', 'gender', 'has_car', 'position']);
         if ($users->count() === 0) {
-            $users = \App\Models\User::orderBy('id')->get(['id', 'name', 'gender', 'has_car']);
+            $users = \App\Models\User::orderBy('position')->orderBy('id')->get(['id', 'name', 'gender', 'has_car', 'position']);
         }
 
         return Inertia::render('properties/index', [

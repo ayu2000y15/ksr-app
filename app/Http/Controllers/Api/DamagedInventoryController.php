@@ -52,12 +52,19 @@ class DamagedInventoryController extends Controller
                 } elseif ($m['table'] === 'users') {
                     $query->select('damaged_inventories.*')
                         ->leftJoin('users', 'damaged_inventories.handler_user_id', '=', 'users.id')
+                        // Prefer ordering by users.position first, then by requested foreign column
+                        ->orderBy('users.position', $direction === 'asc' ? 'asc' : 'desc')
                         ->orderBy('users.' . $m['foreign_col'], $direction);
                 }
             }
         } else {
             // default ordering
-            $query->orderBy('damaged_inventories.damaged_at', 'desc')->orderBy('damaged_inventories.id', 'desc');
+            // when no explicit sort, prefer ordering by handler user's position (asc) then damaged_at desc
+            $query->select('damaged_inventories.*')
+                ->leftJoin('users', 'damaged_inventories.handler_user_id', '=', 'users.id')
+                ->orderBy('users.position', 'asc')
+                ->orderBy('damaged_inventories.damaged_at', 'desc')
+                ->orderBy('damaged_inventories.id', 'desc');
         }
 
         $damaged = $query->get();
@@ -77,9 +84,8 @@ class DamagedInventoryController extends Controller
                 ];
             });
 
-        // return only active users ordered by id for predictable id-sorted lists
-        // Users table has an enum `status` with values like 'active', 'retired', 'shared'
-        $users = User::where('status', 'active')->orderBy('id')->get(['id', 'name']);
+        // return only active users ordered by position (then id) for predictable ordering
+        $users = User::where('status', 'active')->orderBy('position')->orderBy('id')->get(['id', 'name', 'position']);
         $damageConditions = DamageCondition::orderBy('order_column')->get(['id', 'condition']);
 
         // ensure damaged_at is passed as the raw DB value (Y-m-d) to avoid timezone shifts on the client

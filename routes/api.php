@@ -55,11 +55,46 @@ Route::middleware(['web', 'auth'])->group(function () {
         ];
     });
 
-    // ユーザー一覧（ロール割り当て用）
+    // ユーザー一覧（ロール割り当て用） — position を優先して返す
     Route::get('/users', function () {
         // 一時的に権限チェックを無効化
         // $this->authorize('viewAny', User::class);
-        return User::with('roles')->where('status', 'active')->orderBy('id')->get();
+        $q = User::with('roles')->where('status', 'active');
+        $users = $q->orderBy('position')->orderBy('id')->get();
+        if ($users->count() === 0) {
+            $users = User::with('roles')->orderBy('position')->orderBy('id')->get();
+        }
+        return $users;
+    });
+
+    // ユーザー並び替え: フロントから新しい順序の user id 配列を受け取り position を更新する
+    Route::post('/users/reorder', function (\Illuminate\Http\Request $request) {
+        try {
+            $user = $request->user();
+            // 権限チェック: ユーザー更新権限が必要
+            try {
+                \Illuminate\Support\Facades\Gate::forUser($user)->authorize('update', \App\Models\User::class);
+            } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
+                return response()->json(['message' => '権限がありません'], 403);
+            }
+
+            $data = $request->validate([
+                'ids' => 'required|array',
+                'ids.*' => 'required|integer|exists:users,id',
+            ]);
+
+            $ids = $data['ids'];
+
+            \Illuminate\Support\Facades\DB::transaction(function () use ($ids) {
+                foreach ($ids as $idx => $id) {
+                    \App\Models\User::where('id', $id)->update(['position' => $idx + 1]);
+                }
+            });
+
+            return response()->json(['message' => '並び順を更新しました'], 200);
+        } catch (\Exception $e) {
+            return response()->json(['message' => '並び順の更新に失敗しました', 'error' => $e->getMessage()], 500);
+        }
     });
 
     // ユーザー詳細（入寮している物件情報を含む）
@@ -125,9 +160,10 @@ Route::middleware(['web', 'auth'])->group(function () {
         if (in_array('status', (new \ReflectionClass(User::class))->getDefaultProperties() ?: [])) {
             // If model has default properties, still attempt status filter — keep simple: try where status = 'active'
         }
-        $users = User::where('status', 'active')->orderBy('id')->get();
+        // Prefer ordering by position then id so frontend displays stable position order
+        $users = User::where('status', 'active')->orderBy('position')->orderBy('id')->get();
         if ($users->count() === 0) {
-            $users = User::orderBy('id')->get();
+            $users = User::orderBy('position')->orderBy('id')->get();
         }
         return ['users' => $users];
     });

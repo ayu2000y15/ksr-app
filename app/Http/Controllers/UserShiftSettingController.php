@@ -13,7 +13,7 @@ class UserShiftSettingController extends Controller
     {
         $this->authorize('viewAny', UserShiftSetting::class);
         // get all users and existing settings keyed by user_id
-        $users = User::where('status', 'active')->orderBy('id')->get();
+        $users = User::where('status', 'active')->orderBy('position')->orderBy('id')->get();
         $settings = UserShiftSetting::whereIn('user_id', $users->pluck('id'))->get()->keyBy('user_id');
         return inertia('admin/user-shift-settings', ['users' => $users, 'settings' => $settings]);
     }
@@ -48,7 +48,7 @@ class UserShiftSettingController extends Controller
     public function edit(UserShiftSetting $user_shift_setting)
     {
         $this->authorize('update', $user_shift_setting);
-        $users = User::where('status', 'active')->orderBy('id')->get();
+        $users = User::where('status', 'active')->orderBy('position')->orderBy('id')->get();
         return inertia('admin/user-shift-settings/edit', ['item' => $user_shift_setting, 'users' => $users]);
     }
 

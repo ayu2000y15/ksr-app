@@ -17,7 +17,7 @@ import Toast from '@/components/ui/toast';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 
 type InventoryItemOption = { id: number; name: string; category?: { id: number; name: string } | null };
-type UserOption = { id: number; name: string };
+type UserOption = { id: number; name: string; position?: number };
 type DamageConditionOption = { id: number; condition: string };
 
 type Att = { file_path?: string; original_name?: string };
@@ -28,7 +28,7 @@ type DamagedItem = {
     inventory_item?: { id?: number; name?: string; category?: { id?: number; name?: string } } | null;
     inventory_item_id?: number;
     management_number?: string;
-    handler_user?: { id?: number; name?: string } | null;
+    handler_user?: { id?: number; name?: string; position?: number } | null;
     handler_user_id?: number;
     receipt_image_path?: string | null;
     attachments?: Att[];
@@ -668,7 +668,16 @@ export default function DamagedIndexPage() {
                                                 対応者 <span className="text-red-600">*</span>
                                             </Label>
                                             <SingleSelectCombobox
-                                                options={users.map((u) => ({ value: u.id, label: `${u.id} ${u.name}` }))}
+                                                options={(() => {
+                                                    const maxLen =
+                                                        users && users.length > 0
+                                                            ? Math.max(...users.map((u: UserOption) => String(u.position ?? u.id ?? '').length))
+                                                            : 0;
+                                                    return users.map((u: UserOption) => ({
+                                                        value: u.id,
+                                                        label: `${String(u.position ?? u.id ?? '').padStart(maxLen, ' ')} ${u.name}`,
+                                                    }));
+                                                })()}
                                                 selected={form.handler_user_id || null}
                                                 onChange={(val) => {
                                                     const unknownVal = val as unknown;
@@ -1162,7 +1171,9 @@ export default function DamagedIndexPage() {
                                                                     : '—'}
                                                             </div>
                                                             <div className="mt-1 text-sm text-gray-500">
-                                                                {it.handler_user ? `${it.handler_user.id} ${it.handler_user.name}` : ''}
+                                                                {it.handler_user
+                                                                    ? `${it.handler_user.position ?? it.handler_user.id} ${it.handler_user.name}`
+                                                                    : ''}
                                                             </div>
                                                         </div>
                                                         <div className="flex shrink-0 flex-col items-end gap-2">
@@ -1402,7 +1413,9 @@ export default function DamagedIndexPage() {
                                                                     : '—'}
                                                             </td>
                                                             <td className="p-2 align-middle text-sm">
-                                                                {it.handler_user ? `${it.handler_user.id} ${it.handler_user.name}` : ''}
+                                                                {it.handler_user
+                                                                    ? `${it.handler_user.position ?? it.handler_user.id} ${it.handler_user.name}`
+                                                                    : ''}
                                                             </td>
                                                             <td className="p-2 align-middle text-sm">
                                                                 <Button
@@ -1450,7 +1463,7 @@ export default function DamagedIndexPage() {
                                                                                     <dt className="w-1/3 text-gray-600">対応者</dt>
                                                                                     <dd className="w-2/3">
                                                                                         {it.handler_user
-                                                                                            ? `${it.handler_user.id} ${it.handler_user.name}`
+                                                                                            ? `${it.handler_user.position ?? it.handler_user.id} ${it.handler_user.name}`
                                                                                             : '—'}
                                                                                     </dd>
                                                                                 </div>

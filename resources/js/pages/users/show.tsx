@@ -93,7 +93,7 @@ export default function Show({ user, properties }: { user: any; properties: any[
                 <Card>
                     <CardHeader>
                         <CardTitle>
-                            {user.name} (ID: {user.id})
+                            {user.name} (ID: {user.position ?? user.id})
                         </CardTitle>
                     </CardHeader>
                     <CardContent>

@@ -36,14 +36,14 @@ export default function UserRolesPage() {
         fetchRoles();
     }, []);
 
-    // compute max digits for user id so we can align names
-    const maxIdDigits = Math.max(2, ...(users || []).map((u) => String(u.id).length));
+    // compute max digits for user position/id so we can align names
+    const maxIdDigits = Math.max(2, ...(users || []).map((u) => String(u.position ?? u.id).length));
 
     const fetchUsers = async () => {
         const res = await axios.get('/api/users');
-        // sort users by numeric id ascending for consistent ordering
-        const data = Array.isArray(res.data) ? (res.data as User[]).slice().sort((a, b) => Number(a.id) - Number(b.id)) : res.data;
-        setUsers(data);
+        // Server now returns users ordered by position then id. Respect server-side order.
+        const data = Array.isArray(res.data) ? (res.data as User[]) : (res.data.users ?? res.data);
+        setUsers(data as User[]);
     };
     const fetchRoles = async () => {
         const res = await axios.get('/api/roles');
@@ -102,7 +102,7 @@ export default function UserRolesPage() {
                                                     className="inline-block text-right font-mono text-sm text-muted-foreground"
                                                     style={{ width: `${maxIdDigits}ch` }}
                                                 >
-                                                    {String(u.id)}
+                                                    {String(u.position)}
                                                 </span>
                                                 <span className="ml-3 truncate">{u.name}</span>
                                             </div>

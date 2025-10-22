@@ -20,7 +20,7 @@ export default function MonthEditor({
     onMonthChange,
     accentClass,
 }: {
-    users: Array<{ id: number; name: string }>;
+    users: Array<{ id: number; name: string; position?: number; [k: string]: any }>;
     days: string[];
     holidays?: string[];
     existingShifts?: Record<number, Record<string, Cell>>;
@@ -40,6 +40,25 @@ export default function MonthEditor({
 
     // small pad helper used for building month query
     const pad = (n: number) => String(n).padStart(2, '0');
+
+    // client-side sorted users: prefer position then id (stable fallback by name)
+    const sortedUsers = useMemo(() => {
+        try {
+            const list = Array.isArray(users) ? users.slice() : [];
+            return list.sort((a: any, b: any) => {
+                const ak = Number(a.position ?? a.id ?? 0);
+                const bk = Number(b.position ?? b.id ?? 0);
+                if (ak !== bk) return ak - bk;
+                // fallback: keep deterministic order by id then name
+                const aid = Number(a.id ?? 0);
+                const bid = Number(b.id ?? 0);
+                if (aid !== bid) return aid - bid;
+                return String(a.name ?? '').localeCompare(String(b.name ?? ''));
+            });
+        } catch {
+            return users || [];
+        }
+    }, [users]);
 
     // month state so arrows can navigate months (initialized from `days` prop)
     const [currentYear, setCurrentYear] = useState(() => {
@@ -79,7 +98,7 @@ export default function MonthEditor({
         (dayList: string[]) => {
             const initial: Record<number, Record<string, Cell>> = {};
             const es = existingShifts as Record<string, Record<string, Cell>> | undefined;
-            users.forEach((u) => {
+            (sortedUsers || []).forEach((u: any) => {
                 initial[u.id] = {};
                 dayList.forEach((d) => {
                     // prefer existing DB value (handle numeric or string keys), otherwise empty (未設定)
@@ -93,7 +112,7 @@ export default function MonthEditor({
             });
             return initial;
         },
-        [users, existingShifts],
+        [sortedUsers, existingShifts],
     );
 
     const [grid, setGrid] = useState<Record<number, Record<string, Cell>>>(() => ({}));
@@ -414,7 +433,7 @@ export default function MonthEditor({
 
     const bulkSetSelectedToDay = () => {
         if (selectedDates.size === 0) return;
-        users.forEach((u) => {
+        (sortedUsers || []).forEach((u: any) => {
             selectedDates.forEach((d) => {
                 // only set to 'day' if the cell is currently empty (do not overwrite existing assignments)
                 const cur = gridRef.current?.[u.id]?.[d] ?? '';
@@ -564,7 +583,7 @@ export default function MonthEditor({
                                 {users.map((u) => (
                                     <div key={`user-${u.id}`} className="flex h-12 items-center border-b bg-white p-2" style={{ maxWidth: '12rem' }}>
                                         <span className="truncate text-sm">
-                                            <span className="mr-2 inline-block w-8 text-right font-mono text-sm">{u.id}</span>
+                                            <span className="mr-2 inline-block w-8 text-right font-mono text-sm">{u.position}</span>
                                             <Link
                                                 href={route('users.show', { user: u.id })}
                                                 className="truncate text-sm text-blue-600 hover:underline"

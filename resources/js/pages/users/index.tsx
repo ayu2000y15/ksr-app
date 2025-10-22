@@ -7,7 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 // types are intentionally typed as any in this file to avoid strict type dependency
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { Car, Download, Edit, Eye, LoaderCircle, Plus, Trash } from 'lucide-react';
+import axios from 'axios';
+import { Car, Download, Edit, Eye, GripVertical, LoaderCircle, Plus, Trash } from 'lucide-react';
 import { Fragment, ReactNode, useEffect, useState } from 'react';
 // dialog modal removed: details now open on a separate page
 
@@ -275,7 +276,7 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                             </div>
 
                                             <div className="flex flex-col items-end space-y-2">
-                                                <div className="text-xs text-muted-foreground">ID: {user.id}</div>
+                                                <div className="text-xs text-muted-foreground">ID: {user.position ?? user.id}</div>
                                                 <div>{renderStatusBadge(user.status)}</div>
                                                 <div className="text-xs text-muted-foreground">{new Date(user.created_at).toLocaleDateString()}</div>
                                             </div>
@@ -424,6 +425,10 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead>
+                                            {/* ドラッグハンドル列 */}
+                                            <div className="sr-only">並び替え</div>
+                                        </TableHead>
+                                        <TableHead>
                                             <SortableHeader sort_key="id" queryParams={queryParams}>
                                                 ID
                                             </SortableHeader>
@@ -453,8 +458,64 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                 <TableBody>
                                     {users.map((user: any) => (
                                         <Fragment key={`user-${user.id}`}>
-                                            <TableRow key={user.id} className="cursor-pointer hover:bg-gray-50" onClick={() => toggleExpand(user.id)}>
-                                                <TableCell>{user.id}</TableCell>
+                                            <TableRow
+                                                key={user.id}
+                                                className="cursor-pointer hover:bg-gray-50"
+                                                onClick={() => toggleExpand(user.id)}
+                                                draggable={true}
+                                                onDragStart={(e) => {
+                                                    e.dataTransfer?.setData('text/plain', String(user.id));
+                                                    e.dataTransfer!.effectAllowed = 'move';
+                                                    // highlight drag source
+                                                    e.currentTarget.classList.add('opacity-60');
+                                                }}
+                                                onDragEnd={(e) => {
+                                                    e.currentTarget.classList.remove('opacity-60');
+                                                }}
+                                                onDragOver={(e) => {
+                                                    e.preventDefault();
+                                                    e.dataTransfer!.dropEffect = 'move';
+                                                    const target = e.currentTarget as HTMLElement;
+                                                    target.classList.add('bg-gray-100');
+                                                }}
+                                                onDragLeave={(e) => {
+                                                    const target = e.currentTarget as HTMLElement;
+                                                    target.classList.remove('bg-gray-100');
+                                                }}
+                                                onDrop={async (e) => {
+                                                    e.preventDefault();
+                                                    const draggedId = Number(e.dataTransfer?.getData('text/plain'));
+                                                    const targetId = user.id;
+                                                    if (!draggedId || draggedId === targetId) return;
+                                                    // build new order array
+                                                    const old = [...users];
+                                                    const fromIndex = old.findIndex((u) => u.id === draggedId);
+                                                    const toIndex = old.findIndex((u) => u.id === targetId);
+                                                    if (fromIndex < 0 || toIndex < 0) return;
+                                                    const [moved] = old.splice(fromIndex, 1);
+                                                    old.splice(toIndex, 0, moved);
+                                                    setUsers(old);
+                                                    // send updated order to server (ids array)
+                                                    try {
+                                                        await axios.post('/api/users/reorder', { ids: old.map((u) => u.id) });
+                                                        // optimistic: update positions client-side to match server-assigned positions
+                                                        setUsers((prev) => prev.map((u, i) => ({ ...u, position: i + 1 })));
+                                                    } catch (err) {
+                                                        console.error('reorder failed', err);
+                                                        // optionally show toast
+                                                    }
+                                                }}
+                                            >
+                                                <TableCell>
+                                                    <button
+                                                        aria-label="ドラッグして並び替え"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        className="inline-flex h-6 w-6 items-center justify-center rounded bg-gray-100 text-gray-600"
+                                                    >
+                                                        <GripVertical className="h-4 w-4" />
+                                                    </button>
+                                                </TableCell>
+                                                <TableCell>{user.position ?? user.id}</TableCell>
                                                 <TableCell>
                                                     <div className="flex w-full items-center gap-3">
                                                         <div className={`flex items-center gap-3`}>

@@ -18,6 +18,7 @@ class User extends BaseAuthenticatable
      * @var array<int, string>
      */
     protected $fillable = [
+        'position',
         'name',
         'email',
         'password',

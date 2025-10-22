@@ -149,14 +149,10 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
         }
     }, [queryDate]);
 
-    // ensure users are displayed in ID order in the month editor
+    // prefer server-provided ordering (server returns users ordered by position)
     const usersById = useMemo(() => {
         const u = (page.props as any).users || [];
-        try {
-            return (Array.isArray(u) ? u.slice() : []).sort((a: any, b: any) => (a.id ?? 0) - (b.id ?? 0));
-        } catch (e) {
-            return u;
-        }
+        return Array.isArray(u) ? u.slice() : [];
     }, [(page.props as any).users]);
 
     const serverDefaultShifts: DefaultShiftType[] = ((page.props as any).defaultShifts as DefaultShiftType[]) || [];
@@ -389,10 +385,10 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                                         const bDate = String(b.date ?? b.start_time ?? '').slice(0, 10);
                                         if (aDate !== bDate) return aDate < bDate ? -1 : 1;
 
-                                        // same date: sort by user_id ascending
-                                        const aUid = Number(a.user_id ?? (a.user && a.user.id) ?? 0);
-                                        const bUid = Number(b.user_id ?? (b.user && b.user.id) ?? 0);
-                                        if (aUid !== bUid) return aUid - bUid;
+                                        // same date: prefer user.position, then user_id, then user.id (ascending)
+                                        const aKey = Number(a.user?.position ?? a.user_id ?? (a.user && a.user.id) ?? 0);
+                                        const bKey = Number(b.user?.position ?? b.user_id ?? (b.user && b.user.id) ?? 0);
+                                        if (aKey !== bKey) return aKey - bKey;
 
                                         // final tiebreaker: start_time (string compare of wall-clock)
                                         const aStart = String(a.start_time ?? '');
@@ -429,7 +425,18 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                                                 })()}
                                             </TableCell>
 
-                                            <TableCell>{sd.user ? sd.user.name : '—'}</TableCell>
+                                            <TableCell>
+                                                {sd.user ? (
+                                                    <>
+                                                        <span className="mr-2 inline-block w-10 text-right font-mono tabular-nums">
+                                                            {sd.user.position ?? sd.user.id}
+                                                        </span>
+                                                        <span>{sd.user.name}</span>
+                                                    </>
+                                                ) : (
+                                                    '—'
+                                                )}
+                                            </TableCell>
 
                                             <TableCell>
                                                 {(() => {

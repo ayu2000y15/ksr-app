@@ -37,10 +37,15 @@ class UserController extends Controller
         $sort = in_array($request->query('sort', 'id'), $sortableColumns) ? $request->query('sort', 'id') : 'id';
         $direction = in_array($request->query('direction', 'asc'), ['asc', 'desc']) ? $request->query('direction', 'asc') : 'asc';
 
-        $users = User::with('roles')
-            ->orderBy($sort, $direction)
-            ->simplePaginate(50) // ページネーションを追加
-            ->withQueryString(); // クエリパラメータを維持
+        $query = User::with('roles');
+        if ($sort === 'id') {
+            // prefer explicit position ordering, fallback to id
+            $query = $query->orderBy('position', $direction)->orderBy('id', $direction);
+        } else {
+            $query = $query->orderBy($sort, $direction);
+        }
+
+        $users = $query->simplePaginate(50)->withQueryString(); // ページネーションを追加 and keep query params
 
         return Inertia::render('users/index', [
             'users' => $users,

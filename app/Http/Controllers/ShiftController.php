@@ -32,8 +32,8 @@ class ShiftController extends Controller
             ->whereBetween('date', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
             ->get();
 
-        // only include active users in the month editor
-        $users = User::select('id', 'name')->where('status', 'active')->orderBy('name')->get();
+        // only include active users in the month editor (prefer position ordering then id)
+        $users = User::select('id', 'name', 'position')->where('status', 'active')->orderBy('position')->orderBy('id')->get();
         $holidays = Holiday::whereBetween('date', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
             ->pluck('date')
             ->map(function ($d) {
@@ -172,7 +172,7 @@ class ShiftController extends Controller
             'date' => $d,
             'shiftDetails' => $shiftDetails,
             // include active users so the daily page can show a user picker for quick-add
-            'users' => User::select('id', 'name', 'status')->where('status', 'active')->orderBy('id')->get(),
+            'users' => User::select('id', 'name', 'status', 'position')->where('status', 'active')->orderBy('position')->orderBy('id')->get(),
             'queryParams' => $request->query() ?: null,
         ]);
     }
@@ -716,7 +716,7 @@ class ShiftController extends Controller
         $start = $month->copy()->startOfMonth();
         $end = $month->copy()->endOfMonth();
 
-        $users = User::where('status', 'active')->get();
+        $users = User::where('status', 'active')->orderBy('position')->orderBy('id')->get();
 
         $created = 0;
         $updated = 0;

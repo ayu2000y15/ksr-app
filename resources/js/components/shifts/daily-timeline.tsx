@@ -12,7 +12,7 @@ type ShiftDetail = {
     end_time?: string | null;
     date?: string | null;
     user_id?: number | null;
-    user?: { id?: number; name?: string } | null;
+    user?: { id?: number; name?: string; position?: number | null } | null;
     shift_type?: string | null;
     type?: string | null;
     [key: string]: unknown;
@@ -70,9 +70,11 @@ export default function DailyTimeline(props: {
     const availableUsers = Array.isArray(allUsers)
         ? allUsers.filter((u: any) => String(u.status ?? 'active') === 'active' && !presentUserIds.has(Number(u.id)))
         : [];
-    // compute max id width for simple alignment in the select options
+    // compute max id/position width for simple alignment in the select options
     const maxIdLen =
-        Array.isArray(availableUsers) && availableUsers.length > 0 ? Math.max(...availableUsers.map((u: any) => String(u.id ?? '').length)) : 0;
+        Array.isArray(availableUsers) && availableUsers.length > 0
+            ? Math.max(...availableUsers.map((u: any) => String(u.position ?? u.id ?? '').length))
+            : 0;
 
     const [interval] = useState<number>(initialInterval);
     const [selTarget, setSelTarget] = useState<{ id: number | null; startIndex: number | null } | null>(null);
@@ -135,10 +137,10 @@ export default function DailyTimeline(props: {
                 return { ...(sd as ShiftDetail), sMin, eMin, startRaw: sd.start_time ?? null, endRaw: sd.end_time ?? null } as Item;
             })
             .sort((a: Item, b: Item) => {
-                // Primary sort: user ID ascending
-                const aUid = Number(a.user_id ?? (a.user && (a.user as { id?: number }).id) ?? 0);
-                const bUid = Number(b.user_id ?? (b.user && (b.user as { id?: number }).id) ?? 0);
-                if (aUid !== bUid) return aUid - bUid;
+                // Primary sort: prefer user.position, then user_id, then user.id (ascending)
+                const aKey = Number(a.user?.position ?? a.user_id ?? (a.user && (a.user as { id?: number }).id) ?? 0);
+                const bKey = Number(b.user?.position ?? b.user_id ?? (b.user && (b.user as { id?: number }).id) ?? 0);
+                if (aKey !== bKey) return aKey - bKey;
 
                 // Secondary: start time asc
                 const aStart = String(a.startRaw ?? '');
@@ -607,7 +609,9 @@ export default function DailyTimeline(props: {
                                             onChange={(e) => toggleAbsent(Number(it.id ?? 0), e.target.checked)}
                                             title="チェックで欠席扱い"
                                         />
-                                        <span className="mr-2 w-6 text-right font-mono text-sm">{it.user_id ?? (it.user && it.user.id) ?? '—'}</span>
+                                        <span className="mr-2 w-6 text-right font-mono text-sm">
+                                            {it.user?.position ?? it.user_id ?? (it.user && it.user.id) ?? '—'}
+                                        </span>
                                         <span className={`truncate ${absentMap[Number(it.id ?? 0)] ? 'text-gray-600 line-through opacity-60' : ''}`}>
                                             {it.user ? it.user.name : '—'}
                                         </span>
@@ -892,7 +896,7 @@ export default function DailyTimeline(props: {
                                     <option value="">-- ユーザーを選択 --</option>
                                     {(availableUsers || []).map((u: any) => (
                                         <option key={u.id} value={u.id}>
-                                            {`${String(u.id ?? '').padStart(maxIdLen, ' ')} ${u.name}`}
+                                            {`${String(u.position ?? u.id ?? '').padStart(maxIdLen, ' ')} ${u.name}`}
                                         </option>
                                     ))}
                                 </select>

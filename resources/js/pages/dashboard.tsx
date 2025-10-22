@@ -310,6 +310,7 @@ export default function Dashboard() {
     const [ganttWidth, setGanttWidth] = useState(900);
     const [ganttOffset, setGanttOffset] = useState(300);
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+    const [isShiftCalendarOpen, setIsShiftCalendarOpen] = useState(false);
     const page = usePage<SharedData>();
     // Use a typed view of shared page props to avoid sprinkling `any` casts.
     const { auth } = page.props as any;
@@ -821,6 +822,7 @@ export default function Dashboard() {
             setCurrentDate(date);
         }
         setIsCalendarOpen(false);
+        setIsShiftCalendarOpen(false);
     };
 
     // format helpers
@@ -1464,7 +1466,7 @@ export default function Dashboard() {
                             </div>
 
                             <div className="flex flex-wrap items-center gap-2">
-                                <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
+                                <Popover open={isShiftCalendarOpen} onOpenChange={setIsShiftCalendarOpen}>
                                     <PopoverTrigger asChild>
                                         <Button variant="outline" size="icon">
                                             <CalendarIcon className="h-4 w-4" />

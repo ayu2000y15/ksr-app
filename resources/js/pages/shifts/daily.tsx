@@ -634,9 +634,9 @@ export default function Daily() {
                                                 const rb = rank(b);
                                                 if (ra !== rb) return ra - rb;
 
-                                                const aUid = Number(a.user_id ?? (a.user && a.user.id) ?? 0);
-                                                const bUid = Number(b.user_id ?? (b.user && b.user.id) ?? 0);
-                                                if (aUid !== bUid) return aUid - bUid;
+                                                const aKey = Number(a.user?.position ?? a.user_id ?? (a.user && a.user.id) ?? 0);
+                                                const bKey = Number(b.user?.position ?? b.user_id ?? (b.user && b.user.id) ?? 0);
+                                                if (aKey !== bKey) return aKey - bKey;
 
                                                 const aStart = String(a.start_time ?? a.startRaw ?? '');
                                                 const bStart = String(b.start_time ?? b.startRaw ?? '');
@@ -862,7 +862,7 @@ export default function Daily() {
                                                     }
                                                 })
                                                 .forEach((w: any) => {
-                                                    const uid = w.user_id ?? (w.user && w.user.id) ?? null;
+                                                    const uid = w.user?.position ?? w.user_id ?? (w.user && w.user.id) ?? null;
                                                     if (uid !== null && typeof uid !== 'undefined') absentUserIds.add(String(uid));
                                                 });
 
@@ -903,9 +903,9 @@ export default function Daily() {
                                                     const ra = rank(a);
                                                     const rb = rank(b);
                                                     if (ra !== rb) return ra - rb;
-                                                    const aUid = Number(a.user_id ?? (a.user && a.user.id) ?? 0);
-                                                    const bUid = Number(b.user_id ?? (b.user && b.user.id) ?? 0);
-                                                    if (aUid !== bUid) return aUid - bUid;
+                                                    const aKey = Number(a.user?.position ?? a.user_id ?? (a.user && a.user.id) ?? 0);
+                                                    const bKey = Number(b.user?.position ?? b.user_id ?? (b.user && b.user.id) ?? 0);
+                                                    if (aKey !== bKey) return aKey - bKey;
                                                     const aStart = String(a.start_time ?? a.startRaw ?? '');
                                                     const bStart = String(b.start_time ?? b.startRaw ?? '');
                                                     if (aStart < bStart) return -1;
@@ -916,14 +916,15 @@ export default function Daily() {
                                             // map user id to order index
                                             const userOrder: Record<string | number, number> = {};
                                             workItems.forEach((wi: any, idx: number) => {
-                                                const uid = wi.user_id ?? (wi.user && wi.user.id) ?? '';
+                                                const uid = wi.user?.position ?? wi.user_id ?? (wi.user && wi.user.id) ?? '';
                                                 if (userOrder[String(uid)] === undefined) userOrder[String(uid)] = idx;
                                             });
 
                                             const combined = sdBreaks
                                                 .map((s: any) => ({
                                                     id: s.id,
-                                                    user_id: s.user_id ?? (s.user && s.user.id) ?? '—',
+                                                    // prefer position for display/key, fallback to user_id then user.id
+                                                    user_id: s.user?.position ?? s.user_id ?? (s.user && s.user.id) ?? '—',
                                                     start_time: s.start_time,
                                                     end_time: s.end_time,
                                                     status: s.status ?? 'scheduled',
@@ -966,8 +967,9 @@ export default function Daily() {
                                             const sortedByHeader = combined.slice().sort((a: any, b: any) => {
                                                 const dir = breakSortDir === 'asc' ? 1 : -1;
                                                 if (breakSortBy === 'user') {
-                                                    const au = String(a.user_id ?? '') || '';
-                                                    const bu = String(b.user_id ?? '') || '';
+                                                    // sort by the timeline order (userOrder) which respects position
+                                                    const au = userOrder[String(a.user_id)] ?? Number.MAX_SAFE_INTEGER;
+                                                    const bu = userOrder[String(b.user_id)] ?? Number.MAX_SAFE_INTEGER;
                                                     if (au < bu) return -1 * dir;
                                                     if (au > bu) return 1 * dir;
                                                     return 0;
@@ -1581,7 +1583,7 @@ function EditableShiftRow({
         <TableRow id={`sd-row-${sd.id}`} className="hover:bg-gray-50">
             <TableCell>
                 <div className="flex items-center gap-2">
-                    <span className="w-10 text-right font-mono text-sm">{sd.user_id ?? (sd.user && sd.user.id) ?? '—'}</span>
+                    <span className="w-10 text-right font-mono text-sm">{sd.user?.position ?? sd.user_id ?? (sd.user && sd.user.id) ?? '—'}</span>
                     <span className={`truncate ${isAbsent ? 'text-gray-600 line-through opacity-60' : ''}`}>{sd.user ? sd.user.name : '—'}</span>
                 </div>
             </TableCell>

@@ -519,7 +519,16 @@ export default function Index({ properties }: any) {
                                                 ユーザー名 <span className="text-red-600">*</span>
                                             </Label>
                                             <MultiSelectCombobox
-                                                options={users.map((u) => ({ value: u.id, label: `${u.id} ${u.name}` }))}
+                                                options={(() => {
+                                                    const maxLen =
+                                                        users && users.length > 0
+                                                            ? Math.max(...users.map((u: any) => String(u.position ?? u.id ?? '').length))
+                                                            : 0;
+                                                    return users.map((u: any) => ({
+                                                        value: u.id,
+                                                        label: `${String(u.position ?? u.id ?? '').padStart(maxLen, ' ')} ${u.name}`,
+                                                    }));
+                                                })()}
                                                 selected={form.user_ids}
                                                 onChange={(vals) => setForm({ ...form, user_ids: vals })}
                                             />
@@ -553,13 +562,26 @@ export default function Index({ properties }: any) {
                                             <Label>退去確認者</Label>
                                             {(() => {
                                                 // ensure the selected confirmer id is present in the options so the label shows immediately
-                                                const baseOptions = users.map((u) => ({ value: u.id, label: `${u.id} ${u.name}` }));
+                                                const baseOptions = (() => {
+                                                    const maxLen =
+                                                        users && users.length > 0
+                                                            ? Math.max(...users.map((u: any) => String(u.position ?? u.id ?? '').length))
+                                                            : 0;
+                                                    return users.map((u: any) => ({
+                                                        value: u.id,
+                                                        label: `${String(u.position ?? u.id ?? '').padStart(maxLen, ' ')} ${u.name}`,
+                                                    }));
+                                                })();
                                                 const selectedCid = form.move_out_confirm_user_id || '';
                                                 let confirmOptions = baseOptions;
                                                 if (selectedCid && !baseOptions.find((o) => o.value === selectedCid)) {
                                                     const name = allUsersMap[selectedCid as number] || '';
+                                                    // try to resolve position from SSR-provided users if available
+                                                    const ssUsers = (page.props as any).users || [];
+                                                    const found = ssUsers.find((x: any) => Number(x.id) === Number(selectedCid));
+                                                    const selectedPosition = found ? (found.position ?? found.id) : selectedCid;
                                                     confirmOptions = [
-                                                        { value: selectedCid as number, label: `${selectedCid} ${name}` },
+                                                        { value: selectedCid as number, label: `${selectedPosition} ${name}` },
                                                         ...baseOptions,
                                                     ];
                                                 }

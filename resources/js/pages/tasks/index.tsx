@@ -662,7 +662,7 @@ export default function TasksIndexPage() {
                                                 担当者 <span className="ml-1 text-sm text-gray-400"></span>
                                             </Label>
                                             <MultiSelectCombobox
-                                                options={users.map((u) => ({ value: u.id, label: `${u.id} ${u.name}` }))}
+                                                options={users.map((u) => ({ value: u.id, label: `${u.position} ${u.name}` }))}
                                                 selected={form.user_ids}
                                                 onChange={(vals) => setForm({ ...form, user_ids: vals })}
                                             />

@@ -7,7 +7,7 @@ type ShiftDetail = {
     end_time?: string | null;
     date?: string | null;
     user_id?: number | null;
-    user?: { id?: number; name?: string } | null;
+    user?: { id?: number; name?: string; position?: number | null } | null;
     shift_type?: string | null;
     type?: string | null;
     status?: string | null;
@@ -115,9 +115,9 @@ export default function BreakTimeline(props: {
                     const ra = rank(a);
                     const rb = rank(b);
                     if (ra !== rb) return ra - rb;
-                    const aUid = Number(a.user_id ?? (a.user && (a.user as { id?: number }).id) ?? 0);
-                    const bUid = Number(b.user_id ?? (b.user && (b.user as { id?: number }).id) ?? 0);
-                    if (aUid !== bUid) return aUid - bUid;
+                    const aPos = Number(a.user?.position ?? a.user_id ?? (a.user && (a.user as { id?: number }).id) ?? 0);
+                    const bPos = Number(b.user?.position ?? b.user_id ?? (b.user && (b.user as { id?: number }).id) ?? 0);
+                    if (aPos !== bPos) return aPos - bPos;
                     const aStart = String(a.startRaw ?? '');
                     const bStart = String(b.startRaw ?? '');
                     if (aStart < bStart) return -1;
@@ -406,7 +406,9 @@ export default function BreakTimeline(props: {
                     <div className="space-y-2">
                         {(visibleItems || []).map((it) => (
                             <div key={`label-${it.id}`} className="flex h-10 items-center border-b bg-white pr-2">
-                                <span className="mr-2 w-6 text-right font-mono text-sm">{it.user_id ?? (it.user && it.user.id) ?? '—'}</span>
+                                <span className="mr-2 w-6 text-right font-mono text-sm">
+                                    {it.user?.position ?? it.user_id ?? (it.user && it.user.id) ?? '—'}
+                                </span>
                                 <span className="truncate">{it.user ? it.user.name : '—'}</span>
                                 {(() => {
                                     // step_out may be present on the shiftDetail or nested under `shift`
