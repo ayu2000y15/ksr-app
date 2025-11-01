@@ -1189,7 +1189,7 @@ export default function Dashboard() {
                                                                     <span
                                                                         className={`mr-2 inline-block text-right font-mono md:w-12 ${absent ? 'text-gray-500 line-through' : ''}`}
                                                                     >
-                                                                        {String(s.user?.id ?? s.user_id)}
+                                                                        {String(s.user?.position ?? s.user_id)}
                                                                     </span>
                                                                     <div className="flex min-w-0 items-center">
                                                                         <span

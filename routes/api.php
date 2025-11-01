@@ -72,9 +72,7 @@ Route::middleware(['web', 'auth'])->group(function () {
         try {
             $user = $request->user();
             // 権限チェック: ユーザー更新権限が必要
-            try {
-                \Illuminate\Support\Facades\Gate::forUser($user)->authorize('update', \App\Models\User::class);
-            } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
+            if (!$user->hasRole('システム管理者') && !$user->hasPermissionTo('user.update')) {
                 return response()->json(['message' => '権限がありません'], 403);
             }
 

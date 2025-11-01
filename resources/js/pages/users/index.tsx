@@ -484,25 +484,35 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                                 }}
                                                 onDrop={async (e) => {
                                                     e.preventDefault();
+                                                    const target = e.currentTarget as HTMLElement;
+                                                    target.classList.remove('bg-gray-100');
+
                                                     const draggedId = Number(e.dataTransfer?.getData('text/plain'));
                                                     const targetId = user.id;
                                                     if (!draggedId || draggedId === targetId) return;
+
                                                     // build new order array
                                                     const old = [...users];
                                                     const fromIndex = old.findIndex((u) => u.id === draggedId);
                                                     const toIndex = old.findIndex((u) => u.id === targetId);
                                                     if (fromIndex < 0 || toIndex < 0) return;
+
                                                     const [moved] = old.splice(fromIndex, 1);
                                                     old.splice(toIndex, 0, moved);
-                                                    setUsers(old);
+
+                                                    // Optimistically update UI
+                                                    const reordered = old.map((u, i) => ({ ...u, position: i + 1 }));
+                                                    setUsers(reordered);
+
                                                     // send updated order to server (ids array)
                                                     try {
-                                                        await axios.post('/api/users/reorder', { ids: old.map((u) => u.id) });
-                                                        // optimistic: update positions client-side to match server-assigned positions
-                                                        setUsers((prev) => prev.map((u, i) => ({ ...u, position: i + 1 })));
+                                                        const response = await axios.post('/api/users/reorder', { ids: old.map((u) => u.id) });
+                                                        console.log('並び順を保存しました:', response.data);
                                                     } catch (err) {
                                                         console.error('reorder failed', err);
-                                                        // optionally show toast
+                                                        alert('並び順の保存に失敗しました。ページをリロードしてください。');
+                                                        // Revert to original order on error
+                                                        setUsers(initialUsers.data);
                                                     }
                                                 }}
                                             >
