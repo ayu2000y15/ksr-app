@@ -473,6 +473,15 @@ class ShiftController extends Controller
             $user = User::find($userId);
             $uStart = $user && !empty($user->default_start_time) ? $user->default_start_time : null;
             $uEnd = $user && !empty($user->default_end_time) ? $user->default_end_time : null;
+
+            // 00:00:00の場合は空とみなす
+            if ($uStart === '00:00:00' || $uStart === '00:00') {
+                $uStart = null;
+            }
+            if ($uEnd === '00:00:00' || $uEnd === '00:00') {
+                $uEnd = null;
+            }
+
             if ($uStart && $uEnd) {
                 $start = Carbon::parse($date . ' ' . $uStart);
                 $end = Carbon::parse($date . ' ' . $uEnd);

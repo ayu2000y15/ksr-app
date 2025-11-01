@@ -125,6 +125,7 @@ export default function MonthEditor({
     const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' | 'info' } | null>(null);
 
     const [selectedDates, setSelectedDates] = useState<Set<string>>(() => new Set());
+    const [selectedUsers, setSelectedUsers] = useState<Set<number>>(() => new Set());
 
     // attendance map shown in UI; initialized from prop if provided
     const [attendanceMap, setAttendanceMap] = useState<Record<number, number>>(() =>
@@ -431,20 +432,64 @@ export default function MonthEditor({
         });
     };
 
+    const toggleUserSelection = (userId: number) => {
+        setSelectedUsers((prev) => {
+            const next = new Set(prev);
+            if (next.has(userId)) next.delete(userId);
+            else next.add(userId);
+            return next;
+        });
+    };
+
+    const toggleAllUsers = () => {
+        if (selectedUsers.size === sortedUsers.length) {
+            setSelectedUsers(new Set());
+        } else {
+            setSelectedUsers(new Set(sortedUsers.map((u: any) => u.id)));
+        }
+    };
+
+    const toggleAllDates = () => {
+        // only toggle future dates
+        const futureDates = visibleDays.filter((d) => {
+            try {
+                const dt = parseLocal(d);
+                const dayStart = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime();
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                return dayStart >= today.getTime();
+            } catch {
+                return true;
+            }
+        });
+
+        if (selectedDates.size === futureDates.length) {
+            setSelectedDates(new Set());
+        } else {
+            setSelectedDates(new Set(futureDates));
+        }
+    };
+
     const bulkSetSelectedToDay = () => {
-        if (selectedDates.size === 0) return;
-        (sortedUsers || []).forEach((u: any) => {
+        if (selectedDates.size === 0 || selectedUsers.size === 0) {
+            setToast({ message: 'ユーザーと日付の両方を選択してください', type: 'info' });
+            return;
+        }
+
+        selectedUsers.forEach((userId) => {
             selectedDates.forEach((d) => {
                 // only set to 'day' if the cell is currently empty (do not overwrite existing assignments)
-                const cur = gridRef.current?.[u.id]?.[d] ?? '';
+                const cur = gridRef.current?.[userId]?.[d] ?? '';
                 if (cur === '') {
-                    setCell(u.id, d, 'day');
-                    queueSave(u.id, d, 'day');
+                    setCell(userId, d, 'day');
+                    queueSave(userId, d, 'day');
                 }
             });
         });
-        setToast({ message: '選択日を昼にしました', type: 'success' });
+
+        setToast({ message: `${selectedUsers.size}人のユーザーの${selectedDates.size}日分を昼にしました`, type: 'success' });
         setSelectedDates(new Set());
+        setSelectedUsers(new Set());
     };
 
     return (
@@ -463,6 +508,12 @@ export default function MonthEditor({
                         </Button>
                     </div>
                     <div className="flex items-center gap-2">
+                        <Button size="sm" variant="outline" onClick={toggleAllDates} aria-label="全日選択/解除" title="未来の全日付を選択/解除">
+                            {selectedDates.size > 0 ? '全日解除' : '全日選択'}
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={toggleAllUsers} aria-label="全ユーザー選択/解除" title="全ユーザーを選択/解除">
+                            {selectedUsers.size === sortedUsers.length && sortedUsers.length > 0 ? '全ユーザー解除' : '全ユーザー選択'}
+                        </Button>
                         <Button
                             size="sm"
                             aria-label="規定休日登録"
@@ -501,8 +552,13 @@ export default function MonthEditor({
                         >
                             規定休日登録
                         </Button>
-                        <Button size="sm" onClick={bulkSetSelectedToDay} disabled={selectedDates.size === 0} aria-label="選択日を昼に">
-                            選択日を昼に
+                        <Button
+                            size="sm"
+                            onClick={bulkSetSelectedToDay}
+                            disabled={selectedDates.size === 0 || selectedUsers.size === 0}
+                            aria-label="選択日を昼に"
+                        >
+                            選択日を昼に ({selectedUsers.size}人 × {selectedDates.size}日)
                         </Button>
                         {saving && <div className="text-sm text-muted-foreground">保存中…</div>}
                     </div>
@@ -518,7 +574,8 @@ export default function MonthEditor({
                                 過去日にのみ表示されます。確定ボタンを押せば勤務時間と休憩時間が確定され、統計情報が正しく計算されます。
                             </div>
                             <div className="mt-1">
-                                ・<strong> 「選択日を昼に」ボタン</strong>: すでに登録済みの予定は変更せずに、空欄のユーザーを全て昼に設定します。
+                                ・<strong> 「選択日を昼に」ボタン</strong>:
+                                ユーザーと日付のチェックボックスで選択した組み合わせを昼に設定します。すでに登録済みの予定は変更されません。
                             </div>
                             <div className="mt-1">
                                 ・<strong> 「規定休日登録」ボタン</strong>:
@@ -560,7 +617,16 @@ export default function MonthEditor({
                         <div className="flex w-24 flex-shrink-0 flex-col border-r bg-white md:w-48">
                             {/* ヘッダー部分 */}
                             <div className="sticky top-0 z-30 flex h-20 items-end border-b bg-white p-2">
-                                <span className="text-sm font-medium">{`ユーザー名 (出勤日数)`}</span>
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedUsers.size === sortedUsers.length && sortedUsers.length > 0}
+                                        onChange={toggleAllUsers}
+                                        aria-label="すべてのユーザーを選択"
+                                        title="すべてのユーザーを選択/解除"
+                                    />
+                                    <span className="text-sm font-medium">{`ユーザー名 (出勤日数)`}</span>
+                                </div>
                             </div>
 
                             {/* ユーザー名一覧 */}
@@ -582,6 +648,13 @@ export default function MonthEditor({
                             >
                                 {users.map((u) => (
                                     <div key={`user-${u.id}`} className="flex h-12 items-center border-b bg-white p-2" style={{ maxWidth: '12rem' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedUsers.has(u.id)}
+                                            onChange={() => toggleUserSelection(u.id)}
+                                            aria-label={`ユーザー ${u.name} を選択`}
+                                            className="mr-2 flex-shrink-0"
+                                        />
                                         <span className="truncate text-sm">
                                             <span className="mr-2 inline-block w-8 text-right font-mono text-sm">{u.position}</span>
                                             <Link
