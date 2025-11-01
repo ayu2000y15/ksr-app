@@ -36,6 +36,19 @@ export default function Daily() {
     const [shiftDetails, setShiftDetails] = useState<any[]>(initialShiftDetails);
     const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' | 'info' } | null>(null);
 
+    // Date navigation handler
+    const handleDateChange = (daysDelta: number) => {
+        if (!date) return;
+        try {
+            const currentDate = new Date(String(date).slice(0, 10));
+            currentDate.setDate(currentDate.getDate() + daysDelta);
+            const newDate = currentDate.toISOString().slice(0, 10);
+            Inertia.visit(route('shifts.daily', { date: newDate }));
+        } catch {
+            // ignore invalid date
+        }
+    };
+
     // keep local state in sync if props change (Inertia navigation)
     useEffect(() => {
         setShiftDetails(props?.shiftDetails || []);
@@ -581,6 +594,7 @@ export default function Daily() {
                                 if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                             }, 120);
                         }}
+                        onDateChange={handleDateChange}
                     />
                 ) : (
                     <BreakTimeline
@@ -598,6 +612,7 @@ export default function Daily() {
                             setToast({ message: '削除しました', type: 'success' });
                         }}
                         outingMode={breakType === 'outing'}
+                        onDateChange={handleDateChange}
                     />
                 )}
 

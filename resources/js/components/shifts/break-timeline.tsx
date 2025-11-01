@@ -1,4 +1,6 @@
+import { Button } from '@/components/ui/button';
 import axios from 'axios';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 type ShiftDetail = {
@@ -45,6 +47,8 @@ export default function BreakTimeline(props: {
     canDeleteBreak?: boolean;
     // optional callback when a break is deleted (pass id)
     onDeleteBreak?: (id: number) => void;
+    // optional callback when date navigation is requested (pass number of days to add/subtract)
+    onDateChange?: (daysDelta: number) => void;
 }) {
     const { date, shiftDetails = [], initialInterval = 15, breakType = 'planned', onCreateBreak, breaks = [], locked = false } = props;
 
@@ -382,7 +386,19 @@ export default function BreakTimeline(props: {
         <div className="rounded border bg-white p-4">
             <style>{`.labels-scroll::-webkit-scrollbar{display:none}.labels-scroll{-ms-overflow-style:none;scrollbar-width:none;} .footer-scroll{-ms-overflow-style:auto;scrollbar-width:auto;} .gantt-scroll::-webkit-scrollbar{display:none}.gantt-scroll{-ms-overflow-style:none;scrollbar-width:none;}`}</style>
             <div className="mb-3 flex items-center justify-between">
-                <div className="text-lg font-medium">{date ? String(date).slice(0, 10).replace(/-/g, '/') : ''}</div>
+                <div className="flex items-center gap-2">
+                    {props.onDateChange && (
+                        <Button size="sm" onClick={() => props.onDateChange?.(-1)} className="h-8 w-8 p-0">
+                            <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                    )}
+                    <div className="text-lg font-medium">{date ? String(date).slice(0, 10).replace(/-/g, '/') : ''}</div>
+                    {props.onDateChange && (
+                        <Button size="sm" onClick={() => props.onDateChange?.(1)} className="h-8 w-8 p-0">
+                            <ChevronRight className="h-4 w-4" />
+                        </Button>
+                    )}
+                </div>
                 <div className="flex items-center gap-3">
                     <label className="text-sm">グリッド間隔:</label>
                     <span className="rounded border bg-gray-50 p-1 text-sm">{String(initialInterval)}分</span>

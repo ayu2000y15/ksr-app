@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { usePage } from '@inertiajs/react';
 import axios from 'axios';
-import { Plus, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 type BreakPayload = { shift_detail_id: number; start_time: string; end_time: string; type?: string };
@@ -38,6 +38,7 @@ export default function DailyTimeline(props: {
     breakType?: 'planned' | 'actual';
     onCreateBreak?: (p: BreakPayload) => void;
     breaks?: Break[];
+    onDateChange?: (daysDelta: number) => void;
 }) {
     // read Inertia shared props via usePage() to reliably access users
     const page = usePage();
@@ -528,7 +529,19 @@ export default function DailyTimeline(props: {
     return (
         <div className="rounded border bg-white p-4">
             <div className="mb-3 flex items-center justify-between">
-                <div className="text-lg font-medium">{displayDate}</div>
+                <div className="flex items-center gap-2">
+                    {props.onDateChange && (
+                        <Button size="sm" onClick={() => props.onDateChange?.(-1)} className="h-8 w-8 p-0">
+                            <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                    )}
+                    <div className="text-lg font-medium">{displayDate}</div>
+                    {props.onDateChange && (
+                        <Button size="sm" onClick={() => props.onDateChange?.(1)} className="h-8 w-8 p-0">
+                            <ChevronRight className="h-4 w-4" />
+                        </Button>
+                    )}
+                </div>
                 {mode === 'break' && (
                     <div className="flex items-center gap-3">
                         <label className="text-sm">グリッド間隔:</label>

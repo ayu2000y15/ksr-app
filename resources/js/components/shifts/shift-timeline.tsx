@@ -7,6 +7,7 @@ export default function ShiftTimeline(props: {
     onBarClick?: (id: number) => void;
     onCreateBreak?: (p: any) => void;
     breaks?: any[];
+    onDateChange?: (daysDelta: number) => void;
 }) {
     const { initialInterval = 30 } = props;
     return <DailyTimeline {...props} mode="shift" initialInterval={initialInterval} />;
