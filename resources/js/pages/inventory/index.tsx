@@ -4,8 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Toast from '@/components/ui/toast';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { Head, Link, usePage } from '@inertiajs/react';
-import { ChevronDown, ChevronRight, Plus } from 'lucide-react';
-import { useEffect, useState, type MouseEvent } from 'react';
+import { ChevronDown, ChevronRight, Plus, Upload } from 'lucide-react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 
 export default function Index({ items: initial }: any) {
     const page = usePage();
@@ -18,6 +18,46 @@ export default function Index({ items: initial }: any) {
     };
     const [items, setItems] = useState(initial?.data || []);
     useEffect(() => setItems(initial?.data || []), [initial]);
+
+    // CSV アップロード関連
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [uploading, setUploading] = useState(false);
+
+    const handleCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setUploading(true);
+        const formData = new FormData();
+        formData.append('csv_file', file);
+
+        try {
+            const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+            const res = await fetch(route('inventory.import_csv'), {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin',
+                headers: { 'X-CSRF-TOKEN': token, Accept: 'application/json' },
+            });
+
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({ message: 'アップロードに失敗しました' }));
+                setToast({ message: data.message || 'アップロードに失敗しました', type: 'error' });
+                return;
+            }
+
+            // 成功したらページをリロード
+            window.location.reload();
+        } catch (err) {
+            console.error(err);
+            setToast({ message: 'CSV アップロード中にエラーが発生しました', type: 'error' });
+        } finally {
+            setUploading(false);
+            if (fileInputRef.current) {
+                fileInputRef.current.value = '';
+            }
+        }
+    };
 
     const onRowClick = (it: any) => {
         window.location.href = route('inventory.show', it.id) as unknown as string;
@@ -301,11 +341,49 @@ export default function Index({ items: initial }: any) {
         <AppSidebarLayout breadcrumbs={[{ title: '在庫管理', href: route('inventory.index') }]}>
             <Head title="在庫管理" />
             <div className="p-4 sm:p-6 lg:p-8">
+                {/* CSV一括登録の説明 */}
+                {inventoryPerms.create && (
+                    <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-4">
+                        <h3 className="mb-2 text-sm font-semibold text-blue-900">CSV一括登録について</h3>
+                        <p className="mb-2 text-sm text-blue-800">CSVファイルから在庫を一括登録できます。以下の形式でCSVを作成してください：</p>
+                        <div className="mb-2 overflow-x-auto">
+                            <code className="block rounded bg-white p-2 text-xs whitespace-nowrap">
+                                商品名,カテゴリ名,仕入先,カタログ名,サイズ,単位,保管場所,数量,メモ
+                            </code>
+                        </div>
+                        <ul className="mb-2 list-inside list-disc space-y-1 text-sm text-blue-800">
+                            <li>商品名は必須です</li>
+                            <li>カテゴリ名は事前に登録されている名前と完全一致する必要があります</li>
+                            <li>同じ商品名が既に存在する場合は、情報が更新されます</li>
+                            <li>数量は指定された保管場所の在庫数として上書きされます</li>
+                        </ul>
+                        <a href="/inventory_sample.csv" download className="text-sm font-medium text-blue-600 hover:underline">
+                            サンプルCSVをダウンロード
+                        </a>
+                    </div>
+                )}
+
                 <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                         <HeadingSmall title="在庫管理" description="カテゴリごとに在庫を表示" />
                     </div>
                     <div className="flex items-center justify-start gap-2 sm:justify-end">
+                        {/* CSV一括登録 */}
+                        {inventoryPerms.create && (
+                            <>
+                                <input type="file" ref={fileInputRef} accept=".csv,.txt" onChange={handleCsvUpload} className="hidden" />
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    disabled={uploading}
+                                    className="whitespace-nowrap"
+                                >
+                                    <Upload className="mr-0 h-4 w-4 sm:mr-2" />
+                                    <span className="hidden sm:inline">{uploading ? 'アップロード中...' : 'CSV一括登録'}</span>
+                                </Button>
+                            </>
+                        )}
                         {/* 在庫ログ: show if user can view logs */}
                         {inventoryPerms.logs && (
                             <Link href={route('inventory.stock_logs.index')}>
