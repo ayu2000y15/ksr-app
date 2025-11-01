@@ -727,6 +727,39 @@ export default function Index({
                                                                             </Button>
                                                                         )
                                                                     ) : null}
+                                                                    {/* 休暇登録ボタン: シフトが存在しても表示 */}
+                                                                    {!holiday && dayIndex !== 0 && dayIndex !== 6 && (
+                                                                        <>
+                                                                            {(mealTicketButton ||
+                                                                                (showShiftActionsByDeadline && isStepOut !== undefined)) && (
+                                                                                <div className="w-1" />
+                                                                            )}
+                                                                            {withinDeadline ? (
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    className="bg-green-600 text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500"
+                                                                                    onClick={() => {
+                                                                                        if (localRemainingDays !== null && localRemainingDays <= 0) {
+                                                                                            setToast({
+                                                                                                message:
+                                                                                                    '残りの休暇が不足しているため申請できません。',
+                                                                                                type: 'error',
+                                                                                            });
+                                                                                            return;
+                                                                                        }
+                                                                                        setModalDate(iso);
+                                                                                        setModalOpen(true);
+                                                                                    }}
+                                                                                >
+                                                                                    休暇申請
+                                                                                </Button>
+                                                                            ) : (
+                                                                                <Button size="sm" onClick={() => postImmediateLeave(iso)}>
+                                                                                    休暇登録
+                                                                                </Button>
+                                                                            )}
+                                                                        </>
+                                                                    )}
                                                                 </>
                                                             );
                                                         }
