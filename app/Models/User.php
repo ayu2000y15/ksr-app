@@ -88,4 +88,12 @@ class User extends BaseAuthenticatable
     {
         return $this->hasMany(\App\Models\PollVote::class);
     }
+
+    /**
+     * ユーザーが借りている貸出物
+     */
+    public function rentals()
+    {
+        return $this->hasMany(\App\Models\Rental::class, 'user_id');
+    }
 }

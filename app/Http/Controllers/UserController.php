@@ -37,7 +37,9 @@ class UserController extends Controller
         $sort = in_array($request->query('sort', 'id'), $sortableColumns) ? $request->query('sort', 'id') : 'id';
         $direction = in_array($request->query('direction', 'asc'), ['asc', 'desc']) ? $request->query('direction', 'asc') : 'asc';
 
-        $query = User::with('roles');
+        $query = User::with(['roles', 'rentals' => function ($query) {
+            $query->with(['rentalUser', 'returnUser', 'rentalItem'])->orderBy('rental_date', 'desc');
+        }]);
         if ($sort === 'id') {
             // prefer explicit position ordering, fallback to id
             $query = $query->orderBy('position', $direction)->orderBy('id', $direction);
@@ -184,8 +186,23 @@ class UserController extends Controller
         } else {
             $this->authorize('view', $user);
         }
+
+        // 貸出物マスタを取得（有効なもののみ、表示順でソート）
+        $rentalItems = \App\Models\RentalItem::where('is_active', true)
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get();
+
+        // 現在の貸出中のアイテムを取得（返却日がnullのもの）
+        $currentRentals = $user->rentals()
+            ->whereNull('return_date')
+            ->with('rentalItem')
+            ->get();
+
         return Inertia::render('users/edit', [
             'user' => $user,
+            'rentalItems' => $rentalItems,
+            'currentRentals' => $currentRentals,
         ]);
     }
 
@@ -479,6 +496,42 @@ class UserController extends Controller
             $dirty = true;
         }
         if ($dirty) $user->save();
+
+        // 貸出物の更新処理
+        // 新規貸出
+        if ($request->has('new_rental_items')) {
+            $newRentalItemIds = $request->input('new_rental_items', []);
+
+            foreach ($newRentalItemIds as $rentalItemId) {
+                \App\Models\Rental::create([
+                    'user_id' => $user->id,
+                    'rental_item_id' => $rentalItemId,
+                    'rental_date' => now()->toDateString(),
+                    'rental_user_id' => Auth::id(),
+                    'return_date' => null,
+                    'return_user_id' => null,
+                ]);
+            }
+        }
+
+        // 返却処理
+        if ($request->has('return_rental_items')) {
+            $returnRentalItemIds = $request->input('return_rental_items', []);
+
+            foreach ($returnRentalItemIds as $rentalItemId) {
+                $rental = $user->rentals()
+                    ->where('rental_item_id', $rentalItemId)
+                    ->whereNull('return_date')
+                    ->first();
+
+                if ($rental) {
+                    $rental->update([
+                        'return_date' => now()->toDateString(),
+                        'return_user_id' => Auth::id(),
+                    ]);
+                }
+            }
+        }
 
         return Redirect::route('users.index')->with('success', 'ユーザー情報を更新しました。');
     }

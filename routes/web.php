@@ -66,6 +66,16 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
     // ユーザー統計ページ（shifts 配下のパスに移動）
     Route::get('/shifts/user-stats', [UserController::class, 'stats'])->name('shifts.user-stats');
 
+    // --- 貸出物マスタ管理ルート ---
+    Route::get('/rental-items', [App\Http\Controllers\RentalItemController::class, 'index'])->name('rental-items.index');
+    Route::get('/rental-items/create', [App\Http\Controllers\RentalItemController::class, 'create'])->name('rental-items.create');
+    Route::post('/rental-items', [App\Http\Controllers\RentalItemController::class, 'store'])->name('rental-items.store');
+    Route::get('/rental-items/{rentalItem}/edit', [App\Http\Controllers\RentalItemController::class, 'edit'])->name('rental-items.edit');
+    Route::patch('/rental-items/{rentalItem}', [App\Http\Controllers\RentalItemController::class, 'update'])->name('rental-items.update');
+    Route::delete('/rental-items/{rentalItem}', [App\Http\Controllers\RentalItemController::class, 'destroy'])->name('rental-items.destroy');
+    Route::post('/api/rental-items/reorder', [App\Http\Controllers\RentalItemController::class, 'reorder'])->name('rental-items.reorder');
+
+
     // --- 管理画面（Inertiaページ） ---
     Route::inertia('/admin/roles', 'admin/roles')->name('admin.roles');
     Route::inertia('/admin/roles/create', 'admin/roles/create')->name('admin.roles.create');

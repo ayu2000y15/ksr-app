@@ -235,14 +235,22 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                 <Card>
                     <CardHeader className="flex-row items-center justify-between">
                         <CardTitle>ユーザー一覧</CardTitle>
-                        {canCreateUsers && (
-                            <Link href={route('users.create')}>
-                                <Button>
-                                    <Plus className="mr-0 h-4 w-4 sm:mr-2" />
-                                    <span className="hidden sm:inline">新規作成</span>
+                        <div className="flex gap-2">
+                            <Link href={route('rental-items.index')}>
+                                <Button variant="outline">
+                                    <span className="hidden sm:inline">貸出物マスタ</span>
+                                    <span className="sm:hidden">貸出物</span>
                                 </Button>
                             </Link>
-                        )}
+                            {canCreateUsers && (
+                                <Link href={route('users.create')}>
+                                    <Button>
+                                        <Plus className="mr-0 h-4 w-4 sm:mr-2" />
+                                        <span className="hidden sm:inline">新規作成</span>
+                                    </Button>
+                                </Link>
+                            )}
+                        </div>
                     </CardHeader>
                     <CardContent>
                         {/* Mobile: stacked card list (no horizontal scroll) */}
@@ -352,6 +360,33 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                                         <div className="w-36 text-sm text-muted-foreground">メモ</div>
                                                         <div className="flex-1 whitespace-pre-line">{user.memo || '—'}</div>
                                                     </div>
+
+                                                    {/* 貸出リスト */}
+                                                    {user.rentals && user.rentals.length > 0 && (
+                                                        <div className="mt-4">
+                                                            <div className="mb-2 text-sm font-semibold text-foreground">貸出リスト</div>
+                                                            <div className="space-y-2">
+                                                                {user.rentals.map((rental: any) => (
+                                                                    <div key={rental.id} className="rounded border bg-white p-2 text-xs">
+                                                                        <div className="font-medium">{rental.rental_item?.name || '—'}</div>
+                                                                        <div className="mt-1 text-muted-foreground">
+                                                                            貸出日: {new Date(rental.rental_date).toLocaleDateString()} / 対応者:{' '}
+                                                                            {rental.rental_user?.name || '—'}
+                                                                        </div>
+                                                                        {rental.return_date && (
+                                                                            <div className="text-muted-foreground">
+                                                                                返却日: {new Date(rental.return_date).toLocaleDateString()} / 対応者:{' '}
+                                                                                {rental.return_user?.name || '—'}
+                                                                            </div>
+                                                                        )}
+                                                                        {rental.notes && (
+                                                                            <div className="mt-1 text-muted-foreground">備考: {rental.notes}</div>
+                                                                        )}
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
 
                                                     {user.profile_image
                                                         ? (() => {
@@ -643,6 +678,38 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                                                     <div className="w-36 text-sm text-muted-foreground">メモ</div>
                                                                     <div className="flex-1 whitespace-pre-line">{user.memo || '—'}</div>
                                                                 </div>
+
+                                                                {/* 貸出リスト */}
+                                                                {user.rentals && user.rentals.length > 0 && (
+                                                                    <div className="mt-4">
+                                                                        <div className="mb-2 text-sm font-semibold text-foreground">貸出リスト</div>
+                                                                        <div className="space-y-2">
+                                                                            {user.rentals.map((rental: any) => (
+                                                                                <div key={rental.id} className="rounded border bg-white p-2 text-xs">
+                                                                                    <div className="font-medium">
+                                                                                        {rental.rental_item?.name || '—'}
+                                                                                    </div>
+                                                                                    <div className="mt-1 text-muted-foreground">
+                                                                                        貸出日: {new Date(rental.rental_date).toLocaleDateString()} |
+                                                                                        対応者: {rental.rental_user?.name || '—'}
+                                                                                    </div>
+                                                                                    {rental.return_date && (
+                                                                                        <div className="text-muted-foreground">
+                                                                                            返却日:{' '}
+                                                                                            {new Date(rental.return_date).toLocaleDateString()} |
+                                                                                            対応者: {rental.return_user?.name || '—'}
+                                                                                        </div>
+                                                                                    )}
+                                                                                    {rental.notes && (
+                                                                                        <div className="mt-1 text-muted-foreground">
+                                                                                            備考: {rental.notes}
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
 
                                                                 {/* プロフィール画像 (展開時の一番下に表示、3:4 長方形) */}
                                                                 {user.profile_image

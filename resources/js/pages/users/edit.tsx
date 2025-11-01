@@ -18,10 +18,15 @@ const breadcrumbs = [
 ];
 
 export default function EditUserPage() {
-    const pageProps = usePage().props as unknown as { flash?: any; user: any; credentials?: any };
+    const pageProps = usePage().props as unknown as { flash?: any; user: any; credentials?: any; rentalItems?: any[]; currentRentals?: any[] };
     const flash = pageProps.flash || null;
     const user: any = pageProps.user;
     const credentials = pageProps.credentials || (flash && flash.credentials) || null;
+    const rentalItems = pageProps.rentalItems || [];
+    const currentRentals = pageProps.currentRentals || [];
+
+    // 現在貸出中のアイテムIDの配列を取得
+    const currentRentalItemIds = currentRentals.map((r: any) => r.rental_item_id);
 
     const { data, setData, post, patch, processing, errors } = useForm({
         name: user.name || '',
@@ -46,6 +51,8 @@ export default function EditUserPage() {
         employment_notes: user.employment_notes || '',
         profile_image: null as File | null,
         remove_profile_image: false,
+        new_rental_items: [] as number[], // 新規貸出するアイテムID
+        return_rental_items: [] as number[], // 返却するアイテムID
     });
 
     const submit = (e: FormEvent) => {
@@ -473,6 +480,97 @@ export default function EditUserPage() {
                                     <Textarea id="memo" value={data.memo} onChange={(e) => setData('memo', e.target.value)} />
                                     <InputError message={errors.memo} className="mt-2" />
                                 </div>
+
+                                {/* 貸出物選択 */}
+                                {rentalItems.length > 0 && (
+                                    <div>
+                                        <Label>貸出物</Label>
+
+                                        {/* 現在貸出中のアイテム */}
+                                        {currentRentals.length > 0 && (
+                                            <div className="mt-2">
+                                                <div className="mb-2 text-sm font-medium text-gray-700">貸出中</div>
+                                                <div className="space-y-2 rounded-md border border-blue-200 bg-blue-50 p-4">
+                                                    {currentRentals.map((rental: any) => (
+                                                        <div key={rental.id} className="flex items-center justify-between">
+                                                            <div className="flex-1">
+                                                                <span className="text-sm font-medium text-gray-900">{rental.rental_item?.name}</span>
+                                                                {rental.rental_item?.description && (
+                                                                    <span className="ml-2 text-xs text-gray-500">
+                                                                        ({rental.rental_item.description})
+                                                                    </span>
+                                                                )}
+                                                                <div className="mt-1 text-xs text-gray-600">
+                                                                    貸出日: {new Date(rental.rental_date).toLocaleDateString()}
+                                                                </div>
+                                                            </div>
+                                                            <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant="outline"
+                                                                onClick={() => {
+                                                                    if (!data.return_rental_items.includes(rental.rental_item_id)) {
+                                                                        setData('return_rental_items', [
+                                                                            ...data.return_rental_items,
+                                                                            rental.rental_item_id,
+                                                                        ]);
+                                                                    }
+                                                                }}
+                                                                disabled={data.return_rental_items.includes(rental.rental_item_id)}
+                                                                className={
+                                                                    data.return_rental_items.includes(rental.rental_item_id) ? 'bg-gray-200' : ''
+                                                                }
+                                                            >
+                                                                {data.return_rental_items.includes(rental.rental_item_id) ? '返却予定' : '返却'}
+                                                            </Button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* 新規貸出可能なアイテム */}
+                                        <div className="mt-4">
+                                            <div className="mb-2 text-sm font-medium text-gray-700">新規貸出</div>
+                                            <div className="space-y-2 rounded-md border p-4">
+                                                {rentalItems
+                                                    .filter((item: any) => !currentRentalItemIds.includes(item.id))
+                                                    .map((item: any) => (
+                                                        <div key={item.id} className="flex items-center space-x-2">
+                                                            <input
+                                                                type="checkbox"
+                                                                id={`rental-item-${item.id}`}
+                                                                checked={data.new_rental_items.includes(item.id)}
+                                                                onChange={(e) => {
+                                                                    if (e.target.checked) {
+                                                                        setData('new_rental_items', [...data.new_rental_items, item.id]);
+                                                                    } else {
+                                                                        setData(
+                                                                            'new_rental_items',
+                                                                            data.new_rental_items.filter((id: number) => id !== item.id),
+                                                                        );
+                                                                    }
+                                                                }}
+                                                                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                                            />
+                                                            <label
+                                                                htmlFor={`rental-item-${item.id}`}
+                                                                className="cursor-pointer text-sm font-medium text-gray-700"
+                                                            >
+                                                                {item.name}
+                                                                {item.description && (
+                                                                    <span className="ml-2 text-xs text-gray-500">({item.description})</span>
+                                                                )}
+                                                            </label>
+                                                        </div>
+                                                    ))}
+                                                {rentalItems.filter((item: any) => !currentRentalItemIds.includes(item.id)).length === 0 && (
+                                                    <p className="text-sm text-gray-500">新規貸出可能なアイテムはありません</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
 
                                 <div>
                                     <Label>従業員証用顔写真（3cm × 4cm）</Label>
