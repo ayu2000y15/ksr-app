@@ -93,6 +93,8 @@ export default function Index({ items: initial }: any) {
     const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' | 'info' } | null>(null);
     // collapsed state per category for mobile accordion (default: closed)
     const [collapsedCats, setCollapsedCats] = useState<Record<string, boolean>>({});
+    // CSV説明の展開状態
+    const [csvHelpExpanded, setCsvHelpExpanded] = useState(false);
 
     const toggleCollapse = (key: string) => {
         setCollapsedCats((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -343,23 +345,36 @@ export default function Index({ items: initial }: any) {
             <div className="p-4 sm:p-6 lg:p-8">
                 {/* CSV一括登録の説明 */}
                 {inventoryPerms.create && (
-                    <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-4">
-                        <h3 className="mb-2 text-sm font-semibold text-blue-900">CSV一括登録について</h3>
-                        <p className="mb-2 text-sm text-blue-800">CSVファイルから在庫を一括登録できます。以下の形式でCSVを作成してください：</p>
-                        <div className="mb-2 overflow-x-auto">
-                            <code className="block rounded bg-white p-2 text-xs whitespace-nowrap">
-                                商品名,カテゴリ名,仕入先,カタログ名,サイズ,単位,保管場所,数量,メモ
-                            </code>
-                        </div>
-                        <ul className="mb-2 list-inside list-disc space-y-1 text-sm text-blue-800">
-                            <li>商品名は必須です</li>
-                            <li>カテゴリ名は事前に登録されている名前と完全一致する必要があります</li>
-                            <li>同じ商品名が既に存在する場合は、情報が更新されます</li>
-                            <li>数量は指定された保管場所の在庫数として上書きされます</li>
-                        </ul>
-                        <a href="/inventory_sample.csv" download className="text-sm font-medium text-blue-600 hover:underline">
-                            サンプルCSVをダウンロード
-                        </a>
+                    <div className="mb-4 rounded-md border border-blue-200 bg-blue-50">
+                        <button
+                            type="button"
+                            onClick={() => setCsvHelpExpanded(!csvHelpExpanded)}
+                            className="flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-blue-100"
+                        >
+                            <h3 className="text-sm font-semibold text-blue-900">CSV一括登録について</h3>
+                            <ChevronDown className={`h-4 w-4 text-blue-900 transition-transform ${csvHelpExpanded ? 'rotate-180' : ''}`} />
+                        </button>
+                        {csvHelpExpanded && (
+                            <div className="border-t border-blue-200 p-4 pt-3">
+                                <p className="mb-2 text-sm text-blue-800">
+                                    CSVファイルから在庫を一括登録できます。以下の形式でCSVを作成してください：
+                                </p>
+                                <div className="mb-2 overflow-x-auto">
+                                    <code className="block rounded bg-white p-2 text-xs whitespace-nowrap">
+                                        商品名,カテゴリ名,仕入先,カタログ名,サイズ,単位,保管場所,数量,メモ
+                                    </code>
+                                </div>
+                                <ul className="mb-2 list-inside list-disc space-y-1 text-sm text-blue-800">
+                                    <li>商品名は必須です</li>
+                                    <li>カテゴリ名は事前に登録されている名前と完全一致する必要があります</li>
+                                    <li>同じ商品名が既に存在する場合は、情報が更新されます</li>
+                                    <li>数量は指定された保管場所の在庫数として上書きされます</li>
+                                </ul>
+                                <a href="/inventory_sample.csv" download className="text-sm font-medium text-blue-600 hover:underline">
+                                    サンプルCSVをダウンロード
+                                </a>
+                            </div>
+                        )}
                     </div>
                 )}
 
