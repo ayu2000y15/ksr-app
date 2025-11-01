@@ -138,10 +138,12 @@ export default function BreakTimeline(props: {
         const padAfter = 240;
 
         const rawStart = Math.max(0, minStart - padBefore);
-        const start = rawStart - (rawStart % interval);
+        // 開始時刻を interval の倍数に切り捨て（明示的に floor を使用）
+        const start = Math.floor(rawStart / interval) * interval;
 
         const rawEnd = maxEnd + padAfter;
-        const end = rawEnd - (rawEnd % interval) + interval;
+        // 終了時刻を interval の倍数に切り上げ（明示的に ceil を使用）
+        const end = Math.ceil(rawEnd / interval) * interval;
 
         return end - start < 120 ? [start - 60, end + 60] : [start, end];
     }, [items, interval]);
@@ -462,11 +464,12 @@ export default function BreakTimeline(props: {
                             {timeSlots.map((t, i) => {
                                 const displayTime = t;
                                 const displayHour = Math.floor((displayTime % 1440) / 60);
+                                const displayMinute = (displayTime % 1440) % 60;
+                                // 時刻ラベルは整時（分=0）の位置のみ表示
+                                const shouldShowLabel = displayMinute === 0;
                                 return (
                                     <div key={t + ':' + i} className="border-l py-1 text-center text-xs text-muted-foreground">
-                                        {(i - 2) % Math.max(1, Math.floor(60 / interval)) === 0
-                                            ? String(displayHour >= 0 ? displayHour : displayHour + 24)
-                                            : ''}
+                                        {shouldShowLabel ? String(displayHour >= 0 ? displayHour : displayHour + 24) : ''}
                                     </div>
                                 );
                             })}

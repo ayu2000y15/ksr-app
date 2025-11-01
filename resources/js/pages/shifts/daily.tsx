@@ -341,6 +341,22 @@ export default function Daily() {
             <Head title={`日間タイムライン ${displayDate || ''}`} />
             <div className="p-4 sm:p-6 lg:p-8">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    {/* 上段：右端に戻るボタンを配置（出勤編集ボタン行の上） */}
+                    <div className="mb-2 flex w-full justify-start">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                                try {
+                                    if (typeof window !== 'undefined' && window.history && window.history.back) window.history.back();
+                                } catch {
+                                    // ignore
+                                }
+                            }}
+                        >
+                            戻る
+                        </Button>
+                    </div>
                     <div className="flex flex-shrink-0 items-center gap-2">
                         <button
                             className={`rounded px-3 py-1 text-sm ${mode === 'shift' ? 'bg-indigo-600 text-white' : 'bg-gray-100'}`}

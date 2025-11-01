@@ -150,6 +150,38 @@ function renderWithLinks(text?: string, highlight?: string | null) {
 
 // --- メインコンポーネント ---
 export default function DailyNotesIndex() {
+    // NOTE: When navigating to /daily-notes we want to perform a full page reload
+    // once. This helps refresh server-side data/state that may not be picked up
+    // by client-side navigation. We use sessionStorage to ensure we reload only
+    // once per open (prevent infinite reload loops).
+    useEffect(() => {
+        try {
+            if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') return;
+            const key = 'ksr.daily-notes.reloaded';
+            const path = window.location.pathname || '';
+            const isDailyNotes = path.replace(/\/+$/, '').endsWith('/daily-notes');
+            if (!isDailyNotes) {
+                // clear flag when leaving the page so future visits may reload again
+                sessionStorage.removeItem(key);
+                return;
+            }
+
+            if (sessionStorage.getItem(key) !== '1') {
+                // mark and reload once
+                sessionStorage.setItem(key, '1');
+                // give React a tick to finish mounting (not strictly necessary) then reload
+                setTimeout(() => {
+                    window.location.reload();
+                }, 10);
+            } else {
+                // we already reloaded once — remove the flag to allow reload on a
+                // fresh visit later
+                sessionStorage.removeItem(key);
+            }
+        } catch {
+            // ignore failures (e.g. storage unavailable)
+        }
+    }, []);
     const [currentMonth, setCurrentMonth] = useState<Date>(() => {
         // initialize month based on Japan Standard Time (UTC+9)
         const now = new Date();
@@ -191,7 +223,7 @@ export default function DailyNotesIndex() {
     const monthStr = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}`;
 
     // search state (default: from 3 months ago to today)
-    const formatYMD = (d: Date) => d.toISOString().slice(0, 10);
+
     // default search dates should use Japan Standard Time
     const todayStr = toJstYmd(new Date());
     const threeMonthsAgo = toJstDate(new Date());

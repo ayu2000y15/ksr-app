@@ -159,10 +159,13 @@ export default function DailyTimeline(props: {
         const maxEnd = Math.max(...ends);
         const padBefore = mode === 'break' ? 120 : 60;
         const padAfter = mode === 'break' ? 240 : 120;
-        const start = Math.max(0, minStart - padBefore);
-        const end = maxEnd + padAfter;
+        const rawStart = Math.max(0, minStart - padBefore);
+        const rawEnd = maxEnd + padAfter;
+        // interval の倍数に揃える（開始は切り捨て、終了は切り上げ）
+        const start = Math.floor(rawStart / interval) * interval;
+        const end = Math.ceil(rawEnd / interval) * interval;
         return end - start < 120 ? [Math.max(0, start - 60), Math.min(24 * 60, end + 60)] : [start, end];
-    }, [items, mode]);
+    }, [items, mode, interval]);
 
     const totalMinutes = timelineEndMin - timelineStartMin;
     const stepCount = Math.max(1, Math.ceil(totalMinutes / interval));
