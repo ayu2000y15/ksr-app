@@ -3,6 +3,29 @@ import { Link, usePage } from '@inertiajs/react';
 import { Calendar, Clock, Key, Shield, Sliders, Users } from 'lucide-react';
 import * as React from 'react';
 
+// 各種設定メニューに表示可能な項目があるかチェックするカスタムフック
+export function useHasVisibleSettingsItems() {
+    const page = usePage<import('@/types').SharedData>();
+    const permissions: string[] = page.props?.auth?.permissions ?? [];
+    const isSuperAdmin: boolean = page.props?.auth?.isSuperAdmin ?? (page.props as any)['auth.isSuperAdmin'] ?? false;
+
+    // システム管理者なら常にtrue
+    if (isSuperAdmin) return true;
+
+    const settings = [
+        { permission: 'role.view' },
+        { permission: 'permission.view' },
+        { permission: 'role.assign' },
+        { permission: 'default_shift.view' },
+        { permission: 'user_shift_setting.view' },
+        { permission: 'holiday.view' },
+        { permission: 'activitylog.view' },
+    ];
+
+    // いずれかの権限があればtrue
+    return settings.some((item) => item.permission && permissions.includes(item.permission));
+}
+
 export function SidebarSettingsMenu({ isCollapsed, currentPath }: { isCollapsed: boolean; currentPath: string }) {
     const page = usePage<import('@/types').SharedData>();
     const permissions: string[] = page.props?.auth?.permissions ?? [];

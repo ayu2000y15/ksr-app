@@ -14,7 +14,7 @@ import { Link, usePage } from '@inertiajs/react';
 import { AlertTriangle, Calendar, CalendarCheck, CheckSquare, FileText, Home, MessageSquare, Package, Users, Wrench } from 'lucide-react';
 import * as React from 'react';
 import { AppLogo } from './app-logo';
-import { SidebarSettingsMenu } from './sidebar-settings-menu';
+import { SidebarSettingsMenu, useHasVisibleSettingsItems } from './sidebar-settings-menu';
 
 // メインのナビゲーション項目を定義
 const mainNavItems: NavItem[] = [
@@ -43,6 +43,9 @@ export function AppSidebar() {
 
     // 各種設定の展開状態
     const [showSettings, setShowSettings] = React.useState(false);
+
+    // 各種設定メニューに表示可能な項目があるかチェック
+    const hasVisibleSettings = useHasVisibleSettingsItems();
 
     return (
         <Sidebar collapsible="icon" variant="inset">
@@ -111,26 +114,28 @@ export function AppSidebar() {
                             </SidebarMenuItem>
                         );
                     })}
-                    {/* 各種設定 */}
-                    <SidebarMenuItem>
-                        <SidebarMenuButton
-                            asChild
-                            tooltip={isCollapsed ? '各種設定' : undefined}
-                            isActive={
-                                showSettings ||
-                                ['/admin/roles', '/admin/role-permissions', '/admin/user-roles'].some((p) => currentPath.startsWith(p))
-                            }
-                            onClick={() => setShowSettings((v) => !v)}
-                        >
-                            <div className="flex cursor-pointer items-center gap-2">
-                                <Wrench className="h-4 w-4" />
-                                {!isCollapsed && <span className="min-w-0 flex-1">各種設定</span>}
-                            </div>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
+                    {/* 各種設定 - 表示可能な項目がある場合のみ表示 */}
+                    {hasVisibleSettings && (
+                        <SidebarMenuItem>
+                            <SidebarMenuButton
+                                asChild
+                                tooltip={isCollapsed ? '各種設定' : undefined}
+                                isActive={
+                                    showSettings ||
+                                    ['/admin/roles', '/admin/role-permissions', '/admin/user-roles'].some((p) => currentPath.startsWith(p))
+                                }
+                                onClick={() => setShowSettings((v) => !v)}
+                            >
+                                <div className="flex cursor-pointer items-center gap-2">
+                                    <Wrench className="h-4 w-4" />
+                                    {!isCollapsed && <span className="min-w-0 flex-1">各種設定</span>}
+                                </div>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                    )}
                 </SidebarMenu>
                 {/* 各種設定のサブメニュー */}
-                {showSettings && <SidebarSettingsMenu isCollapsed={isCollapsed} currentPath={currentPath} />}
+                {showSettings && hasVisibleSettings && <SidebarSettingsMenu isCollapsed={isCollapsed} currentPath={currentPath} />}
             </SidebarContent>
 
             <SidebarFooter>
