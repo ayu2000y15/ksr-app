@@ -19,7 +19,7 @@ class InventoryPageController extends Controller
         $this->authorize('viewAny', \App\Models\InventoryItem::class);
 
         // include stocks so the Inertia index page receives per-item stock rows
-        $items = InventoryItem::with(['category', 'stocks'])->orderBy('sort_order')->orderBy('name')->paginate(15);
+        $items = InventoryItem::with(['category', 'stocks'])->orderBy('sort_order')->orderBy('name')->get();
         $categories = InventoryCategory::orderBy('order_column')->get();
         return Inertia::render('inventory/index', [
             'items' => $items,
@@ -48,18 +48,48 @@ class InventoryPageController extends Controller
     {
         $this->authorize('create', \App\Models\InventoryItem::class);
 
-        $request->validate([
+        $validator = Validator::make($request->all(), [
             'csv_file' => 'required|file|mimes:csv,txt|max:10240', // 10MB max
+        ], [
+            'csv_file.required' => 'CSVファイルを選択してください',
+            'csv_file.file' => '有効なファイルをアップロードしてください',
+            'csv_file.mimes' => 'CSVファイル（.csv または .txt）をアップロードしてください',
+            'csv_file.max' => 'ファイルサイズは10MB以下にしてください',
         ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'ファイルのバリデーションに失敗しました',
+                'errors' => $validator->errors()->all(),
+            ], 422);
+        }
 
         try {
             $file = $request->file('csv_file');
             $path = $file->getRealPath();
 
+            // 文字エンコーディングの検出と変換
+            $content = file_get_contents($path);
+            $encoding = mb_detect_encoding($content, ['UTF-8', 'SJIS', 'SJIS-win', 'EUC-JP', 'ASCII'], true);
+
+            if ($encoding && $encoding !== 'UTF-8') {
+                $content = mb_convert_encoding($content, 'UTF-8', $encoding);
+                file_put_contents($path, $content);
+            }
+
             // CSVファイルを読み込み
             $csv = array_map(function ($line) {
                 return str_getcsv($line);
             }, file($path));
+
+            if (empty($csv)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'CSVファイルが空です',
+                    'errors' => ['CSVファイルにデータが含まれていません'],
+                ], 422);
+            }
 
             // ヘッダー行をスキップ（存在する場合）
             $hasHeader = false;
@@ -72,7 +102,9 @@ class InventoryPageController extends Controller
             }
 
             $imported = 0;
+            $updated = 0;
             $errors = [];
+            $warnings = [];
             $categoryCache = []; // カテゴリ名→IDのキャッシュ
 
             DB::beginTransaction();
@@ -98,7 +130,19 @@ class InventoryPageController extends Controller
 
                 // 商品名は必須
                 if (empty($name)) {
-                    $errors[] = "{$lineNumber}行目: 商品名が空です";
+                    $errors[] = "[{$lineNumber}行目] 商品名が入力されていません（必須項目です）";
+                    continue;
+                }
+
+                // 商品名の長さチェック
+                if (mb_strlen($name) > 255) {
+                    $errors[] = "[{$lineNumber}行目] 商品名「{$name}」が長すぎます（255文字以内にしてください）";
+                    continue;
+                }
+
+                // 数量の検証
+                if (!empty($quantity) && !is_numeric($quantity)) {
+                    $errors[] = "[{$lineNumber}行目] 商品「{$name}」の数量「{$quantity}」は数値ではありません（半角数字で入力してください）";
                     continue;
                 }
 
@@ -113,7 +157,10 @@ class InventoryPageController extends Controller
                             $categoryId = $category->id;
                             $categoryCache[$categoryName] = $categoryId;
                         } else {
-                            $errors[] = "{$lineNumber}行目: カテゴリ「{$categoryName}」が見つかりません";
+                            // 利用可能なカテゴリ一覧を取得
+                            $availableCategories = InventoryCategory::orderBy('order_column')->pluck('name')->toArray();
+                            $categoryList = implode('、', $availableCategories);
+                            $errors[] = "[{$lineNumber}行目] 商品「{$name}」のカテゴリ「{$categoryName}」が見つかりません（利用可能なカテゴリ: {$categoryList}）";
                             continue;
                         }
                     }
@@ -124,17 +171,23 @@ class InventoryPageController extends Controller
 
                 if (!$item) {
                     // 新規作成
-                    $maxOrder = InventoryItem::max('sort_order') ?? 0;
-                    $item = InventoryItem::create([
-                        'name' => $name,
-                        'category_id' => $categoryId,
-                        'supplier_text' => $supplier,
-                        'catalog_name' => $catalogName,
-                        'size' => $size,
-                        'unit' => $unit,
-                        'memo' => $memo,
-                        'sort_order' => $maxOrder + 1,
-                    ]);
+                    try {
+                        $maxOrder = InventoryItem::max('sort_order') ?? 0;
+                        $item = InventoryItem::create([
+                            'name' => $name,
+                            'category_id' => $categoryId,
+                            'supplier_text' => $supplier,
+                            'catalog_name' => $catalogName,
+                            'size' => $size,
+                            'unit' => $unit,
+                            'memo' => $memo,
+                            'sort_order' => $maxOrder + 1,
+                        ]);
+                        $imported++;
+                    } catch (\Exception $e) {
+                        $errors[] = "[{$lineNumber}行目] 商品「{$name}」の登録に失敗しました: {$e->getMessage()}";
+                        continue;
+                    }
                 } else {
                     // 既存アイテムを更新（空でない値のみ）
                     $updateData = [];
@@ -146,74 +199,119 @@ class InventoryPageController extends Controller
                     if (!empty($memo)) $updateData['memo'] = $memo;
 
                     if (!empty($updateData)) {
-                        $item->update($updateData);
+                        try {
+                            $item->update($updateData);
+                            $updated++;
+                        } catch (\Exception $e) {
+                            $errors[] = "[{$lineNumber}行目] 商品「{$name}」の更新に失敗しました: {$e->getMessage()}";
+                            continue;
+                        }
                     }
                 }
 
                 // 在庫情報の登録・更新
                 if (!empty($storageLocation) || !empty($quantity)) {
-                    $stock = InventoryStock::where('inventory_item_id', $item->id)
-                        ->where('storage_location', $storageLocation ?: '未指定')
-                        ->first();
+                    try {
+                        $stock = InventoryStock::where('inventory_item_id', $item->id)
+                            ->where('storage_location', $storageLocation ?: '未指定')
+                            ->first();
 
-                    $qty = is_numeric($quantity) ? (int)$quantity : 0;
+                        $qty = is_numeric($quantity) ? (int)$quantity : 0;
 
-                    if (!$stock) {
-                        // 新規在庫作成
-                        InventoryStock::create([
-                            'inventory_item_id' => $item->id,
-                            'storage_location' => $storageLocation ?: '未指定',
-                            'quantity' => $qty,
-                            'memo' => '',
-                            'last_stocked_at' => now(),
-                        ]);
-                    } else {
-                        // 既存在庫を更新（数量を加算ではなく上書き）
-                        $oldQty = $stock->quantity;
-                        $stock->update([
-                            'quantity' => $qty,
-                            'last_stocked_at' => now(),
-                        ]);
-
-                        // 在庫ログを記録
-                        if ($oldQty != $qty) {
-                            InventoryStockLog::create([
+                        if (!$stock) {
+                            // 新規在庫作成
+                            InventoryStock::create([
                                 'inventory_item_id' => $item->id,
-                                'storage_location' => $stock->storage_location,
-                                'quantity_before' => $oldQty,
-                                'quantity_after' => $qty,
-                                'change_type' => 'csv_import',
-                                'memo' => "CSV一括登録: {$oldQty} → {$qty}",
-                                'changed_by' => auth()->id(),
-                                'changed_at' => now(),
+                                'storage_location' => $storageLocation ?: '未指定',
+                                'quantity' => $qty,
+                                'memo' => '',
+                                'last_stocked_at' => now(),
                             ]);
+                        } else {
+                            // 既存在庫を更新（数量を加算ではなく上書き）
+                            $oldQty = $stock->quantity;
+                            $stock->update([
+                                'quantity' => $qty,
+                                'last_stocked_at' => now(),
+                            ]);
+
+                            // 在庫ログを記録
+                            if ($oldQty != $qty) {
+                                InventoryStockLog::create([
+                                    'inventory_stock_id' => $stock->id,
+                                    'user_id' => auth()->id(),
+                                    'change_date' => now(),
+                                    'quantity_before' => $oldQty,
+                                    'quantity_after' => $qty,
+                                    'reason' => "CSV一括登録: {$oldQty} → {$qty}",
+                                ]);
+                            }
                         }
+                    } catch (\Exception $e) {
+                        $warnings[] = "[{$lineNumber}行目] 商品「{$name}」の在庫情報の登録に失敗しました: {$e->getMessage()}";
                     }
                 }
-
-                $imported++;
             }
 
+            // 結果メッセージの作成
+            $resultMessages = [];
+            if ($imported > 0) {
+                $resultMessages[] = "新規登録: {$imported}件";
+            }
+            if ($updated > 0) {
+                $resultMessages[] = "更新: {$updated}件";
+            }
+
+            $successMessage = implode('、', $resultMessages);
+            if (empty($successMessage)) {
+                $successMessage = '処理対象のデータがありませんでした';
+            }
+
+            // エラーがある場合はロールバックして処理を中止
+            if (!empty($errors)) {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'message' => count($errors) . "件のエラーがあります。データは登録されていません。",
+                    'errors' => $errors,
+                    'warnings' => $warnings,
+                ], 422);
+            }
+
+            // エラーがない場合のみコミット
             DB::commit();
 
-            if (!empty($errors)) {
-                return back()->with([
-                    'message' => "{$imported}件のアイテムを登録しました。" . count($errors) . "件のエラーがあります。",
-                    'errors' => $errors,
-                    'type' => 'warning',
-                ]);
+            if (!empty($warnings)) {
+                return response()->json([
+                    'success' => true,
+                    'message' => "CSV登録完了（{$successMessage}）ただし、" . count($warnings) . "件の警告があります",
+                    'warnings' => $warnings,
+                    'imported' => $imported,
+                    'updated' => $updated,
+                ], 200);
             }
 
-            return back()->with([
-                'message' => "{$imported}件のアイテムをCSVから一括登録しました。",
-                'type' => 'success',
-            ]);
+            return response()->json([
+                'success' => true,
+                'message' => "CSV登録完了（{$successMessage}）",
+                'imported' => $imported,
+                'updated' => $updated,
+            ], 200);
         } catch (\Exception $e) {
             DB::rollBack();
-            return back()->with([
-                'message' => 'CSV登録中にエラーが発生しました: ' . $e->getMessage(),
-                'type' => 'error',
-            ]);
+            $errorDetail = $e->getMessage();
+            $errorFile = basename($e->getFile());
+            $errorLine = $e->getLine();
+
+            return response()->json([
+                'success' => false,
+                'message' => 'CSV登録処理中に予期しないエラーが発生しました',
+                'errors' => [
+                    "エラー詳細: {$errorDetail}",
+                    "発生場所: {$errorFile}:{$errorLine}",
+                    'CSVファイルの形式が正しいか、文字コードがUTF-8またはShift_JISになっているかご確認ください',
+                ],
+            ], 500);
         }
     }
 }

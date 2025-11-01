@@ -1,10 +1,10 @@
 import HeadingSmall from '@/components/heading-small';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import Toast from '@/components/ui/toast';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { Head, Link, usePage } from '@inertiajs/react';
-import { ChevronDown, ChevronRight, Plus, Upload } from 'lucide-react';
+import { AlertCircle, CheckCircle, ChevronDown, ChevronRight, Plus, Upload } from 'lucide-react';
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 
 export default function Index({ items: initial }: any) {
@@ -16,8 +16,8 @@ export default function Index({ items: initial }: any) {
         delete: false,
         logs: false,
     };
-    const [items, setItems] = useState(initial?.data || []);
-    useEffect(() => setItems(initial?.data || []), [initial]);
+    const [items, setItems] = useState(initial || []);
+    useEffect(() => setItems(initial || []), [initial]);
 
     // CSV アップロード関連
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -26,6 +26,13 @@ export default function Index({ items: initial }: any) {
     const handleCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
+
+        // ファイル拡張子チェック
+        const fileName = file.name.toLowerCase();
+        if (!fileName.endsWith('.csv') && !fileName.endsWith('.txt')) {
+            setToast({ message: 'CSVファイル（.csv または .txt）を選択してください', type: 'error' });
+            return;
+        }
 
         setUploading(true);
         const formData = new FormData();
@@ -40,17 +47,52 @@ export default function Index({ items: initial }: any) {
                 headers: { 'X-CSRF-TOKEN': token, Accept: 'application/json' },
             });
 
-            if (!res.ok) {
-                const data = await res.json().catch(() => ({ message: 'アップロードに失敗しました' }));
-                setToast({ message: data.message || 'アップロードに失敗しました', type: 'error' });
+            const data = await res.json().catch(() => ({ success: false, message: 'サーバーからの応答が不正です' }));
+
+            if (!res.ok || !data.success) {
+                // エラーメッセージの構築
+                const errors = data.errors && Array.isArray(data.errors) ? data.errors : [];
+                const warnings = data.warnings && Array.isArray(data.warnings) ? data.warnings : [];
+
+                // エラーが多い場合はダイアログで表示
+                if (errors.length > 3 || warnings.length > 0) {
+                    setCsvErrorDialog({
+                        open: true,
+                        title: data.message || 'CSVアップロードエラー',
+                        errors,
+                        warnings,
+                    });
+                } else {
+                    // エラーが少ない場合はトーストで表示
+                    let errorMessage = data.message || 'CSVアップロードに失敗しました';
+                    if (errors.length > 0) {
+                        errorMessage += '\n\n' + errors.join('\n');
+                    }
+                    setToast({ message: errorMessage, type: 'error' });
+                }
                 return;
             }
 
-            // 成功したらページをリロード
-            window.location.reload();
+            // 成功時
+            let successMessage = data.message || 'CSV登録が完了しました';
+
+            if (data.warnings && Array.isArray(data.warnings) && data.warnings.length > 0) {
+                successMessage += '\n\n【警告】\n' + data.warnings.join('\n');
+                setToast({ message: successMessage, type: 'info' });
+            } else {
+                setToast({ message: successMessage, type: 'success' });
+            }
+
+            // 成功したらページをリロード（少し遅延させてトーストを表示）
+            setTimeout(() => {
+                window.location.reload();
+            }, 2000);
         } catch (err) {
             console.error(err);
-            setToast({ message: 'CSV アップロード中にエラーが発生しました', type: 'error' });
+            setToast({
+                message: 'CSVアップロード中に予期しないエラーが発生しました。\n\nネットワーク接続を確認してください。',
+                type: 'error',
+            });
         } finally {
             setUploading(false);
             if (fileInputRef.current) {
@@ -95,6 +137,13 @@ export default function Index({ items: initial }: any) {
     const [collapsedCats, setCollapsedCats] = useState<Record<string, boolean>>({});
     // CSV説明の展開状態
     const [csvHelpExpanded, setCsvHelpExpanded] = useState(false);
+    // CSVエラーダイアログ
+    const [csvErrorDialog, setCsvErrorDialog] = useState<{ open: boolean; title: string; errors: string[]; warnings?: string[] }>({
+        open: false,
+        title: '',
+        errors: [],
+        warnings: [],
+    });
 
     const toggleCollapse = (key: string) => {
         setCollapsedCats((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -343,6 +392,45 @@ export default function Index({ items: initial }: any) {
         <AppSidebarLayout breadcrumbs={[{ title: '在庫管理', href: route('inventory.index') }]}>
             <Head title="在庫管理" />
             <div className="p-4 sm:p-6 lg:p-8">
+                {/* メッセージ表示エリア（CSV登録の成功・エラー） */}
+                {toast && (
+                    <div className="mb-4 duration-300 animate-in fade-in slide-in-from-top-2">
+                        <div
+                            className={`rounded-md p-4 ${
+                                toast.type === 'success'
+                                    ? 'border border-green-200 bg-green-50 text-green-800'
+                                    : toast.type === 'error'
+                                      ? 'border border-red-200 bg-red-50 text-red-800'
+                                      : 'border border-blue-200 bg-blue-50 text-blue-800'
+                            }`}
+                        >
+                            <div className="flex items-start gap-3">
+                                <div className="mt-0.5">
+                                    {toast.type === 'success' ? (
+                                        <CheckCircle className="h-5 w-5 text-green-500" />
+                                    ) : toast.type === 'error' ? (
+                                        <AlertCircle className="h-5 w-5 text-red-500" />
+                                    ) : (
+                                        <AlertCircle className="h-5 w-5 text-blue-500" />
+                                    )}
+                                </div>
+                                <div className="flex-1">
+                                    <div className="text-sm font-medium whitespace-pre-line">{toast.message}</div>
+                                </div>
+                                <button
+                                    onClick={() => setToast(null)}
+                                    className="flex-shrink-0 rounded-md p-1 transition-colors hover:bg-black/5"
+                                    aria-label="閉じる"
+                                >
+                                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* CSV一括登録の説明 */}
                 {inventoryPerms.create && (
                     <div className="mb-4 rounded-md border border-blue-200 bg-blue-50">
@@ -485,22 +573,22 @@ export default function Index({ items: initial }: any) {
                                         });
                                         if (locs.length === 0) return <div className="text-sm text-gray-500">表示する在庫がありません。</div>;
 
-                                        // build rows keyed by item id
+                                        // build rows keyed by item id - 各アイテムを個別に表示
                                         const itemMap: Record<string, any> = {};
                                         cat.items.forEach((it: any) => {
-                                            // prefix numeric ids so Object.keys preserves insertion order
-                                            const key = it.id ? `id-${it.id}` : `${it.name}-${it.catalog_name}-${it.size}`;
-                                            if (!itemMap[key]) {
-                                                itemMap[key] = {
-                                                    id: it.id,
-                                                    name: it.name,
-                                                    catalog_name: it.catalog_name,
-                                                    size_with_unit: `${it.size || ''}${it.unit ? String(it.unit) : ''}`,
-                                                    quantities: {},
-                                                };
-                                                // initialize quantities for each loc
-                                                locs.forEach((l) => (itemMap[key].quantities[l] = 0));
-                                            }
+                                            // 各アイテムを個別のキーで管理（アイテムIDが必ずユニーク）
+                                            const key = it.id ? `id-${it.id}` : `temp-${it.name}-${it.catalog_name}-${it.size}-${Math.random()}`;
+                                            itemMap[key] = {
+                                                id: it.id,
+                                                name: it.name,
+                                                catalog_name: it.catalog_name,
+                                                size_with_unit: `${it.size || ''}${it.unit ? String(it.unit) : ''}`,
+                                                quantities: {},
+                                            };
+                                            // initialize quantities for each loc
+                                            locs.forEach((l) => (itemMap[key].quantities[l] = 0));
+
+                                            // このアイテムの在庫情報を設定
                                             const stocks =
                                                 it.stocks && Array.isArray(it.stocks) && it.stocks.length > 0
                                                     ? it.stocks
@@ -508,8 +596,7 @@ export default function Index({ items: initial }: any) {
                                             stocks.forEach((st: any) => {
                                                 const loc = (st.storage_location || '未指定').toString().trim() || '未指定';
                                                 const qty = Number(st.quantity) || 0;
-                                                if (typeof itemMap[key].quantities[loc] === 'undefined') itemMap[key].quantities[loc] = qty;
-                                                else itemMap[key].quantities[loc] += qty;
+                                                itemMap[key].quantities[loc] = qty;
                                             });
                                         });
 
@@ -689,11 +776,63 @@ export default function Index({ items: initial }: any) {
                                         );
                                     })()}
                                 </CardContent>
-                                {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
                             </Card>
                         );
                     })}
                 </div>
+
+                {/* CSVエラー詳細ダイアログ */}
+                <Dialog open={csvErrorDialog.open} onOpenChange={(open) => setCsvErrorDialog({ ...csvErrorDialog, open })}>
+                    <DialogContent className="max-h-[80vh] max-w-3xl overflow-auto">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                                <AlertCircle className="h-5 w-5 text-red-500" />
+                                {csvErrorDialog.title}
+                            </DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                            {csvErrorDialog.errors && csvErrorDialog.errors.length > 0 && (
+                                <div>
+                                    <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-red-900">
+                                        <AlertCircle className="h-4 w-4" />
+                                        エラー ({csvErrorDialog.errors.length}件)
+                                    </h3>
+                                    <div className="max-h-60 overflow-y-auto rounded-md border border-red-200 bg-red-50 p-3">
+                                        <ul className="space-y-1 text-sm text-red-800">
+                                            {csvErrorDialog.errors.map((error, i) => (
+                                                <li key={i} className="flex gap-2">
+                                                    <span className="flex-shrink-0">•</span>
+                                                    <span className="whitespace-pre-line">{error}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                </div>
+                            )}
+                            {csvErrorDialog.warnings && csvErrorDialog.warnings.length > 0 && (
+                                <div>
+                                    <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-yellow-900">
+                                        <AlertCircle className="h-4 w-4" />
+                                        警告 ({csvErrorDialog.warnings.length}件)
+                                    </h3>
+                                    <div className="max-h-60 overflow-y-auto rounded-md border border-yellow-200 bg-yellow-50 p-3">
+                                        <ul className="space-y-1 text-sm text-yellow-800">
+                                            {csvErrorDialog.warnings.map((warning, i) => (
+                                                <li key={i} className="flex gap-2">
+                                                    <span className="flex-shrink-0">•</span>
+                                                    <span className="whitespace-pre-line">{warning}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                </div>
+                            )}
+                            <div className="flex justify-end">
+                                <Button onClick={() => setCsvErrorDialog({ open: false, title: '', errors: [], warnings: [] })}>閉じる</Button>
+                            </div>
+                        </div>
+                    </DialogContent>
+                </Dialog>
             </div>
         </AppSidebarLayout>
     );
