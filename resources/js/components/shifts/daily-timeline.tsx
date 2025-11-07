@@ -185,16 +185,24 @@ export default function DailyTimeline(props: {
 
     // track absent (logical delete) flags locally so UI updates immediately
     const [absentMap, setAbsentMap] = useState<Record<number, boolean>>({});
+    // track position assignments locally for optimistic updates
+    const [positionMap, setPositionMap] = useState<Record<number, string | null>>({});
 
     // initialize absentMap from items' status when items change
     useEffect(() => {
         const m: Record<number, boolean> = {};
+        const p: Record<number, string | null> = {};
         for (const itRaw of items) {
             const it = itRaw as ShiftDetailLight;
             const st = it.status ?? '';
-            if (it.id !== undefined) m[Number(it.id)] = String(st) === 'absent';
+            if (it.id !== undefined) {
+                m[Number(it.id)] = String(st) === 'absent';
+                // initialize position from item's position field
+                p[Number(it.id)] = (it as any).position ?? null;
+            }
         }
         setAbsentMap(m);
+        setPositionMap(p);
     }, [items]);
 
     const counts = useMemo(() => {
@@ -202,6 +210,15 @@ export default function DailyTimeline(props: {
         const night = new Set<number>();
         const mealDay = new Set<number>();
         const mealNight = new Set<number>();
+        // position counts: track unique users per position (exclude absent)
+        const positionCounts: Record<string, Set<number>> = {
+            gatekeeper: new Set(),
+            register: new Set(),
+            boots: new Set(),
+            snowboard: new Set(),
+            ski: new Set(),
+            free: new Set(),
+        };
         (items || []).forEach((it: Item) => {
             const t = String(it.shift_type ?? it.type ?? '');
             const uid = Number(it.user_id ?? (it.user && (it.user as { id?: number }).id) ?? NaN);
@@ -220,6 +237,15 @@ export default function DailyTimeline(props: {
                 const mt = (it as any).meal_ticket;
                 if (mt === undefined || mt === 1 || mt === '1') mealNight.add(uid);
             }
+
+            // count position assignments (exclude absent shifts)
+            // use positionMap for optimistic local state, fallback to it.position
+            if (!isAbsent && it.id !== undefined) {
+                const pos = positionMap[Number(it.id)] ?? (it as any).position;
+                if (pos && positionCounts[pos]) {
+                    positionCounts[pos].add(uid);
+                }
+            }
         });
 
         return {
@@ -227,8 +253,14 @@ export default function DailyTimeline(props: {
             nightCount: night.size,
             mealTicketDayCount: mealDay.size,
             mealTicketNightCount: mealNight.size,
+            gatekeeperCount: positionCounts.gatekeeper.size,
+            registerCount: positionCounts.register.size,
+            bootsCount: positionCounts.boots.size,
+            snowboardCount: positionCounts.snowboard.size,
+            skiCount: positionCounts.ski.size,
+            freeCount: positionCounts.free.size,
         };
-    }, [items, absentMap]);
+    }, [items, absentMap, positionMap]);
 
     // per-slot attendance counts = number of work shifts covering the slot minus any breaks overlapping the slot
     const attendanceCounts = useMemo(() => {
@@ -519,6 +551,40 @@ export default function DailyTimeline(props: {
         }
     };
 
+    const setPosition = async (shiftId: number, userId: number, position: string) => {
+        // optimistic update
+        setPositionMap((prev) => ({ ...prev, [shiftId]: position }));
+        try {
+            await axios.post(route('shifts.mark_position'), {
+                user_id: userId,
+                date: date,
+                position: position,
+            });
+            // success - no need to revert
+        } catch (err) {
+            console.error('failed to set position', err);
+            // revert on error
+            setPositionMap((prev) => {
+                const updated = { ...prev };
+                // revert to original value from items
+                const original = (items || []).find((it: Item) => Number(it.id) === shiftId);
+                updated[shiftId] = (original as any)?.position ?? null;
+                return updated;
+            });
+            try {
+                if (typeof window !== 'undefined' && window.dispatchEvent) {
+                    window.dispatchEvent(
+                        new CustomEvent('ksr.shiftDetail.toast', {
+                            detail: { message: 'ポジションの設定に失敗しました', type: 'error' },
+                        }),
+                    );
+                }
+            } catch {
+                // ignore
+            }
+        }
+    };
+
     const toDbString = (m: number) => {
         const hh = String(Math.floor((m % (24 * 60)) / 60)).padStart(2, '0');
         const mm = String(m % 60).padStart(2, '0');
@@ -577,9 +643,37 @@ export default function DailyTimeline(props: {
                     // shift mode: simplify header (no top time ruler) to avoid visual clutter
                     <div className="min-w-full">
                         <div className="flex items-stretch border-b">
-                            <div className="w-28 sm:w-48">
-                                <div className="flex h-10 items-center border-b">
-                                    <span className="text-sm">欠席</span>
+                            <div className="flex items-center border-b">
+                                {/* spacing to match checkbox + position number + user name */}
+                                <div className="mr-7 flex flex-col items-center"></div>
+                                <span className="mr-2 w-6 flex-shrink-0"></span>
+                                <span className="w-26 flex-shrink-0"></span>
+                                {/* Position count labels aligned with buttons */}
+                                <div className="ml-2 flex items-center gap-1">
+                                    <div className="flex flex-col items-center text-xs text-muted-foreground" style={{ width: '38px' }}>
+                                        <span>門番</span>
+                                        <span>({counts.gatekeeperCount})</span>
+                                    </div>
+                                    <div className="flex flex-col items-center text-xs text-muted-foreground" style={{ width: '38px' }}>
+                                        <span>レジ</span>
+                                        <span>({counts.registerCount})</span>
+                                    </div>
+                                    <div className="flex flex-col items-center text-xs text-muted-foreground" style={{ width: '38px' }}>
+                                        <span>ブーツ</span>
+                                        <span>({counts.bootsCount})</span>
+                                    </div>
+                                    <div className="flex flex-col items-center text-xs text-muted-foreground" style={{ width: '38px' }}>
+                                        <span>スノボ</span>
+                                        <span>({counts.snowboardCount})</span>
+                                    </div>
+                                    <div className="flex flex-col items-center text-xs text-muted-foreground" style={{ width: '38px' }}>
+                                        <span>スキー</span>
+                                        <span>({counts.skiCount})</span>
+                                    </div>
+                                    <div className="flex flex-col items-center text-xs text-muted-foreground" style={{ width: '38px' }}>
+                                        <span>フリー</span>
+                                        <span>({counts.freeCount})</span>
+                                    </div>
                                 </div>
                             </div>
                             <div className="flex-1">
@@ -616,21 +710,111 @@ export default function DailyTimeline(props: {
 
                             return (
                                 <div key={it.id} className="flex items-center gap-4">
-                                    <div className="flex w-28 items-center font-medium sm:w-48">
+                                    <div className="flex items-center font-medium">
                                         {/* checkbox for marking absent */}
-                                        <input
-                                            type="checkbox"
-                                            className="mr-2"
-                                            checked={!!absentMap[Number(it.id ?? 0)]}
-                                            onChange={(e) => toggleAbsent(Number(it.id ?? 0), e.target.checked)}
-                                            title="チェックで欠席扱い"
-                                        />
-                                        <span className="mr-2 w-6 text-right font-mono text-sm">
-                                            {it.user?.position ?? it.user_id ?? (it.user && it.user.id) ?? '—'}
-                                        </span>
-                                        <span className={`truncate ${absentMap[Number(it.id ?? 0)] ? 'text-gray-600 line-through opacity-60' : ''}`}>
+                                        <div className="mr-2 flex flex-col items-center">
+                                            <span className="text-xs">欠席</span>
+                                            <input
+                                                type="checkbox"
+                                                checked={!!absentMap[Number(it.id ?? 0)]}
+                                                onChange={(e) => toggleAbsent(Number(it.id ?? 0), e.target.checked)}
+                                                title="チェックで欠席扱い"
+                                            />
+                                        </div>
+                                        {/* show original user's position to the left of the name */}
+                                        <span className="mr-2 w-6 flex-shrink-0 text-right font-mono text-sm">{it.user?.position ?? '—'}</span>
+                                        {/* user name - fixed width to align position buttons */}
+                                        <span
+                                            className={`w-26 flex-shrink-0 truncate ${absentMap[Number(it.id ?? 0)] ? 'text-gray-600 line-through opacity-60' : ''}`}
+                                        >
                                             {it.user ? it.user.name : '—'}
                                         </span>
+                                        {/* Position buttons: gatekeeper / register / boots / snowboard / ski / free (moved to the right of name) */}
+                                        <div className="ml-2 flex items-center gap-1">
+                                            {/* 門番 */}
+                                            <button
+                                                type="button"
+                                                title="門番"
+                                                className={`rounded px-2 py-0.5 text-xs ${(positionMap[Number(it.id)] ?? it.position) === 'gatekeeper' ? 'bg-red-300 text-white' : 'bg-gray-50'}`}
+                                                onClick={() => setPosition(Number(it.id), Number(it.user_id), 'gatekeeper')}
+                                            >
+                                                <img
+                                                    width="24"
+                                                    height="24"
+                                                    src="https://img.icons8.com/pastel-glyph/64/receptionist--v2.png"
+                                                    alt="receptionist--v2"
+                                                />
+                                            </button>
+                                            {/* レジ */}
+                                            <button
+                                                type="button"
+                                                title="レジ"
+                                                className={`rounded px-2 py-0.5 text-xs ${(positionMap[Number(it.id)] ?? it.position) === 'register' ? 'bg-red-300 text-white' : 'bg-gray-50'}`}
+                                                onClick={() => setPosition(Number(it.id), Number(it.user_id), 'register')}
+                                            >
+                                                <img
+                                                    width="24"
+                                                    height="24"
+                                                    src="https://img.icons8.com/ios/50/cash-register.png"
+                                                    alt="cash-register"
+                                                />
+                                            </button>
+
+                                            {/* ブーツ */}
+                                            <button
+                                                type="button"
+                                                title="ブーツ"
+                                                className={`rounded px-2 py-0.5 text-xs ${(positionMap[Number(it.id)] ?? it.position) === 'boots' ? 'bg-red-300 text-white' : 'bg-gray-50'}`}
+                                                onClick={() => setPosition(Number(it.id), Number(it.user_id), 'boots')}
+                                            >
+                                                <img
+                                                    width="24"
+                                                    height="24"
+                                                    src="https://img.icons8.com/external-royyan-wijaya-detailed-outline-royyan-wijaya/48/external-boot-fashion-royyan-wijaya-detailed-outline-royyan-wijaya.png"
+                                                    alt="external-boot-fashion-royyan-wijaya-detailed-outline-royyan-wijaya"
+                                                />
+                                            </button>
+
+                                            {/* スノーボード */}
+                                            <button
+                                                type="button"
+                                                title="スノーボード"
+                                                className={`rounded px-1 py-0.5 text-xs ${(positionMap[Number(it.id)] ?? it.position) === 'snowboard' ? 'bg-red-300 text-white' : 'bg-gray-50'}`}
+                                                onClick={() => setPosition(Number(it.id), Number(it.user_id), 'snowboard')}
+                                            >
+                                                <img
+                                                    width="24"
+                                                    height="24"
+                                                    src="https://img.icons8.com/external-bearicons-detailed-outline-bearicons/64/external-Snowboard-winter-holiday-bearicons-detailed-outline-bearicons.png"
+                                                    alt="external-Snowboard-winter-holiday-bearicons-detailed-outline-bearicons"
+                                                />
+                                            </button>
+
+                                            {/* スキー */}
+                                            <button
+                                                type="button"
+                                                title="スキー"
+                                                className={`rounded px-1 py-0.5 text-xs ${(positionMap[Number(it.id)] ?? it.position) === 'ski' ? 'bg-red-300 text-white' : 'bg-gray-50'}`}
+                                                onClick={() => setPosition(Number(it.id), Number(it.user_id), 'ski')}
+                                            >
+                                                <img width="24" height="24" src="https://img.icons8.com/ios/50/ski.png" alt="ski" />
+                                            </button>
+
+                                            {/* フリー */}
+                                            <button
+                                                type="button"
+                                                title="フリー"
+                                                className={`rounded px-2 py-0.5 text-xs ${(positionMap[Number(it.id)] ?? it.position) === 'free' ? 'bg-red-300 text-white' : 'bg-gray-50'}`}
+                                                onClick={() => setPosition(Number(it.id), Number(it.user_id), 'free')}
+                                            >
+                                                <img
+                                                    width="24"
+                                                    height="24"
+                                                    src="https://img.icons8.com/external-those-icons-lineal-those-icons/48/external-Free-shopping-those-icons-lineal-those-icons.png"
+                                                    alt="external-Free-shopping-those-icons-lineal-those-icons"
+                                                />
+                                            </button>
+                                        </div>
                                         {/* show a small badge when this shift is marked step_out (中抜け)
                                             step_out may be included either at top-level or nested under `shift` (from backend),
                                             so check both locations. treat '1' or 1 as true. */}

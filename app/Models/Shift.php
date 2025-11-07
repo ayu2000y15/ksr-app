@@ -15,12 +15,14 @@ class Shift extends BaseModel
         'shift_type',
         'step_out',
         'meal_ticket',
+        'position',
     ];
 
     protected $casts = [
         'date' => 'date',
         'step_out' => 'integer',
         'meal_ticket' => 'integer',
+        // position stored as string (e.g. 'snowboard'|'ski')
     ];
 
     public function user()

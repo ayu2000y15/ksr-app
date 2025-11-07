@@ -125,6 +125,8 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
     // 食券不要をマーク/解除
     Route::post('/shifts/mark-meal-ticket', [App\Http\Controllers\ShiftController::class, 'markMealTicket'])->name('shifts.mark_meal_ticket');
     Route::post('/shifts/unmark-meal-ticket', [App\Http\Controllers\ShiftController::class, 'unmarkMealTicket'])->name('shifts.unmark_meal_ticket');
+    // シフト毎のポジションを設定 (snowboard|ski)
+    Route::post('/shifts/mark-position', [App\Http\Controllers\ShiftController::class, 'markPosition'])->name('shifts.mark_position');
 
     // Toggle confirm/unconfirm for all scheduled work ShiftDetails on a date
     Route::post('/shifts/toggle-confirm-date', [App\Http\Controllers\ShiftController::class, 'toggleConfirmDate'])->name('shifts.toggle_confirm_date');

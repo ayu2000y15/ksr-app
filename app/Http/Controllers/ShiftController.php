@@ -69,9 +69,11 @@ class ShiftController extends Controller
                         $shiftRec = Shift::where('user_id', $attrs['user_id'])->whereRaw('date(date) = ?', [$shiftDate])->first();
                         $arr['shift_type'] = $shiftRec ? $shiftRec->shift_type : null;
                         $arr['step_out'] = $shiftRec ? ($shiftRec->step_out ?? 0) : 0;
+                        $arr['position'] = $shiftRec ? ($shiftRec->position ?? null) : null;
                     } else {
                         $arr['shift_type'] = null;
                         $arr['step_out'] = 0;
+                        $arr['position'] = null;
                     }
                 } catch (\Exception $e) {
                     $arr['shift_type'] = null;
@@ -155,9 +157,11 @@ class ShiftController extends Controller
                     $shiftRec = Shift::where('user_id', $attrs['user_id'])->whereRaw('date(date) = ?', [$shiftDate])->first();
                     $arr['shift_type'] = $shiftRec ? $shiftRec->shift_type : null;
                     $arr['step_out'] = $shiftRec ? ($shiftRec->step_out ?? 0) : 0;
+                    $arr['position'] = $shiftRec ? ($shiftRec->position ?? null) : null;
                 } else {
                     $arr['shift_type'] = null;
                     $arr['step_out'] = 0;
+                    $arr['position'] = null;
                 }
             } catch (\Exception $e) {
                 $arr['shift_type'] = null;
@@ -306,6 +310,41 @@ class ShiftController extends Controller
         }
 
         return Redirect::back()->with('success', '中抜けに変更しました。');
+    }
+
+    /**
+     * Set a per-shift position marker (e.g. 'snowboard'|'ski') for a user/date.
+     * Expects POST: user_id, date, position (string|null). Returns JSON on AJAX.
+     */
+    public function markPosition(Request $request)
+    {
+        if (Auth::user()->hasRole('システム管理者')) {
+            // bypass
+        } elseif (Auth::user()->hasPermissionTo('shift_application.create')) {
+            // allow with permission
+        } else {
+            $this->authorize('update', Shift::class);
+        }
+
+        $data = $request->validate([
+            'user_id' => 'required|exists:users,id',
+            'date' => 'required|date',
+            'position' => 'nullable|string',
+        ]);
+
+        $shift = Shift::where('user_id', $data['user_id'])->whereRaw('date(date) = ?', [$data['date']])->first();
+        if ($shift) {
+            $shift->update(['position' => $data['position']]);
+        } else {
+            // create a default day shift if needed and set position
+            $shift = Shift::create(['user_id' => $data['user_id'], 'date' => $data['date'], 'shift_type' => 'day', 'position' => $data['position']]);
+        }
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json(['message' => 'ポジションを更新しました。', 'position' => $shift->position], 200);
+        }
+
+        return Redirect::back()->with('success', 'ポジションを更新しました。');
     }
 
     /**
