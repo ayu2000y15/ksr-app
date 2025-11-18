@@ -46,11 +46,15 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
     // 権限ミドルウェアは後で追加することを想定 (e.g., ->middleware('can:manage-users'))
     Route::get('/users', [UserController::class, 'index'])->name('users.index');
     Route::get('/users/create', [UserController::class, 'create'])->name('users.create');
+    // CSVサンプルダウンロード（{user}ルートより前に配置）
+    Route::get('/users/download-sample-csv', [UserController::class, 'downloadSampleCsv'])->name('users.download_sample_csv');
+    // CSV一括登録
+    Route::post('/users/import-csv', [UserController::class, 'importCsv'])->name('users.import_csv');
     Route::post('/users', [UserController::class, 'store'])->name('users.store');
-    // ユーザー詳細ページ（モーダルではなく別ページ）
-    Route::get('/users/{user}', [UserController::class, 'show'])->name('users.show');
     // 作成後に表示する認証情報ページ
     Route::get('/users/credentials', [UserController::class, 'credentials'])->name('users.credentials');
+    // ユーザー詳細ページ（モーダルではなく別ページ）
+    Route::get('/users/{user}', [UserController::class, 'show'])->name('users.show');
     // POST route for sending temporary credentials via email (used by frontend fetch)
     Route::post('/users/{user}/credentials/send', [UserController::class, 'sendCredentials'])->name('users.credentials.send');
     // Allow sending credentials by email when the page does not have a user id (credentials page)

@@ -828,4 +828,343 @@ class UserController extends Controller
             'stats' => $stats,
         ]);
     }
+
+    /**
+     * 登録済みユーザー情報をCSVダウンロード
+     */
+    public function downloadSampleCsv()
+    {
+        try {
+            if (Auth::user()->hasRole('システム管理者')) {
+                // bypass
+            } else {
+                $this->authorize('viewAny', User::class);
+            }
+        } catch (\Exception $e) {
+            // 権限エラーの場合は403を返す
+            abort(403, 'この操作を実行する権限がありません。');
+        }
+
+        // 全ユーザーを取得
+        $users = User::orderBy('id')->get();
+
+        // CSVデータを生成
+        $csvData = [];
+
+        // BOM追加（Excel対応）
+        $bom = chr(0xEF) . chr(0xBB) . chr(0xBF);
+
+        // ヘッダー行
+        $csvData[] = [
+            '名前',
+            'フリガナ',
+            'メールアドレス',
+            '電話番号',
+            'LINE名',
+            '性別',
+            '車の有無',
+            'ステータス',
+            '採用条件',
+            '通勤方法',
+            '基本出勤開始時間',
+            '基本出勤終了時間',
+            '週休希望日数',
+            '固定休希望',
+            '勤務開始日',
+            '勤務終了日',
+            '勤務備考欄',
+            'メモ',
+        ];
+
+        // ユーザーデータを追加
+        foreach ($users as $user) {
+            // 性別の変換
+            $gender = '';
+            if ($user->gender === 'male') {
+                $gender = '男';
+            } elseif ($user->gender === 'female') {
+                $gender = '女';
+            }
+
+            // 車の有無
+            $hasCar = $user->has_car ? '有' : '無';
+
+            // ステータスの変換
+            $status = '';
+            if ($user->status === 'active') {
+                $status = 'アクティブ';
+            } elseif ($user->status === 'retired') {
+                $status = '退職';
+            } elseif ($user->status === 'shared') {
+                $status = '共有';
+            }
+
+            // 採用条件の変換
+            $employmentCondition = '';
+            if ($user->employment_condition === 'dormitory') {
+                $employmentCondition = '寮';
+            } elseif ($user->employment_condition === 'commute') {
+                $employmentCondition = '通勤';
+            }
+
+            // 固定休希望の変換
+            $preferredWeekDays = '';
+            if ($user->preferred_week_days) {
+                $days = json_decode($user->preferred_week_days, true);
+                if (is_array($days)) {
+                    $preferredWeekDays = implode(',', $days);
+                }
+            }
+
+            $csvData[] = [
+                $user->name ?? '',
+                $user->furigana ?? '',
+                $user->email ?? '',
+                $user->phone_number ?? '',
+                $user->line_name ?? '',
+                $gender,
+                $hasCar,
+                $status,
+                $employmentCondition,
+                $user->commute_method ?? '',
+                $user->default_start_time ?? '',
+                $user->default_end_time ?? '',
+                $user->preferred_week_days_count ?? '',
+                $preferredWeekDays,
+                $user->employment_start_date ?? '',
+                $user->employment_end_date ?? '',
+                $user->employment_notes ?? '',
+                $user->memo ?? '',
+            ];
+        }
+
+        // CSV形式に変換
+        $output = fopen('php://temp', 'r+');
+        fwrite($output, $bom); // BOMを先頭に追加
+
+        foreach ($csvData as $row) {
+            fputcsv($output, $row);
+        }
+
+        rewind($output);
+        $csv = stream_get_contents($output);
+        fclose($output);
+
+        // レスポンスを返す
+        $filename = 'users_' . date('Ymd_His') . '.csv';
+        return response($csv, 200)
+            ->header('Content-Type', 'text/csv; charset=UTF-8')
+            ->header('Content-Disposition', 'attachment; filename="' . $filename . '"')
+            ->header('Cache-Control', 'no-cache, no-store, must-revalidate')
+            ->header('Pragma', 'no-cache')
+            ->header('Expires', '0');
+    }
+
+    /**
+     * CSVファイルから一括登録
+     */
+    public function importCsv(Request $request)
+    {
+        if (Auth::user()->hasRole('システム管理者')) {
+            // bypass
+        } else {
+            $this->authorize('create', User::class);
+        }
+
+        $request->validate([
+            'csv_file' => 'required|file|mimes:csv,txt|max:2048',
+        ]);
+
+        try {
+            $file = $request->file('csv_file');
+            $path = $file->getRealPath();
+
+            // BOM除去してファイルを読み込み
+            $content = file_get_contents($path);
+            $content = str_replace("\xEF\xBB\xBF", '', $content);
+
+            // 一時ファイルに書き込み
+            $tmpPath = tempnam(sys_get_temp_dir(), 'csv');
+            file_put_contents($tmpPath, $content);
+
+            $handle = fopen($tmpPath, 'r');
+
+            // ヘッダー行をスキップ
+            $header = fgetcsv($handle);
+
+            $createdCount = 0;
+            $updatedCount = 0;
+            $errorCount = 0;
+            $errors = [];
+            $rowNumber = 1; // ヘッダー行
+
+            while (($row = fgetcsv($handle)) !== false) {
+                $rowNumber++;
+
+                // 空行スキップ
+                if (empty(array_filter($row))) {
+                    continue;
+                }
+
+                try {
+                    // 必須フィールドのバリデーション
+                    if (empty($row[0])) {
+                        $errors[] = "行 {$rowNumber}: 名前は必須です";
+                        $errorCount++;
+                        continue;
+                    }
+                    if (empty($row[2])) {
+                        $errors[] = "行 {$rowNumber}: メールアドレスは必須です";
+                        $errorCount++;
+                        continue;
+                    }
+
+                    // メールアドレスの形式チェック
+                    if (!filter_var($row[2], FILTER_VALIDATE_EMAIL)) {
+                        $errors[] = "行 {$rowNumber}: メールアドレスの形式が正しくありません ({$row[2]})";
+                        $errorCount++;
+                        continue;
+                    }
+
+                    // 既存ユーザーチェック（メールアドレスと名前で判断）
+                    $existingUser = User::where('email', $row[2])
+                        ->orWhere(function ($query) use ($row) {
+                            $query->where('name', $row[0])
+                                ->where('furigana', $row[1] ?? null);
+                        })
+                        ->first();
+
+                    // 性別の変換
+                    $gender = null;
+                    if (isset($row[5])) {
+                        $genderValue = strtolower(trim($row[5]));
+                        if (in_array($genderValue, ['male', '男', '男性'])) {
+                            $gender = 'male';
+                        } elseif (in_array($genderValue, ['female', '女', '女性'])) {
+                            $gender = 'female';
+                        }
+                    }
+
+                    // 車の有無の変換
+                    $hasCar = false;
+                    if (isset($row[6])) {
+                        $carValue = strtolower(trim($row[6]));
+                        $hasCar = in_array($carValue, ['1', 'true', 'yes', '有', 'あり']);
+                    }
+
+                    // ステータスの変換
+                    $status = 'active';
+                    if (isset($row[7])) {
+                        $statusValue = strtolower(trim($row[7]));
+                        if (in_array($statusValue, ['retired', '退職'])) {
+                            $status = 'retired';
+                        } elseif (in_array($statusValue, ['shared', '共有'])) {
+                            $status = 'shared';
+                        }
+                    }
+
+                    // 採用条件の変換
+                    $employmentCondition = null;
+                    if (isset($row[8]) && !empty(trim($row[8]))) {
+                        $condValue = strtolower(trim($row[8]));
+                        if (in_array($condValue, ['dormitory', '寮'])) {
+                            $employmentCondition = 'dormitory';
+                        } elseif (in_array($condValue, ['commute', '通勤'])) {
+                            $employmentCondition = 'commute';
+                        }
+                    }
+
+                    // 固定休希望の変換（カンマ区切り）
+                    $preferredWeekDays = null;
+                    if (isset($row[13]) && !empty(trim($row[13]))) {
+                        $days = explode(',', $row[13]);
+                        $preferredWeekDays = json_encode(array_map('trim', $days));
+                    }
+
+                    // ユーザーデータの準備
+                    $userData = [
+                        'name' => $row[0],
+                        'furigana' => $row[1] ?? null,
+                        'email' => $row[2],
+                        'phone_number' => $row[3] ?? null,
+                        'line_name' => $row[4] ?? null,
+                        'gender' => $gender,
+                        'has_car' => $hasCar,
+                        'status' => $status,
+                        'employment_condition' => $employmentCondition,
+                        'commute_method' => $row[9] ?? null,
+                        'default_start_time' => $row[10] ?? null,
+                        'default_end_time' => $row[11] ?? null,
+                        'preferred_week_days_count' => isset($row[12]) && is_numeric($row[12]) ? intval($row[12]) : null,
+                        'preferred_week_days' => $preferredWeekDays,
+                        'employment_start_date' => $row[14] ?? null,
+                        'employment_end_date' => $row[15] ?? null,
+                        'employment_notes' => $row[16] ?? null,
+                        'memo' => $row[17] ?? null,
+                    ];
+
+                    if ($existingUser) {
+                        // 既存ユーザーを更新
+                        $existingUser->update($userData);
+                        $updatedCount++;
+                    } else {
+                        // 新規ユーザーを作成（一番下に追加）
+                        $temporaryPassword = Str::random(12);
+                        $userData['password'] = Hash::make($temporaryPassword);
+                        $userData['must_change_password'] = true;
+
+                        // 現在の最大position値を取得して+1
+                        $maxPosition = User::max('position') ?? 0;
+                        $userData['position'] = $maxPosition + 1;
+
+                        $user = User::create($userData);
+
+                        // 永続化用の一時パスワードを暗号化して保存
+                        $user->temporary_password = encrypt($temporaryPassword);
+                        $user->temporary_password_expires_at = now()->addDay();
+                        $user->save();
+
+                        $createdCount++;
+                    }
+                } catch (\Exception $e) {
+                    $errorMessage = $e->getMessage();
+                    // SQLエラーの場合はより分かりやすく
+                    if (strpos($errorMessage, 'Duplicate entry') !== false) {
+                        $errorMessage = "重複するデータがあります";
+                    } elseif (strpos($errorMessage, 'Data too long') !== false) {
+                        $errorMessage = "データが長すぎます";
+                    }
+                    $errors[] = "行 {$rowNumber}: {$errorMessage}";
+                    $errorCount++;
+                }
+            }
+
+            fclose($handle);
+            unlink($tmpPath);
+
+            // 結果メッセージの作成
+            $messages = [];
+            if ($createdCount > 0) {
+                $messages[] = "{$createdCount}件のユーザーを新規登録しました";
+            }
+            if ($updatedCount > 0) {
+                $messages[] = "{$updatedCount}件のユーザーを更新しました";
+            }
+            if ($errorCount > 0) {
+                $messages[] = "{$errorCount}件のエラーがありました";
+            }
+
+            $message = implode('。', $messages) . '。';
+
+            if ($errorCount > 0) {
+                return Redirect::route('users.index')
+                    ->with('error', $message)
+                    ->with('csv_errors', $errors);
+            }
+
+            return Redirect::route('users.index')->with('success', $message);
+        } catch (\Exception $e) {
+            return Redirect::route('users.index')->with('error', 'CSVの読み込みに失敗しました: ' . $e->getMessage());
+        }
+    }
 }

@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge'; // Badgeコンポーネントを�
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import Toast from '@/components/ui/toast';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 // types are intentionally typed as any in this file to avoid strict type dependency
 import { Head, Link, router, usePage } from '@inertiajs/react';
@@ -48,11 +49,27 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
     const [nextPageUrl, setNextPageUrl] = useState(initialUsers.next_page_url);
     const [loading, setLoading] = useState(false);
     const [expandedIds, setExpandedIds] = useState<number[]>([]);
+    const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' | 'info' } | null>(null);
+
+    const page = usePage();
+    const flash = page.props.flash as any;
 
     useEffect(() => {
         setUsers(initialUsers.data);
         setNextPageUrl(initialUsers.next_page_url);
     }, [initialUsers]);
+
+    useEffect(() => {
+        // 成功メッセージをトーストで表示
+        if (flash?.success) {
+            setToast({ message: flash.success, type: 'success' });
+        }
+
+        // エラーメッセージをトーストで表示
+        if (flash?.error) {
+            setToast({ message: flash.error, type: 'error' });
+        }
+    }, [flash]);
 
     const loadMore = () => {
         if (!nextPageUrl) return;
@@ -107,7 +124,6 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
         }
     };
 
-    const page = usePage();
     const { permissions } = page.props as any;
 
     // helper to ensure time is shown as HH:MM (minutes included)
@@ -227,11 +243,37 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
     return (
         <AppSidebarLayout breadcrumbs={breadcrumbs}>
             <Head title="ユーザー管理" />
+            {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
             <div className="p-4 sm:p-6 lg:p-8">
                 <div className="mb-6">
                     <HeadingSmall title="ユーザー管理" description="ユーザーの一覧・編集・削除" />
                 </div>
+
+                {/* CSVエラーメッセージの表示 */}
+                {flash?.csv_errors && Array.isArray(flash.csv_errors) && flash.csv_errors.length > 0 && (
+                    <div className="mb-6 rounded-md border border-red-200 bg-red-50 p-4">
+                        <div className="mb-2 flex items-center gap-2">
+                            <svg className="h-5 w-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                />
+                            </svg>
+                            <h3 className="text-sm font-semibold text-red-800">CSVインポートエラー</h3>
+                        </div>
+                        <div className="ml-7 space-y-1">
+                            {flash.csv_errors.map((error: string, index: number) => (
+                                <div key={index} className="text-sm text-red-700">
+                                    {error}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 <Card>
                     <CardHeader className="flex-row items-center justify-between">
                         <CardTitle>ユーザー一覧</CardTitle>
@@ -243,12 +285,58 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                 </Button>
                             </Link>
                             {canCreateUsers && (
-                                <Link href={route('users.create')}>
-                                    <Button>
-                                        <Plus className="mr-0 h-4 w-4 sm:mr-2" />
-                                        <span className="hidden sm:inline">新規作成</span>
+                                <>
+                                    <Button
+                                        className="bg-green-600 text-white hover:bg-green-700"
+                                        onClick={() => {
+                                            window.location.href = route('users.download_sample_csv');
+                                        }}
+                                    >
+                                        <Download className="mr-0 h-4 w-4 sm:mr-2" />
+                                        <span className="hidden sm:inline">ユーザー情報ダウンロード</span>
+                                        <span className="sm:hidden">DL</span>
                                     </Button>
-                                </Link>
+                                    <Button
+                                        className="bg-green-600 text-white hover:bg-green-700"
+                                        onClick={() => {
+                                            const input = document.createElement('input');
+                                            input.type = 'file';
+                                            input.accept = '.csv';
+                                            input.onchange = (e: any) => {
+                                                const file = e.target.files[0];
+                                                if (file) {
+                                                    if (!file.name.endsWith('.csv')) {
+                                                        setToast({ message: 'CSVファイルを選択してください', type: 'error' });
+                                                        return;
+                                                    }
+                                                    const formData = new FormData();
+                                                    formData.append('csv_file', file);
+                                                    router.post(route('users.import_csv'), formData, {
+                                                        forceFormData: true,
+                                                        preserveScroll: true,
+                                                        onError: (errors: any) => {
+                                                            if (errors.csv_file) {
+                                                                setToast({ message: errors.csv_file, type: 'error' });
+                                                            } else {
+                                                                setToast({ message: 'CSV一括登録に失敗しました', type: 'error' });
+                                                            }
+                                                        },
+                                                    });
+                                                }
+                                            };
+                                            input.click();
+                                        }}
+                                    >
+                                        <span className="hidden sm:inline">CSV一括登録</span>
+                                        <span className="sm:hidden">CSV</span>
+                                    </Button>
+                                    <Link href={route('users.create')}>
+                                        <Button>
+                                            <Plus className="mr-0 h-4 w-4 sm:mr-2" />
+                                            <span className="hidden sm:inline">新規作成</span>
+                                        </Button>
+                                    </Link>
+                                </>
                             )}
                         </div>
                     </CardHeader>
