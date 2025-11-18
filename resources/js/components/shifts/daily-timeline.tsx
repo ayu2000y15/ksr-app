@@ -649,7 +649,7 @@ export default function DailyTimeline(props: {
                                 <span className="mr-2 w-6 flex-shrink-0"></span>
                                 <span className="w-26 flex-shrink-0"></span>
                                 {/* Position count labels aligned with buttons */}
-                                <div className="ml-2 flex items-center gap-1">
+                                <div className="ml-8 flex items-center gap-1">
                                     <div className="flex flex-col items-center text-xs text-muted-foreground" style={{ width: '38px' }}>
                                         <span>門番</span>
                                         <span>({counts.gatekeeperCount})</span>
@@ -723,12 +723,39 @@ export default function DailyTimeline(props: {
                                         </div>
                                         {/* show original user's position to the left of the name */}
                                         <span className="mr-2 w-6 flex-shrink-0 text-right font-mono text-sm">{it.user?.position ?? '—'}</span>
-                                        {/* user name - fixed width to align position buttons */}
-                                        <span
-                                            className={`w-26 flex-shrink-0 truncate ${absentMap[Number(it.id ?? 0)] ? 'text-gray-600 line-through opacity-60' : ''}`}
-                                        >
-                                            {it.user ? it.user.name : '—'}
-                                        </span>
+                                        {/* user name + 中抜けバッジ - fixed width to align position buttons */}
+                                        <div className="flex w-32 flex-shrink-0 items-center gap-1">
+                                            <span
+                                                className={`truncate ${absentMap[Number(it.id ?? 0)] ? 'text-gray-600 line-through opacity-60' : ''}`}
+                                            >
+                                                {it.user ? it.user.name : '—'}
+                                            </span>
+                                            {/* show a small badge when this shift is marked step_out (中抜け) */}
+                                            {(() => {
+                                                const sVal = (it as any).step_out ?? ((it as any).shift && (it as any).shift.step_out);
+                                                if (!(sVal === 1 || sVal === '1')) return null;
+                                                const op = absentMap[Number(it.id ?? 0)] ? 'opacity-60' : '';
+                                                return (
+                                                    <>
+                                                        {/* full badge on md and larger */}
+                                                        <span
+                                                            className={`hidden items-center rounded bg-orange-100 px-1 text-xs text-orange-700 md:inline-flex ${op}`}
+                                                            title="中抜け"
+                                                        >
+                                                            中抜け
+                                                        </span>
+                                                        {/* compact circle icon on small screens */}
+                                                        <span
+                                                            className={`inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-xs text-orange-700 md:hidden ${op}`}
+                                                            title="中抜け"
+                                                            aria-label="中抜け"
+                                                        >
+                                                            ○
+                                                        </span>
+                                                    </>
+                                                );
+                                            })()}
+                                        </div>
                                         {/* Position buttons: gatekeeper / register / boots / snowboard / ski / free (moved to the right of name) */}
                                         <div className="ml-2 flex items-center gap-1">
                                             {/* 門番 */}
@@ -815,33 +842,6 @@ export default function DailyTimeline(props: {
                                                 />
                                             </button>
                                         </div>
-                                        {/* show a small badge when this shift is marked step_out (中抜け)
-                                            step_out may be included either at top-level or nested under `shift` (from backend),
-                                            so check both locations. treat '1' or 1 as true. */}
-                                        {(() => {
-                                            const sVal = (it as any).step_out ?? ((it as any).shift && (it as any).shift.step_out);
-                                            if (!(sVal === 1 || sVal === '1')) return null;
-                                            const op = absentMap[Number(it.id ?? 0)] ? 'opacity-60' : '';
-                                            return (
-                                                <>
-                                                    {/* full badge on md and larger */}
-                                                    <span
-                                                        className={`ml-2 hidden items-center rounded bg-orange-100 px-1 text-xs text-orange-700 md:inline-flex ${op}`}
-                                                        title="中抜け"
-                                                    >
-                                                        中抜け
-                                                    </span>
-                                                    {/* compact circle icon on small screens */}
-                                                    <span
-                                                        className={`ml-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-xs text-orange-700 md:hidden ${op}`}
-                                                        title="中抜け"
-                                                        aria-label="中抜け"
-                                                    >
-                                                        ○
-                                                    </span>
-                                                </>
-                                            );
-                                        })()}
                                     </div>
 
                                     <div className="relative h-10 flex-1">

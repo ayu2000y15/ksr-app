@@ -88,6 +88,11 @@ export default function Daily() {
     const [breakType, setBreakType] = useState<'planned' | 'actual' | 'outing'>('planned');
     const [breakLocked, setBreakLocked] = useState<boolean>(true);
 
+    // シフト一覧での選択状態
+    const [selectedShiftIds, setSelectedShiftIds] = useState<Set<number>>(new Set());
+    const [bulkStartTime, setBulkStartTime] = useState<string>('');
+    const [bulkEndTime, setBulkEndTime] = useState<string>('');
+
     // persist selected tab and break type across page reloads
     useEffect(() => {
         try {
@@ -564,12 +569,145 @@ export default function Daily() {
                     {mode === 'shift' && (
                         <Card>
                             <CardHeader>
-                                <CardTitle>シフト一覧</CardTitle>
+                                <div className="flex items-center justify-between">
+                                    <CardTitle>シフト一覧</CardTitle>
+                                    {selectedShiftIds.size > 0 && (
+                                        <div className="flex items-center gap-2">
+                                            <div className="text-sm text-muted-foreground">{selectedShiftIds.size}件選択中</div>
+                                            <input
+                                                type="time"
+                                                placeholder="開始"
+                                                value={bulkStartTime}
+                                                onChange={(e) => setBulkStartTime(e.target.value)}
+                                                className="rounded border px-2 py-1 text-sm"
+                                            />
+                                            <span className="text-sm">〜</span>
+                                            <input
+                                                type="time"
+                                                placeholder="終了"
+                                                value={bulkEndTime}
+                                                onChange={(e) => setBulkEndTime(e.target.value)}
+                                                className="rounded border px-2 py-1 text-sm"
+                                            />
+                                            <Button
+                                                size="sm"
+                                                onClick={async () => {
+                                                    if (!bulkStartTime || !bulkEndTime) {
+                                                        setToast({ message: '開始時刻と終了時刻を入力してください', type: 'error' });
+                                                        return;
+                                                    }
+                                                    if (!confirm(`選択した${selectedShiftIds.size}件のシフトの時間を一括変更しますか？`)) {
+                                                        return;
+                                                    }
+                                                    try {
+                                                        const updates = Array.from(selectedShiftIds).map(async (id) => {
+                                                            const sd = shiftDetails.find((s: any) => s.id === id);
+                                                            if (!sd) return;
+                                                            const baseDate = sd.date ?? (sd.start_time ? String(sd.start_time).slice(0, 10) : date);
+                                                            let addDays = 0;
+                                                            if (bulkStartTime && bulkEndTime) {
+                                                                const [sh, sm] = bulkStartTime.split(':').map((v) => Number(v));
+                                                                const [eh, em] = bulkEndTime.split(':').map((v) => Number(v));
+                                                                if (eh < sh || (eh === sh && em <= sm)) addDays = 1;
+                                                            }
+                                                            const toServerDateTime = (dateStr: string, time: string, dayOffset: number) => {
+                                                                // Parse date as YYYY-MM-DD and add offset days
+                                                                const [y, m, d] = dateStr.split('-').map((v) => Number(v));
+                                                                const baseDate = new Date(y, m - 1, d);
+                                                                baseDate.setDate(baseDate.getDate() + dayOffset);
+
+                                                                // Format as YYYY-MM-DD HH:MM:SS in local time (no timezone conversion)
+                                                                const year = baseDate.getFullYear();
+                                                                const month = String(baseDate.getMonth() + 1).padStart(2, '0');
+                                                                const day = String(baseDate.getDate()).padStart(2, '0');
+                                                                const [h, min] = time.split(':');
+                                                                return `${year}-${month}-${day} ${h.padStart(2, '0')}:${min.padStart(2, '0')}:00`;
+                                                            };
+                                                            const sdt = toServerDateTime(baseDate, bulkStartTime, 0);
+                                                            const edt = toServerDateTime(baseDate, bulkEndTime, addDays);
+                                                            await axios.patch(route('shift-details.update', id), {
+                                                                start_time: sdt,
+                                                                end_time: edt,
+                                                            });
+                                                        });
+                                                        await Promise.all(updates);
+                                                        setToast({ message: `${selectedShiftIds.size}件のシフトを更新しました`, type: 'success' });
+                                                        setSelectedShiftIds(new Set());
+                                                        setBulkStartTime('');
+                                                        setBulkEndTime('');
+                                                        // reload shift details
+                                                        Inertia.reload({ only: ['shiftDetails'] });
+                                                    } catch (err) {
+                                                        console.error(err);
+                                                        setToast({ message: '一括更新に失敗しました', type: 'error' });
+                                                    }
+                                                }}
+                                            >
+                                                一括変更
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => {
+                                                    setSelectedShiftIds(new Set());
+                                                    setBulkStartTime('');
+                                                    setBulkEndTime('');
+                                                }}
+                                            >
+                                                選択解除
+                                            </Button>
+                                        </div>
+                                    )}
+                                </div>
                             </CardHeader>
                             <CardContent>
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
+                                            <TableHead className="w-12">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={(() => {
+                                                        const filtered = (shiftDetails || [])
+                                                            .filter((sd: any) => (sd.type ?? '') === 'work')
+                                                            .filter((sd: any) => {
+                                                                try {
+                                                                    const startDate = sd.start_time
+                                                                        ? String(sd.start_time).slice(0, 10)
+                                                                        : sd.date
+                                                                          ? String(sd.date).slice(0, 10)
+                                                                          : null;
+                                                                    return startDate === date;
+                                                                } catch {
+                                                                    return false;
+                                                                }
+                                                            });
+                                                        return filtered.length > 0 && filtered.every((sd: any) => selectedShiftIds.has(sd.id));
+                                                    })()}
+                                                    onChange={(e) => {
+                                                        const filtered = (shiftDetails || [])
+                                                            .filter((sd: any) => (sd.type ?? '') === 'work')
+                                                            .filter((sd: any) => {
+                                                                try {
+                                                                    const startDate = sd.start_time
+                                                                        ? String(sd.start_time).slice(0, 10)
+                                                                        : sd.date
+                                                                          ? String(sd.date).slice(0, 10)
+                                                                          : null;
+                                                                    return startDate === date;
+                                                                } catch {
+                                                                    return false;
+                                                                }
+                                                            });
+                                                        if (e.target.checked) {
+                                                            setSelectedShiftIds(new Set(filtered.map((sd: any) => sd.id)));
+                                                        } else {
+                                                            setSelectedShiftIds(new Set());
+                                                        }
+                                                    }}
+                                                    aria-label="すべて選択"
+                                                />
+                                            </TableHead>
                                             <TableHead>ユーザー</TableHead>
                                             <TableHead>時間</TableHead>
                                             <TableHead>昼/夜</TableHead>
@@ -631,6 +769,16 @@ export default function Daily() {
                                                         <EditableShiftRow
                                                             key={sd.id}
                                                             sd={sd}
+                                                            isSelected={selectedShiftIds.has(sd.id)}
+                                                            onSelectChange={(checked: boolean) => {
+                                                                const newSet = new Set(selectedShiftIds);
+                                                                if (checked) {
+                                                                    newSet.add(sd.id);
+                                                                } else {
+                                                                    newSet.delete(sd.id);
+                                                                }
+                                                                setSelectedShiftIds(newSet);
+                                                            }}
                                                             onSaved={(updated: any) => {
                                                                 // prefer the client-sent datetime strings to avoid ISO/UTC transient display
                                                                 setShiftDetails((prev) =>
@@ -645,7 +793,10 @@ export default function Daily() {
                                                                     if (typeof window !== 'undefined' && window.dispatchEvent) {
                                                                         window.dispatchEvent(
                                                                             new CustomEvent('ksr.shiftDetail.updated', {
-                                                                                detail: { id: updated.id, status: (updated as any).status ?? null },
+                                                                                detail: {
+                                                                                    id: updated.id,
+                                                                                    status: (updated as any).status ?? null,
+                                                                                },
                                                                             }),
                                                                         );
                                                                     }
@@ -1399,11 +1550,15 @@ function EditableShiftRow({
     onSaved,
     onDeleted,
     onClearOpen,
+    isSelected,
+    onSelectChange,
 }: {
     sd: any;
     onSaved: (u: any) => void;
     onDeleted: (id: number) => void;
     onClearOpen?: (id: number) => void;
+    isSelected?: boolean;
+    onSelectChange?: (checked: boolean) => void;
 }) {
     const page = usePage();
     const props = page.props as any;
@@ -1603,6 +1758,16 @@ function EditableShiftRow({
 
     return (
         <TableRow id={`sd-row-${sd.id}`} className="hover:bg-gray-50">
+            {onSelectChange && (
+                <TableCell>
+                    <input
+                        type="checkbox"
+                        checked={isSelected ?? false}
+                        onChange={(e) => onSelectChange(e.target.checked)}
+                        aria-label={`シフト ${sd.id} を選択`}
+                    />
+                </TableCell>
+            )}
             <TableCell>
                 <div className="flex items-center gap-2">
                     <span className="w-10 text-right font-mono text-sm">{sd.user?.position ?? '—'}</span>
