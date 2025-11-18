@@ -33,7 +33,7 @@ class ShiftController extends Controller
             ->get();
 
         // only include active users in the month editor (prefer position ordering then id)
-        $users = User::select('id', 'name', 'position')->where('status', 'active')->orderBy('position')->orderBy('id')->get();
+        $users = User::select('id', 'name', 'position', 'preferred_week_days')->where('status', 'active')->orderBy('position')->orderBy('id')->get();
         $holidays = Holiday::whereBetween('date', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
             ->pluck('date')
             ->map(function ($d) {
@@ -201,6 +201,77 @@ class ShiftController extends Controller
         ]);
 
         foreach ($data['entries'] as $entry) {
+            // Check if this date falls on a user's preferred holiday weekday
+            $user = User::find($entry['user_id']);
+            if (!$user) {
+                continue;
+            }
+
+            $dateObj = Carbon::parse($entry['date']);
+            $weekday = (int) $dateObj->dayOfWeek;
+
+            // Parse preferred weekly holidays (same logic as autoRegisterEmploymentPeriod)
+            $prefsRaw = $user->preferred_week_days ?? [];
+            if (!is_array($prefsRaw) && is_string($prefsRaw)) {
+                $decoded = json_decode($prefsRaw, true);
+                $prefs = is_array($decoded) ? $decoded : [$prefsRaw];
+            } elseif (is_array($prefsRaw)) {
+                $prefs = $prefsRaw;
+            } else {
+                $prefs = (array) $prefsRaw;
+            }
+
+            // Normalize preferred weekdays to integers (0-6)
+            $preferredHolidayWeekdays = [];
+            foreach ($prefs as $wk) {
+                $wkInt = null;
+                if (is_numeric($wk)) {
+                    $wkInt = (int) $wk;
+                } else {
+                    $s = strtolower(trim((string) $wk));
+                    $map = [
+                        'sun' => 0,
+                        'sunday' => 0,
+                        '日' => 0,
+                        'mon' => 1,
+                        'monday' => 1,
+                        '月' => 1,
+                        'tue' => 2,
+                        'tues' => 2,
+                        'tuesday' => 2,
+                        '火' => 2,
+                        'wed' => 3,
+                        'wednesday' => 3,
+                        '水' => 3,
+                        'thu' => 4,
+                        'thurs' => 4,
+                        'thursday' => 4,
+                        '木' => 4,
+                        'fri' => 5,
+                        'friday' => 5,
+                        '金' => 5,
+                        'sat' => 6,
+                        'saturday' => 6,
+                        '土' => 6,
+                    ];
+                    if (isset($map[$s])) $wkInt = $map[$s];
+                }
+                if ($wkInt !== null) {
+                    $preferredHolidayWeekdays[] = $wkInt;
+                }
+            }
+
+            // Skip if this weekday is a preferred holiday (same logic as autoRegisterEmploymentPeriod)
+            if (in_array($weekday, $preferredHolidayWeekdays, true)) {
+                // Remove existing shift and details for this date
+                $existingShift = Shift::where('user_id', $entry['user_id'])->whereRaw('date(date) = ?', [$entry['date']])->first();
+                if ($existingShift) {
+                    ShiftDetail::where('user_id', $entry['user_id'])->whereRaw('date(date) = ?', [$entry['date']])->delete();
+                    $existingShift->delete();
+                }
+                continue;
+            }
+
             // upsert by user_id + date
             $shift = Shift::where('user_id', $entry['user_id'])->whereRaw('date(date) = ?', [$entry['date']])->first();
             if ($shift) {

@@ -476,20 +476,83 @@ export default function MonthEditor({
             return;
         }
 
+        let setCount = 0;
         selectedUsers.forEach((userId) => {
+            // Find user object to check preferred_week_days
+            const user = sortedUsers.find((u) => u.id === userId);
+            const preferredWeekDays = user?.preferred_week_days;
+
+            // Normalize preferred weekdays to integers (0-6)
+            const preferredHolidayWeekdays: number[] = [];
+            if (Array.isArray(preferredWeekDays)) {
+                preferredWeekDays.forEach((wk: any) => {
+                    let wkInt: number | null = null;
+                    if (typeof wk === 'number') {
+                        wkInt = wk;
+                    } else if (typeof wk === 'string') {
+                        const s = wk.toLowerCase().trim();
+                        const map: Record<string, number> = {
+                            sun: 0,
+                            sunday: 0,
+                            日: 0,
+                            mon: 1,
+                            monday: 1,
+                            月: 1,
+                            tue: 2,
+                            tues: 2,
+                            tuesday: 2,
+                            火: 2,
+                            wed: 3,
+                            wednesday: 3,
+                            水: 3,
+                            thu: 4,
+                            thurs: 4,
+                            thursday: 4,
+                            木: 4,
+                            fri: 5,
+                            friday: 5,
+                            金: 5,
+                            sat: 6,
+                            saturday: 6,
+                            土: 6,
+                        };
+                        if (map[s] !== undefined) wkInt = map[s];
+                    }
+                    if (wkInt !== null) {
+                        preferredHolidayWeekdays.push(wkInt);
+                    }
+                });
+            }
+
             selectedDates.forEach((d) => {
+                // Check if this date falls on a user's preferred holiday weekday
+                const dateObj = parseLocal(d);
+                const weekday = dateObj.getDay(); // 0 (Sun) - 6 (Sat)
+
+                // Skip if this weekday is a preferred holiday
+                if (preferredHolidayWeekdays.includes(weekday)) {
+                    return;
+                }
+
                 // only set to 'day' if the cell is currently empty (do not overwrite existing assignments)
                 const cur = gridRef.current?.[userId]?.[d] ?? '';
                 if (cur === '') {
                     setCell(userId, d, 'day');
                     queueSave(userId, d, 'day');
+                    setCount++;
                 }
             });
         });
 
-        setToast({ message: `${selectedUsers.size}人のユーザーの${selectedDates.size}日分を昼にしました`, type: 'success' });
+        setToast({ message: `${setCount}件を昼に設定しました`, type: 'success' });
         setSelectedDates(new Set());
         setSelectedUsers(new Set());
+
+        // Reload page to reflect changes
+        setTimeout(() => {
+            const monthParam = `${currentYear}-${pad(currentMonth + 1)}-01`;
+            router.get(route('shifts.index', { month: monthParam }), {}, { preserveState: false, preserveScroll: false });
+        }, 500);
     };
 
     const bulkClearSelected = () => {
@@ -514,6 +577,12 @@ export default function MonthEditor({
         setToast({ message: `${clearedCount}件の出勤情報を空欄にしました`, type: 'success' });
         setSelectedDates(new Set());
         setSelectedUsers(new Set());
+
+        // Reload page to reflect changes
+        setTimeout(() => {
+            const monthParam = `${currentYear}-${pad(currentMonth + 1)}-01`;
+            router.get(route('shifts.index', { month: monthParam }), {}, { preserveState: false, preserveScroll: false });
+        }, 500);
     };
 
     return (
