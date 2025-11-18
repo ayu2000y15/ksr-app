@@ -502,8 +502,15 @@ class ShiftController extends Controller
         $d = Carbon::parse($date);
         $weekday = (int) $d->dayOfWeek;
 
-        // find default shifts for weekday and shift_type
-        $defaults = DefaultShift::where('day_of_week', $weekday)->where('shift_type', $shiftType)->get();
+        // Check if the date is a holiday
+        $isHoliday = Holiday::where('date', $date)->exists();
+        $patternType = $isHoliday ? 'holiday' : 'weekday';
+
+        // find default shifts for weekday, shift_type, and type (holiday/weekday)
+        $defaults = DefaultShift::where('day_of_week', $weekday)
+            ->where('shift_type', $shiftType)
+            ->where('type', $patternType)
+            ->get();
         // remove existing details for that user/date to avoid duplicates (delete all types: work, break, etc.)
         ShiftDetail::where('user_id', $userId)->whereRaw('date(date) = ?', [$date])->delete();
 
