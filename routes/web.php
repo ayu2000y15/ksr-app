@@ -50,6 +50,8 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
     Route::get('/users/download-sample-csv', [UserController::class, 'downloadSampleCsv'])->name('users.download_sample_csv');
     // CSV一括登録
     Route::post('/users/import-csv', [UserController::class, 'importCsv'])->name('users.import_csv');
+    // JSON API: ページネーションされたユーザー一覧（無限スクロール用）
+    Route::get('/users/api', [UserController::class, 'apiIndex'])->name('users.api');
     Route::post('/users', [UserController::class, 'store'])->name('users.store');
     // 作成後に表示する認証情報ページ
     Route::get('/users/credentials', [UserController::class, 'credentials'])->name('users.credentials');

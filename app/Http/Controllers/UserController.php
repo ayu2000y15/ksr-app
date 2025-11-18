@@ -56,6 +56,39 @@ class UserController extends Controller
     }
 
     /**
+     * JSON API: ページネーションされたユーザー一覧（無限スクロール用）
+     */
+    public function apiIndex(Request $request)
+    {
+        if (Auth::user()->hasRole('システム管理者')) {
+            // bypass
+        } else {
+            $this->authorize('viewAny', User::class);
+        }
+
+        $sortableColumns = ['id', 'name', 'email', 'status', 'created_at'];
+        $sort = in_array($request->query('sort', 'id'), $sortableColumns) ? $request->query('sort', 'id') : 'id';
+        $direction = in_array($request->query('direction', 'asc'), ['asc', 'desc']) ? $request->query('direction', 'asc') : 'asc';
+
+        $query = User::with(['roles', 'rentals' => function ($query) {
+            $query->with(['rentalUser', 'returnUser', 'rentalItem'])->orderBy('rental_date', 'desc');
+        }]);
+        if ($sort === 'id') {
+            $query = $query->orderBy('position', $direction)->orderBy('id', $direction);
+        } else {
+            $query = $query->orderBy($sort, $direction);
+        }
+
+        $users = $query->simplePaginate(50);
+
+        // Return minimal JSON compatible shape used by frontend
+        return response()->json([
+            'data' => $users->items(),
+            'next_page_url' => $users->nextPageUrl(),
+        ]);
+    }
+
+    /**
      * ユーザー作成フォームを表示します。
      */
     public function create()

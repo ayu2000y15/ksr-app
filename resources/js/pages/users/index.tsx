@@ -10,7 +10,7 @@ import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { Car, Download, Edit, Eye, GripVertical, LoaderCircle, Plus, Trash } from 'lucide-react';
-import { Fragment, ReactNode, useEffect, useState } from 'react';
+import { Fragment, ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 // dialog modal removed: details now open on a separate page
 
 // パンくずリストの定義
@@ -71,29 +71,50 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
         }
     }, [flash]);
 
-    const loadMore = () => {
+    const loadMore = useCallback(() => {
         if (!nextPageUrl) return;
 
         setLoading(true);
-        router.get(
-            nextPageUrl,
-            {},
-            {
-                preserveState: true,
-                preserveScroll: true,
-                onSuccess: (page) => {
-                    const newUsers = (page.props.users as any).data;
-                    const nextPage = (page.props.users as any).next_page_url;
+
+        try {
+            // nextPageUrl may be an absolute URL; extract the `page` param
+            const url = new URL(nextPageUrl, window.location.origin);
+            const pageParam = url.searchParams.get('page') || '2';
+
+            // Use JSON API to fetch paginated users so we don't trigger Inertia navigation
+            const apiUrl = route('users.api', { page: pageParam });
+            axios
+                .get(apiUrl)
+                .then((res) => {
+                    const newUsers = res.data.data || [];
+                    const nextPage = res.data.next_page_url || null;
                     setUsers((prevUsers) => [...prevUsers, ...newUsers]);
                     setNextPageUrl(nextPage);
                     setLoading(false);
-                },
-                onError: () => {
+                })
+                .catch(() => {
                     setLoading(false);
+                });
+        } catch {
+            // Fallback: try direct get of nextPageUrl
+            router.get(
+                nextPageUrl,
+                {},
+                {
+                    preserveState: true,
+                    preserveScroll: true,
+                    onSuccess: (page) => {
+                        const newUsers = (page.props.users as any).data;
+                        const nextPage = (page.props.users as any).next_page_url;
+                        setUsers((prevUsers) => [...prevUsers, ...newUsers]);
+                        setNextPageUrl(nextPage);
+                        setLoading(false);
+                    },
+                    onError: () => setLoading(false),
                 },
-            },
-        );
-    };
+            );
+        }
+    }, [nextPageUrl]);
 
     const toggleExpand = (id: number) => {
         setExpandedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -125,6 +146,7 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
     };
 
     const { permissions } = page.props as any;
+    const sentinelRef = useRef<HTMLDivElement | null>(null);
 
     // helper to ensure time is shown as HH:MM (minutes included)
     const formatTime = (t: any) => {
@@ -239,6 +261,25 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
     const canCreateUsers = permissions?.user?.create || permissions?.is_system_admin;
     const canUpdateUsers = permissions?.user?.update || permissions?.is_system_admin;
     const canDeleteUsers = permissions?.user?.delete || permissions?.is_system_admin;
+
+    // Infinite scroll: observe sentinel and trigger loadMore when visible
+    useEffect(() => {
+        const node = sentinelRef.current;
+        if (!node) return;
+        const obs = new IntersectionObserver(
+            (entries) => {
+                entries.forEach((entry) => {
+                    if (entry.isIntersecting && !loading && nextPageUrl) {
+                        loadMore();
+                    }
+                });
+            },
+            { rootMargin: '200px' },
+        );
+
+        obs.observe(node);
+        return () => obs.disconnect();
+    }, [loading, nextPageUrl, loadMore]);
 
     return (
         <AppSidebarLayout breadcrumbs={breadcrumbs}>
@@ -864,12 +905,15 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                         </div>
 
                         {nextPageUrl && (
-                            <div className="mt-6 text-center">
-                                <Button onClick={loadMore} disabled={loading} variant="outline">
-                                    {loading && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />}
-                                    もっとみる
-                                </Button>
-                            </div>
+                            <>
+                                <div ref={sentinelRef} />
+                                <div className="mt-6 text-center">
+                                    <Button onClick={loadMore} disabled={loading} variant="outline">
+                                        {loading && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />}
+                                        もっとみる
+                                    </Button>
+                                </div>
+                            </>
                         )}
                     </CardContent>
                 </Card>
