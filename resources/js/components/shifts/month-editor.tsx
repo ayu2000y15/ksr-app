@@ -516,17 +516,17 @@ export default function MonthEditor({
                         </Button>
                         <Button
                             size="sm"
-                            aria-label="規定休日登録"
+                            aria-label="自動登録"
                             onClick={async () => {
                                 try {
                                     // confirm action
                                     const ok = window.confirm(
-                                        'この操作は当該月の全ユーザーの希望週休を一括登録します。\nすでに登録済みのシフトがある場合は、上書きされる可能性があります。\nよろしいですか？',
+                                        'この操作は各ユーザーの勤務開始日から勤務終了日までの期間を昼出勤として一括登録します。\n固定休希望と基本出勤時間が考慮されます。\nすでに登録済みのシフトは変更されません。\nよろしいですか？',
                                     );
                                     if (!ok) return;
                                     setSaving(true);
                                     const monthParam = `${currentYear}-${pad(currentMonth + 1)}-01`;
-                                    const res = await axios.post(route('shifts.apply_preferred_holidays'), { month: monthParam });
+                                    const res = await axios.post(route('shifts.auto_register_employment_period'), { month: monthParam });
                                     const msg = res?.data?.message ?? '処理が完了しました。';
                                     setToast({ message: msg, type: 'success' });
                                     // refresh current month view
@@ -536,7 +536,7 @@ export default function MonthEditor({
                                         router.get(route('shifts.index', { month: monthParam }), {}, { preserveState: true, preserveScroll: true });
                                     }
                                 } catch (err: unknown) {
-                                    let msg = '規定休日の登録に失敗しました';
+                                    let msg = '自動登録に失敗しました';
                                     try {
                                         const j = err as { response?: { data?: { message?: string } } };
                                         if (j?.response?.data?.message) msg = j.response.data.message;
@@ -550,7 +550,7 @@ export default function MonthEditor({
                             }}
                             disabled={saving}
                         >
-                            規定休日登録
+                            自動登録
                         </Button>
                         <Button
                             size="sm"
@@ -578,8 +578,8 @@ export default function MonthEditor({
                                 ユーザーと日付のチェックボックスで選択した組み合わせを昼に設定します。すでに登録済みの予定は変更されません。
                             </div>
                             <div className="mt-1">
-                                ・<strong> 「規定休日登録」ボタン</strong>:
-                                ユーザーによって固定希望休日がある場合に、その月の休日をまとめて登録します。
+                                ・<strong> 「自動登録」ボタン</strong>:
+                                各ユーザーの勤務開始日から勤務終了日までの期間を昼出勤として一括登録します。固定休希望と基本出勤時間が考慮され、すでに登録済みのシフトは変更されません。
                             </div>
                             <div className="mt-1">
                                 ・<strong>日別の詳細シフト</strong>:

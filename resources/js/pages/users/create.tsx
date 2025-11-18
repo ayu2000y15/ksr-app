@@ -25,7 +25,8 @@ export default function Create() {
         default_end_time: '',
         preferred_week_days: [] as string[],
         preferred_week_days_count: '',
-        employment_period: '',
+        employment_start_date: '',
+        employment_end_date: '',
         employment_notes: '',
     });
 
@@ -284,13 +285,25 @@ export default function Create() {
                                     </div>
                                 </div>
 
-                                <div>
-                                    <Label htmlFor="employment_period">勤務期間</Label>
-                                    <Input
-                                        id="employment_period"
-                                        value={data.employment_period}
-                                        onChange={(e) => setData('employment_period', e.target.value)}
-                                    />
+                                <div className="flex gap-4">
+                                    <div className="flex-1">
+                                        <Label htmlFor="employment_start_date">勤務開始日</Label>
+                                        <Input
+                                            id="employment_start_date"
+                                            type="date"
+                                            value={data.employment_start_date}
+                                            onChange={(e) => setData('employment_start_date', e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="flex-1">
+                                        <Label htmlFor="employment_end_date">勤務終了日</Label>
+                                        <Input
+                                            id="employment_end_date"
+                                            type="date"
+                                            value={data.employment_end_date}
+                                            onChange={(e) => setData('employment_end_date', e.target.value)}
+                                        />
+                                    </div>
                                 </div>
 
                                 <div>

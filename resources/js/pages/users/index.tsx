@@ -348,7 +348,10 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
 
                                                     <div className="flex">
                                                         <div className="w-36 text-sm text-muted-foreground">勤務期間</div>
-                                                        <div className="flex-1">{user.employment_period || '—'}</div>
+                                                        <div className="flex-1">
+                                                            {user.employment_start_date ? user.employment_start_date.replace(/-/g, '/') : '—'}～
+                                                            {user.employment_end_date ? user.employment_end_date.replace(/-/g, '/') : '—'}
+                                                        </div>
                                                     </div>
 
                                                     <div className="flex">
@@ -666,7 +669,13 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
 
                                                                 <div className="flex">
                                                                     <div className="w-36 text-sm text-muted-foreground">勤務期間</div>
-                                                                    <div className="flex-1">{user.employment_period || '—'}</div>
+                                                                    <div className="flex-1">
+                                                                        {user.employment_start_date
+                                                                            ? user.employment_start_date.replace(/-/g, '/')
+                                                                            : '—'}
+                                                                        ～
+                                                                        {user.employment_end_date ? user.employment_end_date.replace(/-/g, '/') : '—'}
+                                                                    </div>
                                                                 </div>
 
                                                                 <div className="flex">

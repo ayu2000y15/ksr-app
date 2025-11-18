@@ -503,199 +503,120 @@ export default function Index({
                                     const isStepOut = (localStepOutDates || []).includes(iso);
 
                                     return (
-                                        <div key={iso} className={`flex items-center justify-between border-b px-4 py-2 ${rowBg}`}>
-                                            <div className="flex items-start gap-4">
-                                                <div className="w-36 flex-shrink-0">
-                                                    <div className={`font-medium ${dateTextClass}`}>{formatMd(d)}</div>
-                                                    <div className="mt-1 md:hidden">
-                                                        {holiday && <div className="text-xs text-red-600">祝日</div>}
+                                        <div key={iso} className={`border-b px-2 py-3 sm:px-4 ${rowBg}`}>
+                                            {/* Mobile layout: vertical stacking */}
+                                            <div className="flex flex-col gap-2 md:hidden">
+                                                <div className="flex items-center justify-between">
+                                                    <div>
+                                                        <div className={`font-medium ${dateTextClass}`}>{formatMd(d)}</div>
+                                                        {holiday && <div className="mt-0.5 text-xs text-red-600">祝日</div>}
                                                     </div>
-                                                </div>
-
-                                                {/* desktop: inline badge/time next to date */}
-                                                <div className="hidden flex-1 items-center gap-3 md:flex">
                                                     {isUserLeave && (
-                                                        <div className="inline-block rounded bg-green-100 px-3 py-1 text-sm font-medium text-green-800">
+                                                        <div className="inline-block rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
                                                             休
                                                         </div>
                                                     )}
-                                                    {showTime && timeStr && (
-                                                        <div
-                                                            className={`text-sm ${isPastOnly ? 'text-muted-foreground' : 'font-medium text-sky-700'}`}
-                                                        >
-                                                            {timeStr}
-                                                        </div>
-                                                    )}
                                                 </div>
-
-                                                {/* mobile: stacked info under date (time below) */}
-                                                <div className="flex-1 md:hidden">
-                                                    {isUserLeave && (
-                                                        <div className="mt-1 inline-block rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
-                                                            休
-                                                        </div>
-                                                    )}
-                                                    {showTime && timeStr && (
-                                                        <div
-                                                            className={`text-xs ${isPastOnly ? 'text-muted-foreground' : 'font-medium text-sky-700'}`}
-                                                        >
-                                                            {timeStr}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            <div className="flex items-center gap-2">
-                                                {(() => {
-                                                    // If not pastOrToday, decide actions in this order:
-                                                    // 1) If user has a leave already -> show cancel
-                                                    // 2) If user has a scheduled shift (出勤日) -> show meal-ticket / 中抜け (regardless of weekend/holiday)
-                                                    // 3) If no shift: if withinDeadline -> show 休暇申請 (申請), else -> show 休暇登録
-                                                    if (!pastOrToday) {
-                                                        if (isUserLeave) {
-                                                            // Do not show cancel button when the date is within the application deadline window.
-                                                            // application_deadline_days == 0 means no deadline (allow cancel).
-                                                            const allowCancel = application_deadline_days === 0 ? true : !withinDeadline;
-                                                            const isWeekendOrHoliday = holiday || dayIndex === 0 || dayIndex === 6;
-                                                            // hide cancel on weekends/holidays even when allowCancel is true
-                                                            if (allowCancel && !isWeekendOrHoliday) {
-                                                                return (
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="destructive"
-                                                                        onClick={async () => {
-                                                                            try {
-                                                                                await axios.post(route('shifts.unmark_break'), {
-                                                                                    user_id: authUser.id,
-                                                                                    date: iso,
-                                                                                });
-                                                                                setLocalUserLeaves((prev) => prev.filter((x) => x !== iso));
-                                                                                // restore remaining day locally
-                                                                                setLocalRemainingDays((prev) => (prev === null ? null : prev + 1));
-                                                                                setToast({ message: '休暇をキャンセルしました。', type: 'success' });
-                                                                            } catch (e) {
-                                                                                console.error(e);
-                                                                                setToast({
-                                                                                    message: '休暇のキャンセルに失敗しました。',
-                                                                                    type: 'error',
-                                                                                });
-                                                                            }
-                                                                        }}
-                                                                    >
-                                                                        キャンセル
-                                                                    </Button>
-                                                                );
-                                                            }
-                                                            // otherwise hide the cancel button during application period or on weekends/holidays
-                                                            return null;
-                                                        }
-                                                        // If the user has a scheduled shift on this date, show shift-related actions regardless of weekend/holiday
-                                                        if (isShiftExists || (timeStr && timeStr !== '時間未設定')) {
-                                                            // meal ticket button on days with shifts
-                                                            const hasMealTicketFalse = (() => {
-                                                                if (!sd) return false;
-                                                                const mt = (sd as unknown as { meal_ticket?: number | string | boolean }).meal_ticket;
-                                                                return mt === 0 || mt === '0' || mt === false;
-                                                            })();
-                                                            const isMealTicket = (localMealTicketDates || []).includes(iso) || hasMealTicketFalse;
-
-                                                            // create meal ticket button element (optimistic handlers)
-                                                            // showMealTicketControl: hide meal-ticket control for today and tomorrow (daysUntil <= 1)
-                                                            const showMealTicketControl = typeof daysUntil === 'number' ? daysUntil >= 2 : true;
-                                                            // only show shift actions (meal-ticket / step-out) when within the application deadline (or no limit)
-                                                            const showShiftActionsByDeadline = withinDeadlineOrNoLimit;
-
-                                                            const mealTicketButton =
-                                                                showShiftActionsByDeadline && showMealTicketControl ? (
-                                                                    isMealTicket ? (
+                                                {showTime && timeStr && (
+                                                    <div className={`text-xs ${isPastOnly ? 'text-muted-foreground' : 'font-medium text-sky-700'}`}>
+                                                        {timeStr}
+                                                    </div>
+                                                )}
+                                                <div className="flex w-full flex-col gap-1.5">
+                                                    {(() => {
+                                                        // If not pastOrToday, decide actions in this order:
+                                                        // 1) If user has a leave already -> show cancel
+                                                        // 2) If user has a scheduled shift (出勤日) -> show meal-ticket / 中抜け (regardless of weekend/holiday)
+                                                        // 3) If no shift: if withinDeadline -> show 休暇申請 (申請), else -> show 休暇登録
+                                                        if (!pastOrToday) {
+                                                            if (isUserLeave) {
+                                                                // Do not show cancel button when the date is within the application deadline window.
+                                                                // application_deadline_days == 0 means no deadline (allow cancel).
+                                                                const allowCancel = application_deadline_days === 0 ? true : !withinDeadline;
+                                                                const isWeekendOrHoliday = holiday || dayIndex === 0 || dayIndex === 6;
+                                                                // hide cancel on weekends/holidays even when allowCancel is true
+                                                                if (allowCancel && !isWeekendOrHoliday) {
+                                                                    return (
                                                                         <Button
+                                                                            size="sm"
                                                                             variant="destructive"
-                                                                            size="sm"
                                                                             onClick={async () => {
                                                                                 try {
-                                                                                    await axios.post(route('shifts.unmark_meal_ticket'), {
+                                                                                    await axios.post(route('shifts.unmark_break'), {
                                                                                         user_id: authUser.id,
                                                                                         date: iso,
                                                                                     });
-                                                                                    setLocalMealTicketDates((prev) => prev.filter((d) => d !== iso));
-                                                                                    setToast({
-                                                                                        message: '食券不要を解除しました。',
-                                                                                        type: 'success',
-                                                                                    });
-                                                                                } catch (err) {
-                                                                                    console.error(err);
-                                                                                    setToast({
-                                                                                        message: '食券不要の解除に失敗しました。',
-                                                                                        type: 'error',
-                                                                                    });
-                                                                                }
-                                                                            }}
-                                                                        >
-                                                                            食券必要
-                                                                        </Button>
-                                                                    ) : (
-                                                                        <Button
-                                                                            variant="outline"
-                                                                            size="sm"
-                                                                            onClick={async () => {
-                                                                                try {
-                                                                                    await axios.post(route('shifts.mark_meal_ticket'), {
-                                                                                        user_id: authUser.id,
-                                                                                        date: iso,
-                                                                                    });
-                                                                                    setLocalMealTicketDates((prev) =>
-                                                                                        prev.includes(iso) ? prev : [...prev, iso],
+                                                                                    setLocalUserLeaves((prev) => prev.filter((x) => x !== iso));
+                                                                                    // restore remaining day locally
+                                                                                    setLocalRemainingDays((prev) =>
+                                                                                        prev === null ? null : prev + 1,
                                                                                     );
                                                                                     setToast({
-                                                                                        message: '食券不要に設定しました。',
+                                                                                        message: '休暇をキャンセルしました。',
                                                                                         type: 'success',
                                                                                     });
-                                                                                } catch (err) {
-                                                                                    console.error(err);
+                                                                                } catch (e) {
+                                                                                    console.error(e);
                                                                                     setToast({
-                                                                                        message: '食券不要に設定できませんでした。',
+                                                                                        message: '休暇のキャンセルに失敗しました。',
                                                                                         type: 'error',
                                                                                     });
                                                                                 }
                                                                             }}
                                                                         >
-                                                                            食券不要
+                                                                            キャンセル
                                                                         </Button>
-                                                                    )
-                                                                ) : null;
+                                                                    );
+                                                                }
+                                                                // otherwise hide the cancel button during application period or on weekends/holidays
+                                                                return null;
+                                                            }
+                                                            // If the user has a scheduled shift on this date, show shift-related actions regardless of weekend/holiday
+                                                            if (isShiftExists || (timeStr && timeStr !== '時間未設定')) {
+                                                                // meal ticket button on days with shifts
+                                                                const hasMealTicketFalse = (() => {
+                                                                    if (!sd) return false;
+                                                                    const mt = (sd as unknown as { meal_ticket?: number | string | boolean })
+                                                                        .meal_ticket;
+                                                                    return mt === 0 || mt === '0' || mt === false;
+                                                                })();
+                                                                const isMealTicket = (localMealTicketDates || []).includes(iso) || hasMealTicketFalse;
 
-                                                            // render meal ticket button (only when allowed) then render 中抜け controls
-                                                            return (
-                                                                <>
-                                                                    {mealTicketButton}
-                                                                    {mealTicketButton ? <div className="w-1" /> : null}
-                                                                    {/* 中抜け controls: also gated by deadline */}
-                                                                    {showShiftActionsByDeadline ? (
-                                                                        isStepOut ? (
+                                                                // create meal ticket button element (optimistic handlers)
+                                                                // showMealTicketControl: hide meal-ticket control for today and tomorrow (daysUntil <= 1)
+                                                                const showMealTicketControl = typeof daysUntil === 'number' ? daysUntil >= 2 : true;
+                                                                // only show shift actions (meal-ticket / step-out) when within the application deadline (or no limit)
+                                                                const showShiftActionsByDeadline = withinDeadlineOrNoLimit;
+
+                                                                const mealTicketButton =
+                                                                    showShiftActionsByDeadline && showMealTicketControl ? (
+                                                                        isMealTicket ? (
                                                                             <Button
                                                                                 variant="destructive"
                                                                                 size="sm"
                                                                                 onClick={async () => {
                                                                                     try {
-                                                                                        await axios.post(route('shifts.unmark_step_out'), {
+                                                                                        await axios.post(route('shifts.unmark_meal_ticket'), {
                                                                                             user_id: authUser.id,
                                                                                             date: iso,
                                                                                         });
-                                                                                        setLocalStepOutDates((prev) => prev.filter((d) => d !== iso));
+                                                                                        setLocalMealTicketDates((prev) =>
+                                                                                            prev.filter((d) => d !== iso),
+                                                                                        );
                                                                                         setToast({
-                                                                                            message: '中抜けを取消しました。',
+                                                                                            message: '食券不要を解除しました。',
                                                                                             type: 'success',
                                                                                         });
                                                                                     } catch (err) {
                                                                                         console.error(err);
                                                                                         setToast({
-                                                                                            message: '中抜けの取消に失敗しました。',
+                                                                                            message: '食券不要の解除に失敗しました。',
                                                                                             type: 'error',
                                                                                         });
                                                                                     }
                                                                                 }}
                                                                             >
-                                                                                中抜け取消
+                                                                                食券必要
                                                                             </Button>
                                                                         ) : (
                                                                             <Button
@@ -703,138 +624,518 @@ export default function Index({
                                                                                 size="sm"
                                                                                 onClick={async () => {
                                                                                     try {
-                                                                                        await axios.post(route('shifts.mark_step_out'), {
+                                                                                        await axios.post(route('shifts.mark_meal_ticket'), {
                                                                                             user_id: authUser.id,
                                                                                             date: iso,
                                                                                         });
-                                                                                        setLocalStepOutDates((prev) =>
+                                                                                        setLocalMealTicketDates((prev) =>
                                                                                             prev.includes(iso) ? prev : [...prev, iso],
                                                                                         );
                                                                                         setToast({
-                                                                                            message: '中抜けに変更しました。',
+                                                                                            message: '食券不要に設定しました。',
                                                                                             type: 'success',
                                                                                         });
                                                                                     } catch (err) {
                                                                                         console.error(err);
                                                                                         setToast({
-                                                                                            message: '中抜けにできませんでした。',
+                                                                                            message: '食券不要に設定できませんでした。',
                                                                                             type: 'error',
                                                                                         });
                                                                                     }
                                                                                 }}
                                                                             >
-                                                                                中抜け
+                                                                                食券不要
                                                                             </Button>
                                                                         )
-                                                                    ) : null}
-                                                                    {/* 休暇登録ボタン: シフトが存在しても表示 */}
-                                                                    {!holiday && dayIndex !== 0 && dayIndex !== 6 && (
-                                                                        <>
-                                                                            {(mealTicketButton ||
-                                                                                (showShiftActionsByDeadline && isStepOut !== undefined)) && (
-                                                                                <div className="w-1" />
-                                                                            )}
-                                                                            {withinDeadline ? (
+                                                                    ) : null;
+
+                                                                // render meal ticket button (only when allowed) then render 中抜け controls
+                                                                return (
+                                                                    <>
+                                                                        {mealTicketButton}
+                                                                        {mealTicketButton ? <div className="w-1" /> : null}
+                                                                        {/* 中抜け controls: also gated by deadline */}
+                                                                        {showShiftActionsByDeadline ? (
+                                                                            isStepOut ? (
                                                                                 <Button
+                                                                                    variant="destructive"
                                                                                     size="sm"
-                                                                                    className="bg-green-600 text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500"
-                                                                                    onClick={() => {
-                                                                                        if (localRemainingDays !== null && localRemainingDays <= 0) {
+                                                                                    onClick={async () => {
+                                                                                        try {
+                                                                                            await axios.post(route('shifts.unmark_step_out'), {
+                                                                                                user_id: authUser.id,
+                                                                                                date: iso,
+                                                                                            });
+                                                                                            setLocalStepOutDates((prev) =>
+                                                                                                prev.filter((d) => d !== iso),
+                                                                                            );
                                                                                             setToast({
-                                                                                                message:
-                                                                                                    '残りの休暇が不足しているため申請できません。',
+                                                                                                message: '中抜けを取消しました。',
+                                                                                                type: 'success',
+                                                                                            });
+                                                                                        } catch (err) {
+                                                                                            console.error(err);
+                                                                                            setToast({
+                                                                                                message: '中抜けの取消に失敗しました。',
                                                                                                 type: 'error',
                                                                                             });
-                                                                                            return;
                                                                                         }
-                                                                                        setModalDate(iso);
-                                                                                        setModalOpen(true);
                                                                                     }}
                                                                                 >
-                                                                                    休暇申請
+                                                                                    中抜け取消
                                                                                 </Button>
                                                                             ) : (
-                                                                                <Button size="sm" onClick={() => postImmediateLeave(iso)}>
-                                                                                    休暇登録
+                                                                                <Button
+                                                                                    variant="outline"
+                                                                                    size="sm"
+                                                                                    onClick={async () => {
+                                                                                        try {
+                                                                                            await axios.post(route('shifts.mark_step_out'), {
+                                                                                                user_id: authUser.id,
+                                                                                                date: iso,
+                                                                                            });
+                                                                                            setLocalStepOutDates((prev) =>
+                                                                                                prev.includes(iso) ? prev : [...prev, iso],
+                                                                                            );
+                                                                                            setToast({
+                                                                                                message: '中抜けに変更しました。',
+                                                                                                type: 'success',
+                                                                                            });
+                                                                                        } catch (err) {
+                                                                                            console.error(err);
+                                                                                            setToast({
+                                                                                                message: '中抜けにできませんでした。',
+                                                                                                type: 'error',
+                                                                                            });
+                                                                                        }
+                                                                                    }}
+                                                                                >
+                                                                                    中抜け
                                                                                 </Button>
-                                                                            )}
-                                                                        </>
-                                                                    )}
-                                                                </>
-                                                            );
-                                                        }
+                                                                            )
+                                                                        ) : null}
+                                                                        {/* 休暇登録ボタン: シフトが存在しても表示 */}
+                                                                        {!holiday && dayIndex !== 0 && dayIndex !== 6 && (
+                                                                            <>
+                                                                                {(mealTicketButton ||
+                                                                                    (showShiftActionsByDeadline && isStepOut !== undefined)) && (
+                                                                                    <div className="w-1" />
+                                                                                )}
+                                                                                {withinDeadline ? (
+                                                                                    <Button
+                                                                                        size="sm"
+                                                                                        className="bg-green-600 text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500"
+                                                                                        onClick={() => {
+                                                                                            if (
+                                                                                                localRemainingDays !== null &&
+                                                                                                localRemainingDays <= 0
+                                                                                            ) {
+                                                                                                setToast({
+                                                                                                    message:
+                                                                                                        '残りの休暇が不足しているため申請できません。',
+                                                                                                    type: 'error',
+                                                                                                });
+                                                                                                return;
+                                                                                            }
+                                                                                            setModalDate(iso);
+                                                                                            setModalOpen(true);
+                                                                                        }}
+                                                                                    >
+                                                                                        休暇申請
+                                                                                    </Button>
+                                                                                ) : (
+                                                                                    <Button size="sm" onClick={() => postImmediateLeave(iso)}>
+                                                                                        休暇登録
+                                                                                    </Button>
+                                                                                )}
+                                                                            </>
+                                                                        )}
+                                                                    </>
+                                                                );
+                                                            }
 
-                                                        // No shift exists on this date -> decide between 申請 (withinDeadline) and 登録 (after deadline)
-                                                        if (!holiday && dayIndex !== 0 && dayIndex !== 6) {
-                                                            if (withinDeadline) {
-                                                                // within deadline window: show 休暇申請
+                                                            // No shift exists on this date -> decide between 申請 (withinDeadline) and 登録 (after deadline)
+                                                            if (!holiday && dayIndex !== 0 && dayIndex !== 6) {
+                                                                if (withinDeadline) {
+                                                                    // within deadline window: show 休暇申請
+                                                                    return (
+                                                                        <Button
+                                                                            size="sm"
+                                                                            className="bg-green-600 text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500"
+                                                                            onClick={() => {
+                                                                                if (localRemainingDays !== null && localRemainingDays <= 0) {
+                                                                                    setToast({
+                                                                                        message: '残りの休暇が不足しているため申請できません。',
+                                                                                        type: 'error',
+                                                                                    });
+                                                                                    return;
+                                                                                }
+                                                                                setModalDate(iso);
+                                                                                setModalOpen(true);
+                                                                            }}
+                                                                        >
+                                                                            休暇申請
+                                                                        </Button>
+                                                                    );
+                                                                }
+
+                                                                // after deadline: show 休暇登録 (immediate)
                                                                 return (
-                                                                    <Button
-                                                                        size="sm"
-                                                                        className="bg-green-600 text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500"
-                                                                        onClick={() => {
-                                                                            if (localRemainingDays !== null && localRemainingDays <= 0) {
-                                                                                setToast({
-                                                                                    message: '残りの休暇が不足しているため申請できません。',
-                                                                                    type: 'error',
-                                                                                });
-                                                                                return;
-                                                                            }
-                                                                            setModalDate(iso);
-                                                                            setModalOpen(true);
-                                                                        }}
-                                                                    >
-                                                                        休暇申請
+                                                                    <Button size="sm" onClick={() => postImmediateLeave(iso)}>
+                                                                        休暇登録
                                                                     </Button>
                                                                 );
                                                             }
 
-                                                            // after deadline: show 休暇登録 (immediate)
+                                                            return null;
+                                                        }
+
+                                                        // pastOrToday: show 中抜け on 当日 only when a shift exists
+                                                        if (isToday && isShiftExists) {
+                                                            if (isStepOut) {
+                                                                return (
+                                                                    <Button variant="outline" size="sm" disabled>
+                                                                        中抜け申請済
+                                                                    </Button>
+                                                                );
+                                                            }
+
                                                             return (
-                                                                <Button size="sm" onClick={() => postImmediateLeave(iso)}>
-                                                                    休暇登録
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    onClick={async () => {
+                                                                        try {
+                                                                            await axios.post(route('shifts.mark_step_out'), {
+                                                                                user_id: authUser.id,
+                                                                                date: iso,
+                                                                            });
+                                                                            setLocalStepOutDates((prev) =>
+                                                                                prev.includes(iso) ? prev : [...prev, iso],
+                                                                            );
+                                                                            setToast({ message: '中抜けに変更しました。', type: 'success' });
+                                                                        } catch (e) {
+                                                                            console.error(e);
+                                                                            setToast({ message: '中抜けにできませんでした。', type: 'error' });
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    中抜け
                                                                 </Button>
                                                             );
                                                         }
 
                                                         return null;
-                                                    }
+                                                    })()}
+                                                </div>
+                                            </div>
 
-                                                    // pastOrToday: show 中抜け on 当日 only when a shift exists
-                                                    if (isToday && isShiftExists) {
-                                                        if (isStepOut) {
+                                            {/* Desktop layout: horizontal */}
+                                            <div className="hidden items-center justify-between md:flex">
+                                                <div className="flex items-start gap-4">
+                                                    <div className="w-36 flex-shrink-0">
+                                                        <div className={`font-medium ${dateTextClass}`}>{formatMd(d)}</div>
+                                                    </div>
+
+                                                    <div className="flex flex-1 items-center gap-3">
+                                                        {isUserLeave && (
+                                                            <div className="inline-block rounded bg-green-100 px-3 py-1 text-sm font-medium text-green-800">
+                                                                休
+                                                            </div>
+                                                        )}
+                                                        {showTime && timeStr && (
+                                                            <div
+                                                                className={`text-sm ${isPastOnly ? 'text-muted-foreground' : 'font-medium text-sky-700'}`}
+                                                            >
+                                                                {timeStr}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex items-center gap-2">
+                                                    {(() => {
+                                                        // Same logic as mobile for desktop buttons
+                                                        if (!pastOrToday) {
+                                                            if (isUserLeave) {
+                                                                const allowCancel = application_deadline_days === 0 ? true : !withinDeadline;
+                                                                const isWeekendOrHoliday = holiday || dayIndex === 0 || dayIndex === 6;
+                                                                if (allowCancel && !isWeekendOrHoliday) {
+                                                                    return (
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="destructive"
+                                                                            onClick={async () => {
+                                                                                try {
+                                                                                    await axios.post(route('shifts.unmark_break'), {
+                                                                                        user_id: authUser.id,
+                                                                                        date: iso,
+                                                                                    });
+                                                                                    setLocalUserLeaves((prev) => prev.filter((x) => x !== iso));
+                                                                                    setLocalRemainingDays((prev) =>
+                                                                                        prev === null ? null : prev + 1,
+                                                                                    );
+                                                                                    setToast({
+                                                                                        message: '休暇をキャンセルしました。',
+                                                                                        type: 'success',
+                                                                                    });
+                                                                                } catch (e) {
+                                                                                    console.error(e);
+                                                                                    setToast({
+                                                                                        message: '休暇のキャンセルに失敗しました。',
+                                                                                        type: 'error',
+                                                                                    });
+                                                                                }
+                                                                            }}
+                                                                        >
+                                                                            キャンセル
+                                                                        </Button>
+                                                                    );
+                                                                }
+                                                                return null;
+                                                            }
+                                                            if (isShiftExists || (timeStr && timeStr !== '時間未設定')) {
+                                                                const hasMealTicketFalse = (() => {
+                                                                    if (!sd) return false;
+                                                                    const mt = (sd as unknown as { meal_ticket?: number | string | boolean })
+                                                                        .meal_ticket;
+                                                                    return mt === 0 || mt === '0' || mt === false;
+                                                                })();
+                                                                const isMealTicket = (localMealTicketDates || []).includes(iso) || hasMealTicketFalse;
+                                                                const showMealTicketControl = typeof daysUntil === 'number' ? daysUntil >= 2 : true;
+                                                                const showShiftActionsByDeadline = withinDeadlineOrNoLimit;
+
+                                                                const mealTicketButton =
+                                                                    showShiftActionsByDeadline && showMealTicketControl ? (
+                                                                        isMealTicket ? (
+                                                                            <Button
+                                                                                variant="destructive"
+                                                                                size="sm"
+                                                                                onClick={async () => {
+                                                                                    try {
+                                                                                        await axios.post(route('shifts.unmark_meal_ticket'), {
+                                                                                            user_id: authUser.id,
+                                                                                            date: iso,
+                                                                                        });
+                                                                                        setLocalMealTicketDates((prev) =>
+                                                                                            prev.filter((d) => d !== iso),
+                                                                                        );
+                                                                                        setToast({
+                                                                                            message: '食券不要を解除しました。',
+                                                                                            type: 'success',
+                                                                                        });
+                                                                                    } catch (err) {
+                                                                                        console.error(err);
+                                                                                        setToast({
+                                                                                            message: '食券不要の解除に失敗しました。',
+                                                                                            type: 'error',
+                                                                                        });
+                                                                                    }
+                                                                                }}
+                                                                            >
+                                                                                食券必要
+                                                                            </Button>
+                                                                        ) : (
+                                                                            <Button
+                                                                                variant="outline"
+                                                                                size="sm"
+                                                                                onClick={async () => {
+                                                                                    try {
+                                                                                        await axios.post(route('shifts.mark_meal_ticket'), {
+                                                                                            user_id: authUser.id,
+                                                                                            date: iso,
+                                                                                        });
+                                                                                        setLocalMealTicketDates((prev) =>
+                                                                                            prev.includes(iso) ? prev : [...prev, iso],
+                                                                                        );
+                                                                                        setToast({
+                                                                                            message: '食券不要に設定しました。',
+                                                                                            type: 'success',
+                                                                                        });
+                                                                                    } catch (err) {
+                                                                                        console.error(err);
+                                                                                        setToast({
+                                                                                            message: '食券不要に設定できませんでした。',
+                                                                                            type: 'error',
+                                                                                        });
+                                                                                    }
+                                                                                }}
+                                                                            >
+                                                                                食券不要
+                                                                            </Button>
+                                                                        )
+                                                                    ) : null;
+
+                                                                return (
+                                                                    <>
+                                                                        {mealTicketButton}
+                                                                        {mealTicketButton ? <div className="w-1" /> : null}
+                                                                        {showShiftActionsByDeadline ? (
+                                                                            isStepOut ? (
+                                                                                <Button
+                                                                                    variant="destructive"
+                                                                                    size="sm"
+                                                                                    onClick={async () => {
+                                                                                        try {
+                                                                                            await axios.post(route('shifts.unmark_step_out'), {
+                                                                                                user_id: authUser.id,
+                                                                                                date: iso,
+                                                                                            });
+                                                                                            setLocalStepOutDates((prev) =>
+                                                                                                prev.filter((d) => d !== iso),
+                                                                                            );
+                                                                                            setToast({
+                                                                                                message: '中抜けを取消しました。',
+                                                                                                type: 'success',
+                                                                                            });
+                                                                                        } catch (err) {
+                                                                                            console.error(err);
+                                                                                            setToast({
+                                                                                                message: '中抜けの取消に失敗しました。',
+                                                                                                type: 'error',
+                                                                                            });
+                                                                                        }
+                                                                                    }}
+                                                                                >
+                                                                                    中抜け取消
+                                                                                </Button>
+                                                                            ) : (
+                                                                                <Button
+                                                                                    variant="outline"
+                                                                                    size="sm"
+                                                                                    onClick={async () => {
+                                                                                        try {
+                                                                                            await axios.post(route('shifts.mark_step_out'), {
+                                                                                                user_id: authUser.id,
+                                                                                                date: iso,
+                                                                                            });
+                                                                                            setLocalStepOutDates((prev) =>
+                                                                                                prev.includes(iso) ? prev : [...prev, iso],
+                                                                                            );
+                                                                                            setToast({
+                                                                                                message: '中抜けに変更しました。',
+                                                                                                type: 'success',
+                                                                                            });
+                                                                                        } catch (err) {
+                                                                                            console.error(err);
+                                                                                            setToast({
+                                                                                                message: '中抜けにできませんでした。',
+                                                                                                type: 'error',
+                                                                                            });
+                                                                                        }
+                                                                                    }}
+                                                                                >
+                                                                                    中抜け
+                                                                                </Button>
+                                                                            )
+                                                                        ) : null}
+                                                                        {!holiday && dayIndex !== 0 && dayIndex !== 6 && (
+                                                                            <>
+                                                                                {(mealTicketButton ||
+                                                                                    (showShiftActionsByDeadline && isStepOut !== undefined)) && (
+                                                                                    <div className="w-1" />
+                                                                                )}
+                                                                                {withinDeadline ? (
+                                                                                    <Button
+                                                                                        size="sm"
+                                                                                        className="bg-green-600 text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500"
+                                                                                        onClick={() => {
+                                                                                            setModalDate(iso);
+                                                                                            setModalOpen(true);
+                                                                                        }}
+                                                                                    >
+                                                                                        休暇申請
+                                                                                    </Button>
+                                                                                ) : (
+                                                                                    <Button size="sm" onClick={() => postImmediateLeave(iso)}>
+                                                                                        休暇登録
+                                                                                    </Button>
+                                                                                )}
+                                                                            </>
+                                                                        )}
+                                                                    </>
+                                                                );
+                                                            }
+
+                                                            if (!holiday && dayIndex !== 0 && dayIndex !== 6) {
+                                                                if (withinDeadline) {
+                                                                    return (
+                                                                        <Button
+                                                                            size="sm"
+                                                                            className="bg-green-600 text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500"
+                                                                            onClick={() => {
+                                                                                setModalDate(iso);
+                                                                                setModalOpen(true);
+                                                                            }}
+                                                                        >
+                                                                            休暇申請
+                                                                        </Button>
+                                                                    );
+                                                                }
+
+                                                                return (
+                                                                    <Button size="sm" onClick={() => postImmediateLeave(iso)}>
+                                                                        休暇登録
+                                                                    </Button>
+                                                                );
+                                                            }
+
+                                                            return null;
+                                                        }
+
+                                                        if (isToday && isShiftExists) {
+                                                            if (isStepOut) {
+                                                                return (
+                                                                    <Button
+                                                                        variant="destructive"
+                                                                        size="sm"
+                                                                        onClick={async () => {
+                                                                            try {
+                                                                                await axios.post(route('shifts.unmark_step_out'), {
+                                                                                    user_id: authUser.id,
+                                                                                    date: iso,
+                                                                                });
+                                                                                setLocalStepOutDates((prev) => prev.filter((d) => d !== iso));
+                                                                                setToast({ message: '中抜けを取消しました。', type: 'success' });
+                                                                            } catch (err) {
+                                                                                console.error(err);
+                                                                                setToast({ message: '中抜けの取消に失敗しました。', type: 'error' });
+                                                                            }
+                                                                        }}
+                                                                    >
+                                                                        中抜け取消
+                                                                    </Button>
+                                                                );
+                                                            }
+
                                                             return (
-                                                                <Button variant="outline" size="sm" disabled>
-                                                                    中抜け申請済
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    onClick={async () => {
+                                                                        try {
+                                                                            await axios.post(route('shifts.mark_step_out'), {
+                                                                                user_id: authUser.id,
+                                                                                date: iso,
+                                                                            });
+                                                                            setLocalStepOutDates((prev) =>
+                                                                                prev.includes(iso) ? prev : [...prev, iso],
+                                                                            );
+                                                                            setToast({ message: '中抜けに変更しました。', type: 'success' });
+                                                                        } catch (e) {
+                                                                            console.error(e);
+                                                                            setToast({ message: '中抜けにできませんでした。', type: 'error' });
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    中抜け
                                                                 </Button>
                                                             );
                                                         }
 
-                                                        return (
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                                onClick={async () => {
-                                                                    try {
-                                                                        await axios.post(route('shifts.mark_step_out'), {
-                                                                            user_id: authUser.id,
-                                                                            date: iso,
-                                                                        });
-                                                                        setLocalStepOutDates((prev) => (prev.includes(iso) ? prev : [...prev, iso]));
-                                                                        setToast({ message: '中抜けに変更しました。', type: 'success' });
-                                                                    } catch (e) {
-                                                                        console.error(e);
-                                                                        setToast({ message: '中抜けにできませんでした。', type: 'error' });
-                                                                    }
-                                                                }}
-                                                            >
-                                                                中抜け
-                                                            </Button>
-                                                        );
-                                                    }
-
-                                                    return null;
-                                                })()}
+                                                        return null;
+                                                    })()}
+                                                </div>
                                             </div>
                                         </div>
                                     );

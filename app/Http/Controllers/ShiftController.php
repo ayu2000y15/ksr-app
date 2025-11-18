@@ -869,4 +869,166 @@ class ShiftController extends Controller
 
         return response()->json(['message' => "完了しました。作成: {$created} 件、更新: {$updated} 件"], 200);
     }
+
+    /**
+     * Auto-register shifts for users based on their employment period.
+     * For each active user with employment_start_date and employment_end_date,
+     * create 'day' shifts for dates within their employment period and the specified month,
+     * respecting their preferred weekly holidays and default work times.
+     * Does not overwrite existing shifts.
+     */
+    public function autoRegisterEmploymentPeriod(Request $request)
+    {
+        if (Auth::user()->hasRole('システム管理者')) {
+            // bypass
+        } else {
+            $this->authorize('create', Shift::class);
+        }
+
+        $data = $request->validate([
+            'month' => 'required|date',
+        ]);
+
+        try {
+            $month = Carbon::parse($data['month'])->startOfMonth();
+        } catch (\Exception $e) {
+            return response()->json(['message' => '無効な月です。'], 400);
+        }
+
+        $monthStart = $month->copy()->startOfMonth();
+        $monthEnd = $month->copy()->endOfMonth();
+
+        $users = User::where('status', 'active')
+            ->whereNotNull('employment_start_date')
+            ->orderBy('position')
+            ->orderBy('id')
+            ->get();
+
+        $created = 0;
+        $skipped = 0;
+
+        \DB::transaction(function () use ($users, $monthStart, $monthEnd, &$created, &$skipped) {
+            foreach ($users as $u) {
+                $empStart = $u->employment_start_date ? Carbon::parse($u->employment_start_date) : null;
+                $empEnd = $u->employment_end_date ? Carbon::parse($u->employment_end_date) : null;
+
+                if (!$empStart) {
+                    continue;
+                }
+
+                // Determine the date range: intersection of employment period and the month
+                $rangeStart = max($empStart, $monthStart);
+                $rangeEnd = $empEnd && $empEnd->lt($monthEnd) ? $empEnd : $monthEnd;
+
+                if ($rangeStart->gt($rangeEnd)) {
+                    continue; // no overlap
+                }
+
+                // Parse preferred weekly holidays
+                $prefsRaw = $u->preferred_week_days ?? [];
+                if (!is_array($prefsRaw) && is_string($prefsRaw)) {
+                    $decoded = json_decode($prefsRaw, true);
+                    $prefs = is_array($decoded) ? $decoded : [$prefsRaw];
+                } elseif (is_array($prefsRaw)) {
+                    $prefs = $prefsRaw;
+                } else {
+                    $prefs = (array) $prefsRaw;
+                }
+
+                // Normalize preferred weekdays to integers (0-6)
+                $preferredHolidayWeekdays = [];
+                foreach ($prefs as $wk) {
+                    $wkInt = null;
+                    if (is_numeric($wk)) {
+                        $wkInt = (int) $wk;
+                    } else {
+                        $s = strtolower(trim((string) $wk));
+                        $map = [
+                            'sun' => 0,
+                            'sunday' => 0,
+                            '日' => 0,
+                            'mon' => 1,
+                            'monday' => 1,
+                            '月' => 1,
+                            'tue' => 2,
+                            'tues' => 2,
+                            'tuesday' => 2,
+                            '火' => 2,
+                            'wed' => 3,
+                            'wednesday' => 3,
+                            '水' => 3,
+                            'thu' => 4,
+                            'thurs' => 4,
+                            'thursday' => 4,
+                            '木' => 4,
+                            'fri' => 5,
+                            'friday' => 5,
+                            '金' => 5,
+                            'sat' => 6,
+                            'saturday' => 6,
+                            '土' => 6,
+                        ];
+                        if (isset($map[$s])) $wkInt = $map[$s];
+                    }
+                    if ($wkInt !== null) {
+                        $preferredHolidayWeekdays[] = $wkInt;
+                    }
+                }
+
+                // Iterate over each day in the range
+                $period = new \DatePeriod(
+                    new \DateTime($rangeStart->toDateString()),
+                    new \DateInterval('P1D'),
+                    (new \DateTime($rangeEnd->toDateString()))->modify('+1 day')
+                );
+
+                foreach ($period as $dt) {
+                    $ymd = $dt->format('Y-m-d');
+                    $wk = (int) $dt->format('w'); // 0 (Sun) - 6 (Sat)
+
+                    // Skip if this weekday is a preferred holiday
+                    if (in_array($wk, $preferredHolidayWeekdays, true)) {
+                        continue;
+                    }
+
+                    // Check if a shift already exists for this user and date
+                    $existingShift = Shift::where('user_id', $u->id)
+                        ->whereRaw('date(date) = ?', [$ymd])
+                        ->first();
+
+                    if ($existingShift) {
+                        $skipped++;
+                        continue; // do not overwrite existing shifts
+                    }
+
+                    // Create a 'day' shift
+                    $shift = Shift::create([
+                        'user_id' => $u->id,
+                        'date' => $ymd,
+                        'shift_type' => 'day',
+                    ]);
+
+                    // Create a work ShiftDetail with default times if available
+                    $startTime = $u->default_start_time ?? '09:00';
+                    $endTime = $u->default_end_time ?? '18:00';
+
+                    ShiftDetail::create([
+                        'shift_id' => $shift->id,
+                        'user_id' => $u->id,
+                        'date' => $ymd,
+                        'type' => 'work',
+                        'status' => 'scheduled',
+                        'start_time' => $ymd . ' ' . $startTime,
+                        'end_time' => $ymd . ' ' . $endTime,
+                    ]);
+
+                    $created++;
+                }
+            }
+        });
+
+        return response()->json([
+            'message' => "完了しました。作成: {$created} 件、スキップ: {$skipped} 件"
+        ], 200);
+    }
 }

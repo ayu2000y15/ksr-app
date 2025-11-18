@@ -134,6 +134,9 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
     // Apply preferred weekly holidays for a month: create 'leave' shifts on users' preferred_week_days
     Route::post('/shifts/apply-preferred-holidays', [App\Http\Controllers\ShiftController::class, 'applyPreferredHolidays'])->name('shifts.apply_preferred_holidays');
 
+    // Auto-register shifts for users based on their employment period
+    Route::post('/shifts/auto-register-employment-period', [App\Http\Controllers\ShiftController::class, 'autoRegisterEmploymentPeriod'])->name('shifts.auto_register_employment_period');
+
     // ShiftDetail 単体更新（開始/終了時刻の編集）
     Route::patch('/shift-details/{shift_detail}', [App\Http\Controllers\ShiftDetailController::class, 'update'])->name('shift-details.update');
     // ShiftDetail 作成（休憩などの勤務詳細を追加）

@@ -345,7 +345,8 @@ class UserController extends Controller
             'preferred_week_days' => 'nullable|array',
             'preferred_week_days.*' => 'in:Mon,Tue,Wed,Thu,Fri,Sat,Sun',
             'preferred_week_days_count' => 'nullable|integer|min:0|max:7',
-            'employment_period' => 'nullable|string|max:255',
+            'employment_start_date' => 'nullable|date',
+            'employment_end_date' => 'nullable|date|after_or_equal:employment_start_date',
             'employment_notes' => 'nullable|string',
         ], $messages);
 
@@ -368,7 +369,8 @@ class UserController extends Controller
             'default_end_time' => $request->default_end_time,
             'preferred_week_days' => $request->preferred_week_days ? json_encode($request->preferred_week_days) : null,
             'preferred_week_days_count' => $request->preferred_week_days_count ? intval($request->preferred_week_days_count) : null,
-            'employment_period' => $request->employment_period,
+            'employment_start_date' => $request->employment_start_date,
+            'employment_end_date' => $request->employment_end_date,
             'employment_notes' => $request->employment_notes,
             'password' => Hash::make($temporaryPassword),
             'must_change_password' => true,
@@ -452,7 +454,8 @@ class UserController extends Controller
             'default_end_time',
             'preferred_week_days',
             'preferred_week_days_count',
-            'employment_period',
+            'employment_start_date',
+            'employment_end_date',
             'employment_notes'
         ]));
 

@@ -36,7 +36,8 @@ class User extends BaseAuthenticatable
         'default_start_time',
         'default_end_time',
         'preferred_week_days',
-        'employment_period',
+        'employment_start_date',
+        'employment_end_date',
         'employment_notes',
         'preferred_week_days_count',
     ];
@@ -64,6 +65,8 @@ class User extends BaseAuthenticatable
         'has_car' => 'boolean',
         'preferred_week_days' => 'array',
         'preferred_week_days_count' => 'int',
+        'employment_start_date' => 'date:Y-m-d',
+        'employment_end_date' => 'date:Y-m-d',
     ];
 
 
