@@ -30,6 +30,7 @@ export default function EditUserPage() {
 
     const { data, setData, post, patch, processing, errors } = useForm({
         name: user.name || '',
+        furigana: user.furigana || '',
         email: user.email || '',
         status: user.status || 'active',
         gender: user.gender ?? '',
@@ -233,6 +234,12 @@ export default function EditUserPage() {
                                     </Label>
                                     <Input id="name" value={data.name} onChange={(e) => setData('name', e.target.value)} required />
                                     <InputError message={errors.name} className="mt-2" />
+                                </div>
+
+                                <div>
+                                    <Label htmlFor="furigana">フリガナ</Label>
+                                    <Input id="furigana" value={data.furigana} onChange={(e) => setData('furigana', e.target.value)} />
+                                    <InputError message={errors.furigana} className="mt-2" />
                                 </div>
 
                                 <div>

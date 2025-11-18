@@ -261,16 +261,21 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                         <div className="flex items-start justify-between gap-4">
                                             <div className="min-w-0">
                                                 <div className="flex items-center gap-3">
-                                                    <div
-                                                        className={`truncate text-sm font-medium ${
-                                                            user.gender === 'male'
-                                                                ? 'text-blue-600'
-                                                                : user.gender === 'female'
-                                                                  ? 'text-red-600'
-                                                                  : 'text-foreground'
-                                                        }`}
-                                                    >
-                                                        {user.name}
+                                                    <div>
+                                                        {user.furigana && (
+                                                            <div className="truncate text-[10px] text-muted-foreground">{user.furigana}</div>
+                                                        )}
+                                                        <div
+                                                            className={`truncate text-sm font-medium ${
+                                                                user.gender === 'male'
+                                                                    ? 'text-blue-600'
+                                                                    : user.gender === 'female'
+                                                                      ? 'text-red-600'
+                                                                      : 'text-foreground'
+                                                            }`}
+                                                        >
+                                                            {user.name}
+                                                        </div>
                                                     </div>
                                                     <div className="truncate text-xs text-muted-foreground">
                                                         {user.roles && user.roles.length > 0 ? (
@@ -567,11 +572,16 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                                 <TableCell>
                                                     <div className="flex w-full items-center gap-3">
                                                         <div className={`flex items-center gap-3`}>
-                                                            <span
-                                                                className={`${user.gender === 'male' ? 'text-blue-600' : user.gender === 'female' ? 'text-red-600' : ''}`}
-                                                            >
-                                                                {user.name}
-                                                            </span>
+                                                            <div>
+                                                                {user.furigana && (
+                                                                    <div className="text-[10px] text-muted-foreground">{user.furigana}</div>
+                                                                )}
+                                                                <span
+                                                                    className={`${user.gender === 'male' ? 'text-blue-600' : user.gender === 'female' ? 'text-red-600' : ''}`}
+                                                                >
+                                                                    {user.name}
+                                                                </span>
+                                                            </div>
                                                             <span className="text-sm text-muted-foreground">
                                                                 {user.roles && user.roles.length > 0 ? (
                                                                     user.roles.map((r: any) => r.name).join(', ')

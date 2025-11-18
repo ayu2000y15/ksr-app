@@ -12,6 +12,7 @@ import { Head, Link, useForm } from '@inertiajs/react';
 export default function Create() {
     const { data, setData, post, processing, errors, reset } = useForm({
         name: '',
+        furigana: '',
         email: '',
         status: 'active',
         gender: '',
@@ -62,6 +63,12 @@ export default function Create() {
                                     </Label>
                                     <Input id="name" value={data.name} onChange={(e) => setData('name', e.target.value)} required />
                                     <InputError message={errors.name} className="mt-2" />
+                                </div>
+
+                                <div>
+                                    <Label htmlFor="furigana">フリガナ</Label>
+                                    <Input id="furigana" value={data.furigana} onChange={(e) => setData('furigana', e.target.value)} />
+                                    <InputError message={errors.furigana} className="mt-2" />
                                 </div>
 
                                 <div>

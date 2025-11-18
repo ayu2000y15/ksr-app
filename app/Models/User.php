@@ -20,6 +20,7 @@ class User extends BaseAuthenticatable
     protected $fillable = [
         'position',
         'name',
+        'furigana',
         'email',
         'password',
         'temporary_password',

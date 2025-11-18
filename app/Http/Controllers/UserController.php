@@ -330,6 +330,7 @@ class UserController extends Controller
 
         $request->validate([
             'name' => 'required|string|max:255',
+            'furigana' => 'nullable|string|max:255',
             'email' => 'required|string|lowercase|email|max:255|unique:' . User::class,
             'status' => 'required|in:active,retired,shared',
             'phone_number' => 'nullable|string|max:20',
@@ -355,6 +356,7 @@ class UserController extends Controller
 
         $user = User::create([
             'name' => $request->name,
+            'furigana' => $request->furigana,
             'email' => $request->email,
             'status' => $request->status,
             'gender' => $request->gender,
@@ -439,8 +441,9 @@ class UserController extends Controller
             'profile_image' => 'nullable|image|max:2048',
         ], $messages);
 
-        $user->update($request->only([
+        $user->fill($request->only([
             'name',
+            'furigana',
             'email',
             'status',
             'gender',
