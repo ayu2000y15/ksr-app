@@ -904,10 +904,21 @@ class ShiftController extends Controller
             ->orderBy('id')
             ->get();
 
+        // 祝日一覧を取得
+        $holidays = Holiday::whereBetween('date', [$monthStart, $monthEnd])
+            ->pluck('date')
+            ->map(function ($d) {
+                return Carbon::parse($d)->toDateString();
+            })
+            ->toArray();
+
+        // デフォルトシフト設定を取得
+        $defaultShifts = DefaultShift::all();
+
         $created = 0;
         $skipped = 0;
 
-        \DB::transaction(function () use ($users, $monthStart, $monthEnd, &$created, &$skipped) {
+        \DB::transaction(function () use ($users, $monthStart, $monthEnd, $holidays, $defaultShifts, &$created, &$skipped) {
             foreach ($users as $u) {
                 $empStart = $u->employment_start_date ? Carbon::parse($u->employment_start_date) : null;
                 $empEnd = $u->employment_end_date ? Carbon::parse($u->employment_end_date) : null;
@@ -1008,9 +1019,46 @@ class ShiftController extends Controller
                         'shift_type' => 'day',
                     ]);
 
-                    // Create a work ShiftDetail with default times if available
-                    $startTime = $u->default_start_time ?? '09:00';
-                    $endTime = $u->default_end_time ?? '18:00';
+                    // デフォルトシフト時間の決定
+                    $startTime = null;
+                    $endTime = null;
+
+                    // ユーザーのdefault_start_time/default_end_timeが0:00~0:00の場合はデフォルトシフトを優先
+                    $useDefaultShift = false;
+                    if (
+                        (!$u->default_start_time || $u->default_start_time === '00:00' || $u->default_start_time === '00:00:00') &&
+                        (!$u->default_end_time || $u->default_end_time === '00:00' || $u->default_end_time === '00:00:00')
+                    ) {
+                        $useDefaultShift = true;
+                    }
+
+                    if ($useDefaultShift) {
+                        // デフォルトシフトから該当する時間を取得
+                        $isHoliday = in_array($ymd, $holidays, true);
+                        $patternType = $isHoliday ? 'holiday' : 'weekday';
+
+                        foreach ($defaultShifts as $ds) {
+                            if (
+                                (int)$ds->day_of_week === $wk &&
+                                $ds->shift_type === 'day' &&
+                                $ds->type === $patternType
+                            ) {
+                                $startTime = $ds->start_time ?? null;
+                                $endTime = $ds->end_time ?? null;
+                                break;
+                            }
+                        }
+
+                        // デフォルトシフトが見つからない場合は標準時間を使用
+                        if (!$startTime || !$endTime) {
+                            $startTime = '09:00';
+                            $endTime = '18:00';
+                        }
+                    } else {
+                        // ユーザー個別の時間を使用
+                        $startTime = $u->default_start_time ?? '09:00';
+                        $endTime = $u->default_end_time ?? '18:00';
+                    }
 
                     ShiftDetail::create([
                         'shift_id' => $shift->id,

@@ -492,6 +492,30 @@ export default function MonthEditor({
         setSelectedUsers(new Set());
     };
 
+    const bulkClearSelected = () => {
+        if (selectedDates.size === 0 || selectedUsers.size === 0) {
+            setToast({ message: 'ユーザーと日付の両方を選択してください', type: 'info' });
+            return;
+        }
+
+        let clearedCount = 0;
+        selectedUsers.forEach((userId) => {
+            selectedDates.forEach((d) => {
+                // clear only if the cell is 'day' or 'night' (do not clear 'leave')
+                const cur = gridRef.current?.[userId]?.[d] ?? '';
+                if (cur === 'day' || cur === 'night') {
+                    setCell(userId, d, '');
+                    queueSave(userId, d, '');
+                    clearedCount++;
+                }
+            });
+        });
+
+        setToast({ message: `${clearedCount}件の出勤情報を空欄にしました`, type: 'success' });
+        setSelectedDates(new Set());
+        setSelectedUsers(new Set());
+    };
+
     return (
         <div className="rounded border bg-white">
             <div className="p-2">
@@ -559,6 +583,15 @@ export default function MonthEditor({
                             aria-label="選択日を昼に"
                         >
                             選択日を昼に ({selectedUsers.size}人 × {selectedDates.size}日)
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={bulkClearSelected}
+                            disabled={selectedDates.size === 0 || selectedUsers.size === 0}
+                            aria-label="選択日を空欄に"
+                        >
+                            選択日を空欄に ({selectedUsers.size}人 × {selectedDates.size}日)
                         </Button>
                         {saving && <div className="text-sm text-muted-foreground">保存中…</div>}
                     </div>
