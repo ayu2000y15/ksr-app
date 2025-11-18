@@ -52,6 +52,19 @@ export default function BreakTimeline(props: {
 }) {
     const { date, shiftDetails = [], initialInterval = 15, breakType = 'planned', onCreateBreak, breaks = [], locked = false } = props;
 
+    const displayDate = date ? String(date).slice(0, 10).replace(/-/g, '/') : '';
+    const displayDateWithWeekday = (() => {
+        if (!date) return displayDate;
+        try {
+            const d = new Date(String(date).slice(0, 10));
+            const jp = ['日', '月', '火', '水', '木', '金', '土'];
+            const wd = jp[d.getDay()];
+            return `${displayDate} (${wd})`;
+        } catch {
+            return displayDate;
+        }
+    })();
+
     const [interval, setInterval] = useState<number>(initialInterval);
     useEffect(() => setInterval(initialInterval), [initialInterval]);
     const [selTarget, setSelTarget] = useState<{ id: number | null; startIndex: number | null } | null>(null);
@@ -392,7 +405,7 @@ export default function BreakTimeline(props: {
                             <ChevronLeft className="h-4 w-4" />
                         </Button>
                     )}
-                    <div className="text-lg font-medium">{date ? String(date).slice(0, 10).replace(/-/g, '/') : ''}</div>
+                    <div className="text-lg font-medium">{displayDateWithWeekday}</div>
                     {props.onDateChange && (
                         <Button size="sm" onClick={() => props.onDateChange?.(1)} className="h-8 w-8 p-0">
                             <ChevronRight className="h-4 w-4" />

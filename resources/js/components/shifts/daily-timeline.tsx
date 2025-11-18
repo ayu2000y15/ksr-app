@@ -317,6 +317,18 @@ export default function DailyTimeline(props: {
     }, [items, shiftDetails, props.breaks, timelineStartMin, interval, timeSlots, absentMap]);
 
     const displayDate = date ? String(date).slice(0, 10).replace(/-/g, '/') : '';
+    // displayDate に曜日を追加して `yyyy/mm/dd（曜）` の形式にする
+    const displayDateWithWeekday = (() => {
+        if (!date) return displayDate;
+        try {
+            const d = new Date(String(date).slice(0, 10));
+            const jp = ['日', '月', '火', '水', '木', '金', '土'];
+            const wd = jp[d.getDay()];
+            return `${displayDate} (${wd})`;
+        } catch {
+            return displayDate;
+        }
+    })();
 
     // vertical scroll area sizing: compute available height so timeline area fits viewport
     const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -601,7 +613,7 @@ export default function DailyTimeline(props: {
                             <ChevronLeft className="h-4 w-4" />
                         </Button>
                     )}
-                    <div className="text-lg font-medium">{displayDate}</div>
+                    <div className="text-lg font-medium">{displayDateWithWeekday}</div>
                     {props.onDateChange && (
                         <Button size="sm" onClick={() => props.onDateChange?.(1)} className="h-8 w-8 p-0">
                             <ChevronRight className="h-4 w-4" />

@@ -16,20 +16,23 @@ import { useEffect, useState } from 'react';
 export default function Daily() {
     const page = usePage();
     const props = page.props as any;
-    // DEBUG: log Inertia props obtained via usePage() to inspect available props at runtime
-    try {
-        console.log('usePage props:', props);
-        // also log props.users explicitly for quick inspection
-
-        console.log('props.users:', window.page && window.page.props && window.page.props.users);
-    } catch {
-        // ignore
-    }
     const date = props?.queryParams?.date ?? props?.date ?? null;
     const displayDate = date ? String(date).slice(0, 10).replace(/-/g, '/') : '';
+    // displayDate に曜日を追加して `yyyy/mm/dd（曜）` の形式にする
+    const displayDateWithWeekday = (() => {
+        if (!date) return displayDate;
+        try {
+            const d = new Date(String(date).slice(0, 10));
+            const jp = ['日', '月', '火', '水', '木', '金', '土'];
+            const wd = jp[d.getDay()];
+            return `${displayDate} (${wd})`;
+        } catch {
+            return displayDate;
+        }
+    })();
     const breadcrumbs: BreadcrumbItem[] = [
         { title: 'シフト管理', href: route('shifts.index') },
-        { title: `日間タイムライン: ${displayDate}`, href: '' },
+        { title: `日間タイムライン: ${displayDateWithWeekday}`, href: '' },
     ];
     // keep a local copy so edits can be applied without a full page reload
     const initialShiftDetails = (props?.shiftDetails || []) as unknown as any[];
