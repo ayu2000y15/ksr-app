@@ -535,8 +535,35 @@ export default function MonthEditor({
                         <Button size="sm" variant="outline" onClick={toggleAllDates} aria-label="全日選択/解除" title="未来の全日付を選択/解除">
                             {selectedDates.size > 0 ? '全日解除' : '全日選択'}
                         </Button>
-                        <Button size="sm" variant="outline" onClick={toggleAllUsers} aria-label="全ユーザー選択/解除" title="全ユーザーを選択/解除">
-                            {selectedUsers.size === sortedUsers.length && sortedUsers.length > 0 ? '全ユーザー解除' : '全ユーザー選択'}
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                                if (selectedUsers.size === sortedUsers.length && sortedUsers.length > 0) {
+                                    // if all users are already selected, deselect all
+                                    setSelectedUsers(new Set());
+                                    setSelectedDates(new Set());
+                                } else {
+                                    // select all users and all future dates
+                                    setSelectedUsers(new Set(sortedUsers.map((u: any) => u.id)));
+                                    const futureDates = visibleDays.filter((d) => {
+                                        try {
+                                            const dt = parseLocal(d);
+                                            const dayStart = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime();
+                                            const today = new Date();
+                                            today.setHours(0, 0, 0, 0);
+                                            return dayStart >= today.getTime();
+                                        } catch {
+                                            return true;
+                                        }
+                                    });
+                                    setSelectedDates(new Set(futureDates));
+                                }
+                            }}
+                            aria-label="一括選択/解除"
+                            title="全ユーザーと全日付を一括選択/解除"
+                        >
+                            一括選択
                         </Button>
                         <Button
                             size="sm"
