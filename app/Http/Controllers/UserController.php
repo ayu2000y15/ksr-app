@@ -998,6 +998,38 @@ class UserController extends Controller
             $errors = [];
             $rowNumber = 1; // ヘッダー行
 
+            // 日付/時刻の正規化ヘルパー
+            $normalizeTime = function ($val) {
+                if (!isset($val)) return null;
+                $v = trim((string)$val);
+                if ($v === '') return null;
+                // 全角コロン対応
+                $v = str_replace('：', ':', $v);
+                // 単一の時間数字のみなら :00 を付与
+                if (preg_match('/^\d{1,2}$/', $v)) {
+                    $v = $v . ':00';
+                }
+                // strtotimeで解釈できるか確認
+                $ts = strtotime($v);
+                if ($ts === false) {
+                    throw new \Exception("時刻の形式が正しくありません ({$val})");
+                }
+                return date('H:i:s', $ts);
+            };
+
+            $normalizeDate = function ($val) {
+                if (!isset($val)) return null;
+                $v = trim((string)$val);
+                if ($v === '') return null;
+                // スラッシュをハイフンへ
+                $v = str_replace('/', '-', $v);
+                $ts = strtotime($v);
+                if ($ts === false) {
+                    throw new \Exception("日付の形式が正しくありません ({$val})");
+                }
+                return date('Y-m-d', $ts);
+            };
+
             while (($row = fgetcsv($handle)) !== false) {
                 $rowNumber++;
 
@@ -1093,12 +1125,12 @@ class UserController extends Controller
                         'status' => $status,
                         'employment_condition' => $employmentCondition,
                         'commute_method' => $row[9] ?? null,
-                        'default_start_time' => $row[10] ?? null,
-                        'default_end_time' => $row[11] ?? null,
+                        'default_start_time' => isset($row[10]) ? $normalizeTime($row[10]) : null,
+                        'default_end_time' => isset($row[11]) ? $normalizeTime($row[11]) : null,
                         'preferred_week_days_count' => isset($row[12]) && is_numeric($row[12]) ? intval($row[12]) : null,
                         'preferred_week_days' => $preferredWeekDays,
-                        'employment_start_date' => $row[14] ?? null,
-                        'employment_end_date' => $row[15] ?? null,
+                        'employment_start_date' => isset($row[14]) ? $normalizeDate($row[14]) : null,
+                        'employment_end_date' => isset($row[15]) ? $normalizeDate($row[15]) : null,
                         'employment_notes' => $row[16] ?? null,
                         'memo' => $row[17] ?? null,
                     ];
