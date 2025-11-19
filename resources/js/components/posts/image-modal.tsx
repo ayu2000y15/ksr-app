@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 
+type ImageItem = string | { url: string; isVideo?: boolean };
+
 type Props = {
-    images: string[];
+    images: ImageItem[]; // can be strings or objects with {url, isVideo}
     startIndex?: number;
     onClose: () => void;
 };
@@ -25,6 +27,21 @@ export default function ImageModal({ images, startIndex = 0, onClose }: Props) {
 
     const prev = () => setIndex((i) => (images.length ? (i - 1 + images.length) % images.length : i));
     const next = () => setIndex((i) => (images.length ? (i + 1) % images.length : i));
+
+    const isVideoUrl = (url: string) => /\.(mp4|mov|webm|mkv|avi)(\?|$)/i.test(url);
+    const getUrl = (it: ImageItem): string | null => {
+        try {
+            if (typeof it === 'string') return it || null;
+            return it?.url || null;
+        } catch {
+            return null;
+        }
+    };
+    const isVideoItem = (it: ImageItem) => {
+        const url = getUrl(it);
+        if (!url) return !!(typeof it !== 'string' && it && (it as any).isVideo);
+        return (typeof it !== 'string' && !!(it as any).isVideo) || isVideoUrl(url);
+    };
 
     if (!images || images.length === 0) return null;
 
@@ -52,7 +69,15 @@ export default function ImageModal({ images, startIndex = 0, onClose }: Props) {
                         ◀
                     </button>
 
-                    <img src={images[index]} alt={`attachment-${index}`} className="mx-auto max-h-[70vh] w-auto object-contain" />
+                    {(() => {
+                        const src = getUrl(images[index]);
+                        if (!src) return <div className="mx-auto max-h-[70vh] w-auto text-sm text-muted-foreground">ファイルを表示できません</div>;
+                        return isVideoItem(images[index]) ? (
+                            <video src={src} controls className="mx-auto max-h-[70vh] w-auto object-contain" />
+                        ) : (
+                            <img src={src} alt={`attachment-${index}`} className="mx-auto max-h-[70vh] w-auto object-contain" />
+                        );
+                    })()}
 
                     <button
                         type="button"
@@ -67,16 +92,28 @@ export default function ImageModal({ images, startIndex = 0, onClose }: Props) {
                 {/* thumbnails */}
                 {images.length > 1 && (
                     <div className="mt-3 flex gap-2 overflow-x-auto">
-                        {images.map((src, i) => (
-                            <button
-                                type="button"
-                                key={i}
-                                onClick={() => setIndex(i)}
-                                className={`rounded border ${i === index ? 'ring-2 ring-primary' : ''}`}
-                            >
-                                <img src={src} alt={`thumb-${i}`} className="h-16 w-24 object-cover" />
-                            </button>
-                        ))}
+                        {images.map((it, i) => {
+                            const src = getUrl(it);
+                            const vid = isVideoItem(it);
+                            return (
+                                <button
+                                    type="button"
+                                    key={i}
+                                    onClick={() => setIndex(i)}
+                                    className={`rounded border ${i === index ? 'ring-2 ring-primary' : ''}`}
+                                >
+                                    {src ? (
+                                        vid ? (
+                                            <video src={src} className="h-16 w-24 object-cover" muted playsInline loop />
+                                        ) : (
+                                            <img src={src} alt={`thumb-${i}`} className="h-16 w-24 object-cover" />
+                                        )
+                                    ) : (
+                                        <div className="flex h-16 w-24 items-center justify-center bg-gray-100 text-xs">N/A</div>
+                                    )}
+                                </button>
+                            );
+                        })}
                     </div>
                 )}
             </div>

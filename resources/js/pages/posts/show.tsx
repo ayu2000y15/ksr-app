@@ -330,11 +330,13 @@ export default function PostShow() {
     const [modalOpen, setModalOpen] = useState(false);
     const [modalStartIndex, setModalStartIndex] = useState(0);
     const [manualModalOpen, setManualModalOpen] = useState(false);
-    const [manualModalImages, setManualModalImages] = useState<string[]>([]);
+    const [manualModalImages, setManualModalImages] = useState<
+        Array<{ url: string; isImage?: boolean; isVideo?: boolean; original_name?: string; size?: number }>
+    >([]);
     const [manualModalStartIndex, setManualModalStartIndex] = useState(0);
     // printing will use a hidden iframe appended to the document
 
-    const postAttachments = useMemo((): { url: string; isImage: boolean; original_name?: string; size?: number }[] => {
+    const postAttachments = useMemo((): { url: string; isImage: boolean; isVideo?: boolean; original_name?: string; size?: number }[] => {
         const attachments = post?.attachments || [];
         return (attachments || []).map(
             (a: {
@@ -353,8 +355,9 @@ export default function PostShow() {
                     url = '/storage/' + url;
                 }
                 const isImage = typeof url === 'string' && /\.(png|jpe?g|gif|svg|webp)(\?|$)/i.test(url);
+                const isVideo = typeof url === 'string' && /\.(mp4|webm|mov|mkv|avi)(\?|$)/i.test(url);
                 const size = (a as any).size || (a as any).file_size || (a as any).byte_size || (a as any).filesize || undefined;
-                return { url, isImage, original_name: a.original_name, size };
+                return { url, isImage, isVideo, original_name: a.original_name, size };
             },
         );
     }, [post?.attachments]);
@@ -1061,14 +1064,20 @@ export default function PostShow() {
                                                                             alt={a.original_name || `item-${i}-img-${ai}`}
                                                                             className="h-full w-full cursor-pointer object-contain"
                                                                             onClick={() => {
-                                                                                const imgs = (it.attachments || [])
-                                                                                    .filter(
-                                                                                        (x: { isImage?: boolean; url?: string }) =>
-                                                                                            x.isImage && !!x.url,
-                                                                                    )
-                                                                                    .map((x: { isImage?: boolean; url?: string }) => x.url as string);
-                                                                                setManualModalImages(imgs);
-                                                                                const idx = imgs.findIndex((u: string) => u === (a.url || ''));
+                                                                                const items = (it.attachments || [])
+                                                                                    .filter((x: any) => !!x.url)
+                                                                                    .map(
+                                                                                        (x: any) =>
+                                                                                            x as {
+                                                                                                url: string;
+                                                                                                isImage?: boolean;
+                                                                                                isVideo?: boolean;
+                                                                                                original_name?: string;
+                                                                                                size?: number;
+                                                                                            },
+                                                                                    );
+                                                                                setManualModalImages(items);
+                                                                                const idx = items.findIndex((u: any) => u.url === (a.url || ''));
                                                                                 setManualModalStartIndex(idx >= 0 ? idx : 0);
                                                                                 setManualModalOpen(true);
                                                                             }}
@@ -1113,6 +1122,15 @@ export default function PostShow() {
                                                             src={p.url}
                                                             alt={`attachment ${idx + 1}`}
                                                             className="h-full w-full cursor-pointer object-cover"
+                                                            onClick={() => {
+                                                                setModalStartIndex(idx);
+                                                                setModalOpen(true);
+                                                            }}
+                                                        />
+                                                    ) : p.isVideo ? (
+                                                        <video
+                                                            src={p.url}
+                                                            className="h-full w-full cursor-pointer object-contain"
                                                             onClick={() => {
                                                                 setModalStartIndex(idx);
                                                                 setModalOpen(true);
@@ -1249,13 +1267,7 @@ export default function PostShow() {
                     </Card>
                 </div>
             </div>
-            {modalOpen && (
-                <ImageModal
-                    images={postAttachments.filter((p) => p.isImage).map((p) => p.url)}
-                    startIndex={modalStartIndex}
-                    onClose={() => setModalOpen(false)}
-                />
-            )}
+            {modalOpen && <ImageModal images={postAttachments} startIndex={modalStartIndex} onClose={() => setModalOpen(false)} />}
 
             {manualModalOpen && (
                 <ImageModal images={manualModalImages} startIndex={manualModalStartIndex} onClose={() => setManualModalOpen(false)} />

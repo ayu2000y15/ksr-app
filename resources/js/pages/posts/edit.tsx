@@ -21,7 +21,7 @@ const breadcrumbs = [
 ];
 
 export default function PostEdit() {
-    const ALLOWED_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.pdf', '.txt', '.xlsx'];
+    const ALLOWED_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.pdf', '.txt', '.xlsx', '.mp4', '.mov', '.webm', '.mkv', '.avi'];
     const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
     // We'll read initial post data from window.page.props (Inertia provides it)
     const [initialPost, setInitialPost] = useState<any>((window as any).page?.props?.post || null);
@@ -132,9 +132,10 @@ export default function PostEdit() {
                 url = '/storage/' + url;
             }
             const isImage = typeof url === 'string' && /\.(png|jpe?g|gif|svg|webp)(\?|$)/i.test(url);
+            const isVideo = typeof url === 'string' && /\.(mp4|mov|webm|mkv|avi)(\?|$)/i.test(url);
             const size = a.size || a.file_size || a.byte_size || a.filesize || null;
             const original_name = a.original_name || a.name || null;
-            return { id: a.id, url, file: undefined, isImage, existing: true, original_name, size };
+            return { id: a.id, url, file: undefined, isImage, isVideo, existing: true, original_name, size };
         });
     });
     // keep previews in sync with newly selected attachments (created blob URLs)
@@ -156,6 +157,7 @@ export default function PostEdit() {
                 url: URL.createObjectURL(f),
                 file: f,
                 isImage: f.type.startsWith('image/'),
+                isVideo: f.type.startsWith('video/'),
                 existing: false,
             }));
             return [...existingPreviews, ...newCreated];
@@ -173,7 +175,7 @@ export default function PostEdit() {
     const [modalOpen, setModalOpen] = useState(false);
     const [modalStartIndex, setModalStartIndex] = useState(0);
     const [manualModalOpen, setManualModalOpen] = useState(false);
-    const [manualModalImages, setManualModalImages] = useState<string[]>([]);
+    const [manualModalImages, setManualModalImages] = useState<Array<{ url: string; isVideo?: boolean }>>([]);
     const [manualModalStartIndex, setManualModalStartIndex] = useState(0);
     const [bodyHtml, setBodyHtml] = useState<string>(initialPost?.body || '');
     const [manualItems, setManualItems] = useState<any[]>(
@@ -417,9 +419,10 @@ export default function PostEdit() {
                     url = '/storage/' + url;
                 }
                 const isImage = typeof url === 'string' && /\.(png|jpe?g|gif|svg|webp)(\?|$)/i.test(url);
+                const isVideo = typeof url === 'string' && /\.(mp4|mov|webm|mkv|avi)(\?|$)/i.test(url);
                 const size = a.size || a.file_size || a.byte_size || a.filesize || null;
                 const original_name = a.original_name || a.name || null;
-                return { id: a.id, url, file: undefined, isImage, existing: true, original_name, size };
+                return { id: a.id, url, file: undefined, isImage, isVideo, existing: true, original_name, size };
             }),
         );
 
@@ -440,9 +443,10 @@ export default function PostEdit() {
                               url = '/storage/' + url;
                           }
                           const isImage = typeof url === 'string' && /\.(png|jpe?g|gif|svg|webp)(\?|$)/i.test(url);
+                          const isVideo = typeof url === 'string' && /\.(mp4|mov|webm|mkv|avi)(\?|$)/i.test(url);
                           const size = a.size || a.file_size || a.byte_size || a.filesize || null;
                           const original_name = a.original_name || a.name || null;
-                          return { id: a.id, url, file: undefined, isImage, existing: true, original_name, size };
+                          return { id: a.id, url, file: undefined, isImage, isVideo, existing: true, original_name, size };
                       })
                     : [];
                 return { id: it.id, text: it.content || it.text || '', files: [], previews: itemPreviews };
@@ -836,6 +840,7 @@ export default function PostEdit() {
                                                                             url: URL.createObjectURL(f),
                                                                             file: f,
                                                                             isImage: f.type.startsWith('image/'),
+                                                                            isVideo: f.type.startsWith('video/'),
                                                                         })),
                                                                     ];
                                                                     copy[idx] = { ...copy[idx], files: newFiles, previews: newPreviews };
@@ -868,13 +873,31 @@ export default function PostEdit() {
                                                                         alt={`item ${idx} attachment ${i + 1}`}
                                                                         className="h-20 w-20 cursor-pointer object-cover"
                                                                         onClick={() => {
-                                                                            const imgs = (it.previews || [])
-                                                                                .filter((pp: any) => pp.isImage)
-                                                                                .map((pp: any) => pp.url);
-                                                                            setManualModalImages(imgs);
+                                                                            const items = it.previews || [];
+                                                                            setManualModalImages(items);
                                                                             setManualModalStartIndex(
-                                                                                (imgs.findIndex((u: string) => u === p.url) + imgs.length) %
-                                                                                    imgs.length,
+                                                                                Math.max(
+                                                                                    0,
+                                                                                    items.findIndex((u: any) => u.url === p.url),
+                                                                                ),
+                                                                            );
+                                                                            setManualModalOpen(true);
+                                                                        }}
+                                                                    />
+                                                                ) : (p as any).isVideo ? (
+                                                                    <video
+                                                                        src={p.url}
+                                                                        className="h-20 w-20 cursor-pointer object-cover"
+                                                                        muted
+                                                                        playsInline
+                                                                        onClick={() => {
+                                                                            const items = it.previews || [];
+                                                                            setManualModalImages(items);
+                                                                            setManualModalStartIndex(
+                                                                                Math.max(
+                                                                                    0,
+                                                                                    items.findIndex((u: any) => u.url === p.url),
+                                                                                ),
                                                                             );
                                                                             setManualModalOpen(true);
                                                                         }}
@@ -1135,7 +1158,7 @@ export default function PostEdit() {
                                             </div>
 
                                             <div className="mt-2 text-sm text-muted-foreground">
-                                                使用可能なファイル形式: .png .jpg .jpeg .gif .pdf .txt .xlsx
+                                                使用可能なファイル形式: .png .jpg .jpeg .gif .pdf .txt .xlsx .mp4 .mov .webm .mkv .avi
                                             </div>
                                             <div className="mt-1 text-sm text-muted-foreground">
                                                 ファイルサイズは1ファイルあたり最大10MBまでです。
@@ -1152,6 +1175,17 @@ export default function PostEdit() {
                                                                 src={p.url}
                                                                 alt={`attachment ${idx + 1}`}
                                                                 className="h-20 w-20 cursor-pointer object-cover"
+                                                                onClick={() => {
+                                                                    setModalStartIndex(idx);
+                                                                    setModalOpen(true);
+                                                                }}
+                                                            />
+                                                        ) : (p as any).isVideo ? (
+                                                            <video
+                                                                src={p.url}
+                                                                className="h-20 w-20 cursor-pointer object-cover"
+                                                                muted
+                                                                playsInline
                                                                 onClick={() => {
                                                                     setModalStartIndex(idx);
                                                                     setModalOpen(true);
@@ -1324,13 +1358,7 @@ export default function PostEdit() {
                 </div>
             </div>
 
-            {modalOpen && (
-                <ImageModal
-                    images={previews.filter((p) => p.isImage).map((p) => p.url)}
-                    startIndex={modalStartIndex}
-                    onClose={() => setModalOpen(false)}
-                />
-            )}
+            {modalOpen && <ImageModal images={previews} startIndex={modalStartIndex} onClose={() => setModalOpen(false)} />}
             {manualModalOpen && (
                 <ImageModal images={manualModalImages} startIndex={manualModalStartIndex} onClose={() => setManualModalOpen(false)} />
             )}

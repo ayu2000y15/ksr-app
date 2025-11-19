@@ -261,6 +261,13 @@ class PostController extends Controller
             'poll.is_anonymous' => 'required_if:type,poll|boolean',
             'poll.options' => 'required_if:type,poll|array|min:2',
             'poll.options.*.value' => 'required|string',
+            // attachments: allow images, docs, spreadsheets and common video formats up to 10MB each
+            'attachments' => 'array',
+            'attachments.*' => 'file|mimes:png,jpg,jpeg,gif,pdf,txt,xlsx,mp4,mov,webm,mkv,avi|max:10240',
+            // per-item attachments (item_attachments[index] => array of files)
+            'item_attachments' => 'array',
+            'item_attachments.*' => 'array',
+            'item_attachments.*.*' => 'file|mimes:png,jpg,jpeg,gif,pdf,txt,xlsx,mp4,mov,webm,mkv,avi|max:10240',
         ]);
 
         $user = $request->user();
@@ -414,6 +421,12 @@ class PostController extends Controller
             'poll.options' => 'required_if:type,poll|array|min:2',
             'poll.options.*.id' => 'nullable|integer',
             'poll.options.*.value' => 'required|string|max:255',
+            // attachments allowed on update as well
+            'attachments' => 'array',
+            'attachments.*' => 'file|mimes:png,jpg,jpeg,gif,pdf,txt,xlsx,mp4,mov,webm,mkv,avi|max:10240',
+            'item_attachments' => 'array',
+            'item_attachments.*' => 'array',
+            'item_attachments.*.*' => 'file|mimes:png,jpg,jpeg,gif,pdf,txt,xlsx,mp4,mov,webm,mkv,avi|max:10240',
         ]);
 
         DB::beginTransaction();

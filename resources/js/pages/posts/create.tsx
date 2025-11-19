@@ -22,7 +22,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 export default function PostCreate() {
-    const ALLOWED_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.pdf', '.txt', '.xlsx'];
+    const ALLOWED_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.pdf', '.txt', '.xlsx', '.mp4', '.mov', '.webm', '.mkv', '.avi'];
     const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
     const { data, setData, processing, errors, reset } = useForm({
         type: 'board',
@@ -91,7 +91,7 @@ export default function PostCreate() {
     const [modalOpen, setModalOpen] = useState(false);
     const [modalStartIndex, setModalStartIndex] = useState(0);
     const [manualModalOpen, setManualModalOpen] = useState(false);
-    const [manualModalImages, setManualModalImages] = useState<string[]>([]);
+    const [manualModalImages, setManualModalImages] = useState<Array<{ url: string; isVideo?: boolean }>>([]);
     const [manualModalStartIndex, setManualModalStartIndex] = useState(0);
     const [bodyHtml, setBodyHtml] = useState<string>('');
     const [manualTag, setManualTag] = useState<string>('');
@@ -177,7 +177,12 @@ export default function PostCreate() {
             return [];
         });
         if (!attachments || attachments.length === 0) return;
-        const next = attachments.map((f) => ({ url: URL.createObjectURL(f), file: f, isImage: f.type.startsWith('image/') }));
+        const next = attachments.map((f) => ({
+            url: URL.createObjectURL(f),
+            file: f,
+            isImage: f.type.startsWith('image/'),
+            isVideo: f.type.startsWith('video/'),
+        }));
         setPreviews(next);
         return () => {
             next.forEach((p) => URL.revokeObjectURL(p.url));
@@ -500,6 +505,7 @@ export default function PostCreate() {
                                                                             url: URL.createObjectURL(f),
                                                                             file: f,
                                                                             isImage: f.type.startsWith('image/'),
+                                                                            isVideo: f.type.startsWith('video/'),
                                                                         })),
                                                                     ];
                                                                     copy[idx] = { ...copy[idx], files: newFiles, previews: newPreviews };
@@ -526,14 +532,31 @@ export default function PostCreate() {
                                                                         alt={`item ${idx} attachment ${i + 1}`}
                                                                         className="h-full w-full cursor-pointer object-cover"
                                                                         onClick={() => {
-                                                                            // open modal for this item's images
-                                                                            const imgs = (it.previews || [])
-                                                                                .filter((pp: any) => pp.isImage)
-                                                                                .map((pp: any) => pp.url);
-                                                                            setManualModalImages(imgs);
+                                                                            const items = it.previews || [];
+                                                                            setManualModalImages(items);
                                                                             setManualModalStartIndex(
-                                                                                (imgs.findIndex((u: string) => u === p.url) + imgs.length) %
-                                                                                    imgs.length,
+                                                                                Math.max(
+                                                                                    0,
+                                                                                    items.findIndex((u: any) => u.url === p.url),
+                                                                                ),
+                                                                            );
+                                                                            setManualModalOpen(true);
+                                                                        }}
+                                                                    />
+                                                                ) : (p as any).isVideo ? (
+                                                                    <video
+                                                                        src={p.url}
+                                                                        className="h-full w-full cursor-pointer object-cover"
+                                                                        muted
+                                                                        playsInline
+                                                                        onClick={() => {
+                                                                            const items = it.previews || [];
+                                                                            setManualModalImages(items);
+                                                                            setManualModalStartIndex(
+                                                                                Math.max(
+                                                                                    0,
+                                                                                    items.findIndex((u: any) => u.url === p.url),
+                                                                                ),
                                                                             );
                                                                             setManualModalOpen(true);
                                                                         }}
@@ -780,7 +803,7 @@ export default function PostCreate() {
                                             </div>
 
                                             <div className="mt-2 text-sm text-muted-foreground">
-                                                使用可能なファイル形式: .png .jpg .jpeg .gif .pdf .txt .xlsx
+                                                使用可能なファイル形式: .png .jpg .jpeg .gif .pdf .txt .xlsx .mp4 .mov .webm .mkv .avi
                                             </div>
                                             <div className="mt-1 text-sm text-muted-foreground">
                                                 ファイルサイズは1ファイルあたり最大10MBまでです。
@@ -794,6 +817,17 @@ export default function PostCreate() {
                                                                 src={p.url}
                                                                 alt={`attachment ${idx + 1}`}
                                                                 className="h-full w-full cursor-pointer object-cover"
+                                                                onClick={() => {
+                                                                    setModalStartIndex(idx);
+                                                                    setModalOpen(true);
+                                                                }}
+                                                            />
+                                                        ) : (p as any).isVideo ? (
+                                                            <video
+                                                                src={p.url}
+                                                                className="h-full w-full cursor-pointer object-cover"
+                                                                muted
+                                                                playsInline
                                                                 onClick={() => {
                                                                     setModalStartIndex(idx);
                                                                     setModalOpen(true);
@@ -944,13 +978,7 @@ export default function PostCreate() {
                 </div>
             </div>
 
-            {modalOpen && (
-                <ImageModal
-                    images={previews.filter((p) => p.isImage).map((p) => p.url)}
-                    startIndex={modalStartIndex}
-                    onClose={() => setModalOpen(false)}
-                />
-            )}
+            {modalOpen && <ImageModal images={previews} startIndex={modalStartIndex} onClose={() => setModalOpen(false)} />}
             {manualModalOpen && (
                 <ImageModal images={manualModalImages} startIndex={manualModalStartIndex} onClose={() => setManualModalOpen(false)} />
             )}
