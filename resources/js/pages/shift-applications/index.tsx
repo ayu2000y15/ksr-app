@@ -535,7 +535,7 @@ export default function Index({
                                                                 const allowCancel = application_deadline_days === 0 ? true : !withinDeadline;
                                                                 const isWeekendOrHoliday = holiday || dayIndex === 0 || dayIndex === 6;
                                                                 // hide cancel on weekends/holidays even when allowCancel is true
-                                                                if (allowCancel && !isWeekendOrHoliday) {
+                                                                if (allowCancel && !isWeekendOrHoliday && canCreate) {
                                                                     return (
                                                                         <Button
                                                                             size="sm"

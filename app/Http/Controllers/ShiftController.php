@@ -534,6 +534,8 @@ class ShiftController extends Controller
     {
         if (Auth::user()->hasRole('システム管理者')) {
             // bypass
+        } elseif (Auth::user()->hasPermissionTo('shift_application.create')) {
+            // allow when user has the shift_application.create permission (align with frontend)
         } else {
             $this->authorize('create', Shift::class);
         }
