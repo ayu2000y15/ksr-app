@@ -744,9 +744,11 @@ export default function Index({
                                                                                         休暇申請
                                                                                     </Button>
                                                                                 ) : (
-                                                                                    <Button size="sm" onClick={() => postImmediateLeave(iso)}>
-                                                                                        休暇登録
-                                                                                    </Button>
+                                                                                    {canCreate ? (
+                                                                                        <Button size="sm" onClick={() => postImmediateLeave(iso)}>
+                                                                                            休暇登録
+                                                                                        </Button>
+                                                                                    ) : null}
                                                                                 )}
                                                                             </>
                                                                         )}
@@ -780,11 +782,11 @@ export default function Index({
                                                                 }
 
                                                                 // after deadline: show 休暇登録 (immediate)
-                                                                return (
+                                                                return canCreate ? (
                                                                     <Button size="sm" onClick={() => postImmediateLeave(iso)}>
                                                                         休暇登録
                                                                     </Button>
-                                                                );
+                                                                ) : null;
                                                             }
 
                                                             return null;
@@ -1073,11 +1075,11 @@ export default function Index({
                                                                     );
                                                                 }
 
-                                                                return (
+                                                                return canCreate ? (
                                                                     <Button size="sm" onClick={() => postImmediateLeave(iso)}>
                                                                         休暇登録
                                                                     </Button>
-                                                                );
+                                                                ) : null;
                                                             }
 
                                                             return null;
