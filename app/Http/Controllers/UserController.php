@@ -374,9 +374,26 @@ class UserController extends Controller
             ->orderBy('start_time', 'asc')
             ->get();
 
+        // 送迎情報を取得（ユーザー別統計と同じ条件: created_by でフィルタ）
+        $transportRequests = \App\Models\TransportRequest::where('created_by', $user->id)
+            ->whereBetween('date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
+            ->orderBy('date', 'asc')
+            ->get();
+
         // 日付ごとにデータをグループ化
         $shiftsByDate = $shifts->groupBy('date');
         $detailsByDate = $shiftDetails->groupBy('date');
+
+        // 送迎情報を日付で正規化してグループ化（date カラムが様々な形式の可能性があるため）
+        $transportsByDate = $transportRequests->groupBy(function ($tr) {
+            try {
+                // date が Y/m/d や Y-m-d などの形式に対応
+                $parsed = Carbon::parse($tr->date);
+                return $parsed->format('Y-m-d');
+            } catch (\Throwable $e) {
+                return $tr->date; // パースできない場合はそのまま
+            }
+        });
 
         // 期間内の全日付をループ
         $currentDate = $startDate->copy();
@@ -388,6 +405,19 @@ class UserController extends Controller
             $shift = $shiftsByDate->get($dateStr)?->first();
             $details = $detailsByDate->get($dateStr) ?? collect();
 
+            // 送迎情報を確認
+            $transports = $transportsByDate->get($dateStr) ?? collect();
+            $hasTransportTo = false;
+            $hasTransportFrom = false;
+            foreach ($transports as $tr) {
+                $direction = isset($tr->direction) ? (string)$tr->direction : 'to';
+                if ($direction === 'to') {
+                    $hasTransportTo = true;
+                } else {
+                    $hasTransportFrom = true;
+                }
+            }
+
             $dayData = [
                 'date' => $dateStr,
                 'is_past' => $isPast,
@@ -396,6 +426,8 @@ class UserController extends Controller
                 'work_times' => [],
                 'break_times' => [],
                 'is_absent' => false,
+                'has_transport_to' => $hasTransportTo,
+                'has_transport_from' => $hasTransportFrom,
             ];
 
             foreach ($details as $detail) {
@@ -490,6 +522,18 @@ class UserController extends Controller
         // 出勤日数を計算（ユーザー別統計と同じロジック）
         $totalWorkDays = $shifts->count();
 
+        // 送迎回数を計算
+        $transportToCount = 0;
+        $transportFromCount = 0;
+        foreach ($transportRequests as $tr) {
+            $direction = isset($tr->direction) ? (string)$tr->direction : 'to';
+            if ($direction === 'to') {
+                $transportToCount++;
+            } else {
+                $transportFromCount++;
+            }
+        }
+
         // 統計情報を計算（ユーザー別統計と同じ: actual の work - break）
         $totalRestraintHours = floor($actualWorkMinutes / 60);
         $totalRestraintMinutesRemainder = $actualWorkMinutes % 60;
@@ -506,6 +550,8 @@ class UserController extends Controller
             'total_restraint_time' => sprintf('%d時間%02d分', $totalRestraintHours, $totalRestraintMinutesRemainder),
             'total_break_time' => sprintf('%d時間%02d分', $totalBreakHours, $totalBreakMinutesRemainder),
             'total_work_time' => sprintf('%d時間%02d分', $netWorkHours, $netWorkMinutesRemainder),
+            'transport_to_count' => $transportToCount,
+            'transport_from_count' => $transportFromCount,
         ];
 
         return Inertia::render('users/show', [

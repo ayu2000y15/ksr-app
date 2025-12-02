@@ -14,6 +14,8 @@ type CalendarDay = {
     work_times: Array<{ start_time: string | null; end_time: string | null; status: string }>;
     break_times: Array<{ start_time: string | null; end_time: string | null }>;
     is_absent: boolean;
+    has_transport_to?: boolean;
+    has_transport_from?: boolean;
 };
 
 type Stats = {
@@ -21,6 +23,8 @@ type Stats = {
     total_restraint_time: string;
     total_break_time: string;
     total_work_time: string;
+    transport_to_count: number;
+    transport_from_count: number;
 };
 
 export default function Show({
@@ -338,30 +342,63 @@ export default function Show({
                             </div>
                         </CardHeader>
                         {stats && (
-                            <div className="border-t bg-gray-50 px-6 py-4">
-                                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                                    <div>
-                                        <div className="text-xs text-muted-foreground">出勤日数</div>
-                                        <div className="text-lg font-semibold">{stats.work_days}日</div>
-                                    </div>
-                                    <div>
-                                        <div className="text-xs text-muted-foreground">総拘束時間</div>
-                                        <div className="text-lg font-semibold">{stats.total_restraint_time}</div>
-                                    </div>
-                                    <div>
-                                        <div className="text-xs text-muted-foreground">総休憩時間</div>
-                                        <div className="text-lg font-semibold">{stats.total_break_time}</div>
-                                    </div>
-                                    <div>
-                                        <div className="text-xs text-muted-foreground">総稼働時間</div>
-                                        <div className="text-lg font-semibold">{stats.total_work_time}</div>
+                            <>
+                                <div className="border-t bg-gray-50 px-6 py-4">
+                                    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+                                        <div>
+                                            <div className="text-xs text-muted-foreground">出勤日数</div>
+                                            <div className="text-lg font-semibold">{stats.work_days}日</div>
+                                        </div>
+                                        <div>
+                                            <div className="text-xs text-muted-foreground">総拘束時間</div>
+                                            <div className="text-lg font-semibold">{stats.total_restraint_time}</div>
+                                        </div>
+                                        <div>
+                                            <div className="text-xs text-muted-foreground">総休憩時間</div>
+                                            <div className="text-lg font-semibold">{stats.total_break_time}</div>
+                                        </div>
+                                        <div>
+                                            <div className="text-xs text-muted-foreground">総稼働時間</div>
+                                            <div className="text-lg font-semibold">{stats.total_work_time}</div>
+                                        </div>
+                                        <div>
+                                            <div className="text-xs text-muted-foreground">送迎（行き）</div>
+                                            <div className="text-lg font-semibold">{stats.transport_to_count}回</div>
+                                        </div>
+                                        <div>
+                                            <div className="text-xs text-muted-foreground">送迎（帰り）</div>
+                                            <div className="text-lg font-semibold">{stats.transport_from_count}回</div>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
+                                <div className="border-t bg-blue-50 px-6 py-3">
+                                    <div className="text-xs text-muted-foreground">
+                                        <div className="flex flex-wrap items-center gap-4">
+                                            <div className="flex items-center gap-1">
+                                                <Car className="h-4 w-4 text-blue-600" />
+                                                <span>送迎（行き）</span>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                <Car className="h-4 w-4 text-orange-600" />
+                                                <span>送迎（帰り）</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </>
                         )}
                         <CardContent className="max-h-[70vh] overflow-y-auto">
                             <div className="flex flex-col">
                                 {calendar.map((day) => {
+                                    // デバッグ: 送迎フラグを確認
+                                    if (day.has_transport_to || day.has_transport_from) {
+                                        console.log('Transport detected:', {
+                                            date: day.date,
+                                            has_transport_to: day.has_transport_to,
+                                            has_transport_from: day.has_transport_from,
+                                        });
+                                    }
+
                                     const isLeave = day.shift_type === 'leave';
                                     const hasWork = day.work_times && day.work_times.length > 0;
 
@@ -418,6 +455,8 @@ export default function Show({
                                                                 欠席
                                                             </Badge>
                                                         )}
+                                                        {day.has_transport_to && <Car className="h-4 w-4 text-blue-600" title="送迎（行き）" />}
+                                                        {day.has_transport_from && <Car className="h-4 w-4 text-orange-600" title="送迎（帰り）" />}
                                                     </div>
                                                 </div>
                                                 {timeStr && (
@@ -442,29 +481,36 @@ export default function Show({
                                             </div>
 
                                             {/* Desktop layout */}
-                                            <div className="hidden items-center justify-between md:flex">
-                                                <div className="flex items-center gap-4">
-                                                    <div className={`w-24 font-medium ${dateTextClass}`}>
-                                                        {(() => {
-                                                            const d = new Date(day.date);
-                                                            const m = d.getMonth() + 1;
-                                                            const dd = d.getDate();
-                                                            const jp = ['日', '月', '火', '水', '木', '金', '土'];
-                                                            return `${m}/${dd} (${jp[d.getDay()]})`;
-                                                        })()}
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        {isLeave && (
-                                                            <div className="inline-block rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
-                                                                休
-                                                            </div>
-                                                        )}
-                                                        {day.is_absent && (
-                                                            <Badge variant="destructive" className="text-xs">
-                                                                欠席
-                                                            </Badge>
-                                                        )}
-                                                    </div>
+                                            <div className="hidden md:grid md:grid-cols-[80px_50px_1fr_auto] md:items-center md:gap-4">
+                                                {/* 日付列 */}
+                                                <div className={`font-medium ${dateTextClass}`}>
+                                                    {(() => {
+                                                        const d = new Date(day.date);
+                                                        const m = d.getMonth() + 1;
+                                                        const dd = d.getDate();
+                                                        const jp = ['日', '月', '火', '水', '木', '金', '土'];
+                                                        return `${m}/${dd} (${jp[d.getDay()]})`;
+                                                    })()}
+                                                </div>
+
+                                                {/* 送迎列 */}
+                                                <div className="flex items-center gap-2">
+                                                    {day.has_transport_to && <Car className="h-4 w-4 text-blue-600" title="送迎（行き）" />}
+                                                    {day.has_transport_from && <Car className="h-4 w-4 text-orange-600" title="送迎（帰り）" />}
+                                                </div>
+
+                                                {/* 勤務時間列 */}
+                                                <div className="flex items-center gap-2">
+                                                    {isLeave && (
+                                                        <div className="inline-block rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+                                                            休
+                                                        </div>
+                                                    )}
+                                                    {day.is_absent && (
+                                                        <Badge variant="destructive" className="text-xs">
+                                                            欠席
+                                                        </Badge>
+                                                    )}
                                                     {timeStr && (
                                                         <div
                                                             className={`text-sm ${day.is_past && !day.is_today ? 'text-muted-foreground' : 'font-medium text-sky-700'}`}
@@ -476,15 +522,19 @@ export default function Show({
                                                         <div className="text-sm text-muted-foreground">{day.is_past ? '勤務なし' : '予定なし'}</div>
                                                     )}
                                                 </div>
-                                                {day.break_times && day.break_times.length > 0 && (
-                                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                                        {day.break_times.map((br, idx) => (
-                                                            <span key={idx}>
-                                                                休憩: {formatDateTime(br.start_time)}〜{formatDateTime(br.end_time)}
-                                                            </span>
-                                                        ))}
-                                                    </div>
-                                                )}
+
+                                                {/* 休憩時間列 */}
+                                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                    {day.break_times && day.break_times.length > 0 && (
+                                                        <>
+                                                            {day.break_times.map((br, idx) => (
+                                                                <span key={idx}>
+                                                                    休憩: {formatDateTime(br.start_time)}〜{formatDateTime(br.end_time)}
+                                                                </span>
+                                                            ))}
+                                                        </>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     );
