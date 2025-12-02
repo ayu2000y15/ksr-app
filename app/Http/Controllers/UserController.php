@@ -242,7 +242,7 @@ class UserController extends Controller
     /**
      * ユーザー詳細ページ（Inertia）を表示します。
      */
-    public function show(User $user)
+    public function show(Request $request, User $user)
     {
         if (Auth::user()->hasRole('システム管理者')) {
             // bypass
@@ -323,9 +323,184 @@ class UserController extends Controller
             }
         }
 
+        // カレンダーデータの取得（15日区切り対応）
+        $monthParam = $request->query('month');
+        if ($monthParam) {
+            try {
+                $monthDate = Carbon::parse($monthParam);
+            } catch (\Throwable $e) {
+                $monthDate = Carbon::today();
+            }
+        } else {
+            $monthDate = Carbon::today();
+        }
+
+        // 15日区切り: 前月16日～当月15日
+        $startDate = $monthDate->copy()->day(16)->subMonth();
+        $endDate = $monthDate->copy()->day(15);
+        $today = Carbon::today();
+
+        $calendar = [];
+
+        // 統計用変数（ユーザー別統計と同じロジック）
+        $totalWorkDays = 0;
+        $actualWorkMinutes = 0;  // status='actual' の work のみ
+        $actualBreakMinutes = 0; // status='actual' の break のみ
+
+        // ShiftとShiftDetailを取得
+        // 注意: start_time でフィルタすると日付またぎに対応できるため date を使用
+        $shifts = Shift::where('user_id', $user->id)
+            ->whereBetween('date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
+            ->whereIn('shift_type', ['day', 'night']) // leave は除外
+            ->orderBy('date', 'asc')
+            ->get();
+
+        $shiftDetails = ShiftDetail::where('user_id', $user->id)
+            ->whereBetween('date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
+            ->orderBy('date', 'asc')
+            ->orderBy('start_time', 'asc')
+            ->get();
+
+        // 日付ごとにデータをグループ化
+        $shiftsByDate = $shifts->groupBy('date');
+        $detailsByDate = $shiftDetails->groupBy('date');
+
+        // 期間内の全日付をループ
+        $currentDate = $startDate->copy();
+        while ($currentDate->lte($endDate)) {
+            $dateStr = $currentDate->format('Y-m-d');
+            $isPast = $currentDate->lt($today);
+            $isToday = $currentDate->eq($today);
+
+            $shift = $shiftsByDate->get($dateStr)?->first();
+            $details = $detailsByDate->get($dateStr) ?? collect();
+
+            $dayData = [
+                'date' => $dateStr,
+                'is_past' => $isPast,
+                'is_today' => $isToday,
+                'shift_type' => $shift?->shift_type ?? null,
+                'work_times' => [],
+                'break_times' => [],
+                'is_absent' => false,
+            ];
+
+            foreach ($details as $detail) {
+                $type = isset($detail->type) ? (string)$detail->type : '';
+                $status = isset($detail->status) ? (string)$detail->status : '';
+
+                if ($type === 'work') {
+                    // 過去・今日は actual のみ表示、未来は scheduled も表示
+                    if ($isPast || $isToday) {
+                        // actual のみを表示
+                        if ($status === 'actual') {
+                            $workData = [
+                                'start_time' => $detail->start_time,
+                                'end_time' => $detail->end_time,
+                                'status' => $detail->status,
+                            ];
+                            $dayData['work_times'][] = $workData;
+
+                            // 統計計算: actual の work 時間
+                            if ($detail->start_time && $detail->end_time) {
+                                try {
+                                    $start = Carbon::parse($detail->start_time);
+                                    $end = Carbon::parse($detail->end_time);
+                                    $minutes = max(0, (int) $end->diffInMinutes($start, true));
+                                    $actualWorkMinutes += $minutes;
+                                } catch (\Throwable $e) {
+                                    // ignore
+                                }
+                            }
+                        } else if ($status === 'absent') {
+                            $dayData['is_absent'] = true;
+                            $workData = [
+                                'start_time' => $detail->start_time,
+                                'end_time' => $detail->end_time,
+                                'status' => $detail->status,
+                            ];
+                            $dayData['work_times'][] = $workData;
+                        }
+                    } else {
+                        // 未来: scheduled を表示
+                        if ($status === 'scheduled') {
+                            $workData = [
+                                'start_time' => $detail->start_time,
+                                'end_time' => $detail->end_time,
+                                'status' => $detail->status,
+                            ];
+                            $dayData['work_times'][] = $workData;
+                        }
+                    }
+                } elseif ($type === 'break') {
+                    // 過去・今日は actual のみ表示、未来は scheduled も表示
+                    if ($isPast || $isToday) {
+                        // actual のみを表示
+                        if ($status === 'actual') {
+                            $breakData = [
+                                'start_time' => $detail->start_time,
+                                'end_time' => $detail->end_time,
+                                'status' => $detail->status,
+                            ];
+                            $dayData['break_times'][] = $breakData;
+
+                            // 統計計算: actual の break 時間
+                            if ($detail->start_time && $detail->end_time) {
+                                try {
+                                    $start = Carbon::parse($detail->start_time);
+                                    $end = Carbon::parse($detail->end_time);
+                                    $minutes = max(0, (int) $end->diffInMinutes($start, true));
+                                    $actualBreakMinutes += $minutes;
+                                } catch (\Throwable $e) {
+                                    // ignore
+                                }
+                            }
+                        }
+                    } else {
+                        // 未来: scheduled を表示
+                        if ($status === 'scheduled') {
+                            $breakData = [
+                                'start_time' => $detail->start_time,
+                                'end_time' => $detail->end_time,
+                                'status' => $detail->status,
+                            ];
+                            $dayData['break_times'][] = $breakData;
+                        }
+                    }
+                }
+            }
+
+            $calendar[] = $dayData;
+            $currentDate->addDay();
+        }
+
+        // 出勤日数を計算（ユーザー別統計と同じロジック）
+        $totalWorkDays = $shifts->count();
+
+        // 統計情報を計算（ユーザー別統計と同じ: actual の work - break）
+        $totalRestraintHours = floor($actualWorkMinutes / 60);
+        $totalRestraintMinutesRemainder = $actualWorkMinutes % 60;
+        $totalBreakHours = floor($actualBreakMinutes / 60);
+        $totalBreakMinutesRemainder = $actualBreakMinutes % 60;
+
+        // 総勤務時間 = actual work - actual break
+        $netWorkMinutes = max(0, $actualWorkMinutes - $actualBreakMinutes);
+        $netWorkHours = floor($netWorkMinutes / 60);
+        $netWorkMinutesRemainder = $netWorkMinutes % 60;
+
+        $stats = [
+            'work_days' => $totalWorkDays,
+            'total_restraint_time' => sprintf('%d時間%02d分', $totalRestraintHours, $totalRestraintMinutesRemainder),
+            'total_break_time' => sprintf('%d時間%02d分', $totalBreakHours, $totalBreakMinutesRemainder),
+            'total_work_time' => sprintf('%d時間%02d分', $netWorkHours, $netWorkMinutesRemainder),
+        ];
+
         return Inertia::render('users/show', [
             'user' => $user,
             'properties' => $properties,
+            'calendar' => $calendar,
+            'month' => $startDate->format('Y-m-d'),
+            'stats' => $stats,
         ]);
     }
 
@@ -604,19 +779,23 @@ class UserController extends Controller
 
         $months = [];
         $now = Carbon::now();
-        // start: 3 months in the past (so sequence: -3, -2, -1, 0, +1, +2)
-        $start = $now->copy()->subMonths(3);
+        // 15日区切りの期間を6ヶ月分生成（4ヶ月前から1ヶ月後まで）
+        $start = $now->copy()->subMonths(4);
         for ($i = 0; $i < 6; $i++) {
             $m = $start->copy()->addMonths($i);
             $months[] = $m->format('Y-m'); // e.g. 2025-05,2025-06,...,2025-10
         }
 
-        $users = User::orderBy('id', 'asc')->get();
+        $users = User::orderBy('position', 'asc')->get();
 
-        // Compute earliest/latest range for queries (cover full months)
-        // months[0] is the earliest (left), end($months) is the latest (right)
-        $earliest = Carbon::createFromFormat('Y-m', $months[0])->startOfMonth();
-        $latest = Carbon::createFromFormat('Y-m', end($months))->endOfMonth();
+        // 15日区切りの期間範囲を計算
+        // 最初の期間: months[0]の16日から開始
+        // 最後の期間: end($months)の翌月15日まで
+        $firstMonth = Carbon::createFromFormat('Y-m', $months[0]);
+        $lastMonth = Carbon::createFromFormat('Y-m', end($months));
+
+        $earliest = $firstMonth->copy()->day(16)->startOfDay();
+        $latest = $lastMonth->copy()->addMonth()->day(15)->endOfDay();
 
         // Fetch shifts (one row per date/user) for counting 出勤日数 where shift_type is day/night
         $shifts = Shift::whereBetween('date', [$earliest->toDateString(), $latest->toDateString()])
@@ -740,14 +919,19 @@ class UserController extends Controller
             }
         }
 
-        // Count days from shifts rows
+        // Count days from shifts rows (15日区切り)
         foreach ($shifts as $s) {
             try {
                 $uid = $s->user_id;
                 if (!isset($stats[$uid])) continue;
                 $date = $s->date ? Carbon::parse($s->date) : null;
                 if (!$date) continue;
-                $monthKey = $date->format('Y-m');
+
+                // 15日区切りで月を決定: 16日～翌月15日
+                $monthKey = $date->day <= 15
+                    ? $date->copy()->subMonth()->format('Y-m')
+                    : $date->format('Y-m');
+
                 if (!isset($stats[$uid][$monthKey])) continue;
                 // each shift row counts as one 出勤日
                 $stats[$uid][$monthKey]['days'] += 1;
@@ -756,7 +940,7 @@ class UserController extends Controller
             }
         }
 
-        // Sum work/break minutes from shift details according to the requested rules
+        // Sum work/break minutes from shift details according to the requested rules (15日区切り)
         foreach ($shiftDetails as $sd) {
             try {
                 $uid = $sd->user_id;
@@ -764,7 +948,12 @@ class UserController extends Controller
                 $start = $sd->start_time ? Carbon::parse($sd->start_time) : null;
                 $end = $sd->end_time ? Carbon::parse($sd->end_time) : null;
                 if (!$start || !$end) continue;
-                $monthKey = $start->format('Y-m');
+
+                // 15日区切りで月を決定: 16日～翌月15日
+                $monthKey = $start->day <= 15
+                    ? $start->copy()->subMonth()->format('Y-m')
+                    : $start->format('Y-m');
+
                 if (!isset($stats[$uid][$monthKey])) continue;
 
                 // ensure absolute positive minutes (avoid negative diffs due to ordering/timezone)
@@ -808,7 +997,7 @@ class UserController extends Controller
             }
         }
 
-        // Count transport requests per creator per month within the same date range
+        // Count transport requests per creator per month within the same date range (15日区切り)
         try {
             $transportRequests = \App\Models\TransportRequest::whereBetween('date', [$earliest->toDateString(), $latest->toDateString()])->get();
             foreach ($transportRequests as $tr) {
@@ -817,7 +1006,12 @@ class UserController extends Controller
                     if (!$creatorId) continue;
                     $d = $tr->date ? Carbon::parse($tr->date) : null;
                     if (!$d) continue;
-                    $mk = $d->format('Y-m');
+
+                    // 15日区切りで月を決定: 16日～翌月15日
+                    $mk = $d->day <= 15
+                        ? $d->copy()->subMonth()->format('Y-m')
+                        : $d->format('Y-m');
+
                     if (isset($stats[$creatorId]) && isset($stats[$creatorId][$mk])) {
                         $dir = isset($tr->direction) ? (string)$tr->direction : 'to';
                         if ($dir === 'to') {

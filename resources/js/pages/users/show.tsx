@@ -2,10 +2,40 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
-import { Head, Link, usePage } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { Car } from 'lucide-react';
+import { useMemo } from 'react';
 
-export default function Show({ user, properties }: { user: any; properties: any[] }) {
+type CalendarDay = {
+    date: string;
+    is_past: boolean;
+    is_today: boolean;
+    shift_type: string | null;
+    work_times: Array<{ start_time: string | null; end_time: string | null; status: string }>;
+    break_times: Array<{ start_time: string | null; end_time: string | null }>;
+    is_absent: boolean;
+};
+
+type Stats = {
+    work_days: number;
+    total_restraint_time: string;
+    total_break_time: string;
+    total_work_time: string;
+};
+
+export default function Show({
+    user,
+    properties,
+    calendar,
+    month,
+    stats,
+}: {
+    user: any;
+    properties: any[];
+    calendar?: CalendarDay[];
+    month?: string;
+    stats?: Stats;
+}) {
     let breadcrumbs = [{ title: 'ユーザー管理', href: route('users.index') }, { title: '詳細' }];
 
     const page = usePage();
@@ -51,6 +81,55 @@ export default function Show({ user, properties }: { user: any; properties: any[
 
     const preferredDaysOrdered = orderedWeekdayCodes.filter((c) => preferredDayCodes.includes(c));
 
+    // 月パラメータをパース
+    const monthDate = useMemo(() => {
+        if (!month) return new Date();
+        const parts = String(month)
+            .split('-')
+            .map((p) => parseInt(p, 10));
+        if (parts.length >= 2) return new Date(parts[0], parts[1] - 1, 1);
+        return new Date(month);
+    }, [month]);
+
+    const formatMonthParam = (d: Date) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        return `${y}-${m}-01`;
+    };
+
+    const prevMonth = () => {
+        const m = new Date(monthDate.getFullYear(), monthDate.getMonth() - 1, 1);
+        router.get(
+            route('users.show', user.id),
+            { month: formatMonthParam(m) },
+            {
+                only: ['calendar', 'month', 'stats'],
+                preserveState: true,
+            },
+        );
+    };
+
+    const nextMonth = () => {
+        const m = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 1);
+        router.get(
+            route('users.show', user.id),
+            { month: formatMonthParam(m) },
+            {
+                only: ['calendar', 'month', 'stats'],
+                preserveState: true,
+            },
+        );
+    };
+
+    // 期間表示用（当月16日～翌月15日）
+    const getPeriodDisplay = () => {
+        const currentMonth = monthDate.getMonth() + 1;
+        const currentYear = monthDate.getFullYear();
+        const nextMonthNum = currentMonth === 12 ? 1 : currentMonth + 1;
+        const nextYear = currentMonth === 12 ? currentYear + 1 : currentYear;
+        return `${currentYear}/${currentMonth}/16 〜 ${nextYear}/${nextMonthNum}/15`;
+    };
+
     const formatDate = (iso?: string | null) => {
         if (!iso) return '—';
         try {
@@ -69,6 +148,54 @@ export default function Show({ user, properties }: { user: any; properties: any[
             return s;
         } catch {
             return String(iso);
+        }
+    };
+
+    const formatDateTime = (dt?: string | null) => {
+        if (!dt) return '—';
+        try {
+            const s = String(dt).trim();
+            // Parse yyyy-mm-dd hh:mm:ss format
+            const m = s.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})/);
+            if (m) return `${m[4]}:${m[5]}`;
+            // Try parsing as Date
+            const d = new Date(s.replace(' ', 'T'));
+            if (!isNaN(d.getTime())) {
+                const hh = String(d.getHours()).padStart(2, '0');
+                const mm = String(d.getMinutes()).padStart(2, '0');
+                return `${hh}:${mm}`;
+            }
+            return s;
+        } catch {
+            return String(dt);
+        }
+    };
+
+    const formatDateWithWeekday = (dateStr: string) => {
+        try {
+            const d = new Date(dateStr);
+            if (isNaN(d.getTime())) return dateStr;
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            const weekdayShort = d.toLocaleDateString('ja-JP', { weekday: 'short' });
+            return `${year}/${month}/${day} (${weekdayShort})`;
+        } catch {
+            return dateStr;
+        }
+    };
+
+    const getShiftTypeLabel = (shiftType: string | null) => {
+        if (!shiftType) return '—';
+        switch (shiftType) {
+            case 'day':
+                return '昼';
+            case 'night':
+                return '夜';
+            case 'leave':
+                return '休';
+            default:
+                return shiftType;
         }
     };
 
@@ -187,6 +314,185 @@ export default function Show({ user, properties }: { user: any; properties: any[
                         </div>
                     </CardContent>
                 </Card>
+
+                {/* 出勤履歴 */}
+                {calendar && calendar.length > 0 && (
+                    <Card className="mt-6">
+                        <CardTitle className="px-6">出勤履歴・シフト情報</CardTitle>
+                        <CardHeader className="w-full flex-row flex-nowrap items-center justify-between">
+                            <div className="flex-shrink-0">
+                                <Button size="sm" onClick={prevMonth}>
+                                    前の月
+                                </Button>
+                            </div>
+                            <div className="flex-1 px-4 text-center">
+                                <CardTitle className="!m-0">
+                                    {monthDate.getFullYear()}年 {monthDate.getMonth() + 1}月
+                                </CardTitle>
+                                <div className="mt-1 text-sm font-normal text-muted-foreground">{getPeriodDisplay()}</div>
+                            </div>
+                            <div className="flex-shrink-0">
+                                <Button size="sm" onClick={nextMonth}>
+                                    次の月
+                                </Button>
+                            </div>
+                        </CardHeader>
+                        {stats && (
+                            <div className="border-t bg-gray-50 px-6 py-4">
+                                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                                    <div>
+                                        <div className="text-xs text-muted-foreground">出勤日数</div>
+                                        <div className="text-lg font-semibold">{stats.work_days}日</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-xs text-muted-foreground">総拘束時間</div>
+                                        <div className="text-lg font-semibold">{stats.total_restraint_time}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-xs text-muted-foreground">総休憩時間</div>
+                                        <div className="text-lg font-semibold">{stats.total_break_time}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-xs text-muted-foreground">総稼働時間</div>
+                                        <div className="text-lg font-semibold">{stats.total_work_time}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        <CardContent className="max-h-[70vh] overflow-y-auto">
+                            <div className="flex flex-col">
+                                {calendar.map((day) => {
+                                    const isLeave = day.shift_type === 'leave';
+                                    const hasWork = day.work_times && day.work_times.length > 0;
+
+                                    // 日付オブジェクトを作成して曜日を判定
+                                    const dateObj = new Date(day.date);
+                                    const dayIndex = dateObj.getDay();
+                                    const isWeekend = dayIndex === 0 || dayIndex === 6;
+
+                                    // 背景色を曜日に基づいて設定
+                                    let rowBg = '';
+                                    if (day.is_today) {
+                                        rowBg = 'bg-green-100';
+                                    } else if (dayIndex === 0 || isLeave) {
+                                        // 日曜日または休日
+                                        rowBg = 'bg-red-50';
+                                    } else if (dayIndex === 6) {
+                                        // 土曜日
+                                        rowBg = 'bg-blue-50';
+                                    }
+
+                                    // 日付テキストの色
+                                    const dateTextClass = dayIndex === 0 || isLeave ? 'text-red-600' : dayIndex === 6 ? 'text-blue-600' : '';
+
+                                    // 時刻文字列を作成
+                                    const timeStr =
+                                        hasWork && day.work_times[0]
+                                            ? `${formatDateTime(day.work_times[0].start_time)}〜${formatDateTime(day.work_times[0].end_time)}`
+                                            : null;
+
+                                    return (
+                                        <div key={day.date} className={`border-b px-2 py-3 sm:px-4 ${rowBg}`}>
+                                            {/* Mobile layout */}
+                                            <div className="flex flex-col gap-2 md:hidden">
+                                                <div className="flex items-center justify-between">
+                                                    <div>
+                                                        <div className={`font-medium ${dateTextClass}`}>
+                                                            {(() => {
+                                                                const d = new Date(day.date);
+                                                                const m = d.getMonth() + 1;
+                                                                const dd = d.getDate();
+                                                                const jp = ['日', '月', '火', '水', '木', '金', '土'];
+                                                                return `${m}/${dd} (${jp[d.getDay()]})`;
+                                                            })()}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        {isLeave && (
+                                                            <div className="inline-block rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+                                                                休
+                                                            </div>
+                                                        )}
+                                                        {day.is_absent && (
+                                                            <Badge variant="destructive" className="text-xs">
+                                                                欠席
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                {timeStr && (
+                                                    <div
+                                                        className={`text-xs ${day.is_past && !day.is_today ? 'text-muted-foreground' : 'font-medium text-sky-700'}`}
+                                                    >
+                                                        {timeStr}
+                                                    </div>
+                                                )}
+                                                {!hasWork && !isLeave && (
+                                                    <div className="text-xs text-muted-foreground">{day.is_past ? '勤務なし' : '予定なし'}</div>
+                                                )}
+                                                {day.break_times && day.break_times.length > 0 && (
+                                                    <div className="mt-1 space-y-1">
+                                                        {day.break_times.map((br, idx) => (
+                                                            <div key={idx} className="text-xs text-muted-foreground">
+                                                                休憩: {formatDateTime(br.start_time)} 〜 {formatDateTime(br.end_time)}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Desktop layout */}
+                                            <div className="hidden items-center justify-between md:flex">
+                                                <div className="flex items-center gap-4">
+                                                    <div className={`w-24 font-medium ${dateTextClass}`}>
+                                                        {(() => {
+                                                            const d = new Date(day.date);
+                                                            const m = d.getMonth() + 1;
+                                                            const dd = d.getDate();
+                                                            const jp = ['日', '月', '火', '水', '木', '金', '土'];
+                                                            return `${m}/${dd} (${jp[d.getDay()]})`;
+                                                        })()}
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        {isLeave && (
+                                                            <div className="inline-block rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+                                                                休
+                                                            </div>
+                                                        )}
+                                                        {day.is_absent && (
+                                                            <Badge variant="destructive" className="text-xs">
+                                                                欠席
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                    {timeStr && (
+                                                        <div
+                                                            className={`text-sm ${day.is_past && !day.is_today ? 'text-muted-foreground' : 'font-medium text-sky-700'}`}
+                                                        >
+                                                            {timeStr}
+                                                        </div>
+                                                    )}
+                                                    {!hasWork && !isLeave && (
+                                                        <div className="text-sm text-muted-foreground">{day.is_past ? '勤務なし' : '予定なし'}</div>
+                                                    )}
+                                                </div>
+                                                {day.break_times && day.break_times.length > 0 && (
+                                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                        {day.break_times.map((br, idx) => (
+                                                            <span key={idx}>
+                                                                休憩: {formatDateTime(br.start_time)}〜{formatDateTime(br.end_time)}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
             </div>
         </AppSidebarLayout>
     );
