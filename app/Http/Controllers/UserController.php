@@ -332,7 +332,16 @@ class UserController extends Controller
                 $monthDate = Carbon::today();
             }
         } else {
-            $monthDate = Carbon::today();
+            // デフォルトは今日の日付が含まれる15日区切りの期間
+            $today = Carbon::today();
+            $todayDay = $today->day;
+
+            // 1-15日の場合は前月、16-31日の場合は当月
+            if ($todayDay <= 15) {
+                $monthDate = $today->copy()->subMonth()->startOfMonth();
+            } else {
+                $monthDate = $today->copy()->startOfMonth();
+            }
         }
 
         // 15日区切り: 当月16日～翌月15日
