@@ -335,9 +335,13 @@ class UserController extends Controller
             $monthDate = Carbon::today();
         }
 
-        // 15日区切り: 前月16日～当月15日
-        $startDate = $monthDate->copy()->day(16)->subMonth();
-        $endDate = $monthDate->copy()->day(15);
+        // 15日区切り: 当月16日～翌月15日
+        // monthDate は YYYY-MM-01 形式で渡されるので、その月の16日から翌月15日まで
+        $year = $monthDate->year;
+        $month = $monthDate->month;
+
+        $startDate = Carbon::create($year, $month, 16, 0, 0, 0);
+        $endDate = Carbon::create($year, $month, 16, 0, 0, 0)->addMonth()->subDay(); // 翌月15日
         $today = Carbon::today();
 
         $calendar = [];
