@@ -45,11 +45,9 @@ export default function UserStats(props: any) {
                 <div className="mb-3 flex items-center justify-between">
                     <HeadingSmall title="ユーザー別統計" description="各ユーザーの月別出勤日数・出勤時間合計を表示します。" />
                     <div className="mt-3">
-                        <Link href={route('shifts.index')} className="inline-block">
-                            <Button variant="outline">
-                                <ArrowLeft className="mr-2 h-4 w-4" /> 戻る
-                            </Button>
-                        </Link>
+                        <Button variant="outline" onClick={() => window.history.back()}>
+                            <ArrowLeft className="mr-2 h-4 w-4" /> 戻る
+                        </Button>
                     </div>
                 </div>
 
