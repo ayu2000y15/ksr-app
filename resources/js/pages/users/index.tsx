@@ -441,6 +441,22 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                             <div className="flex-1">
                                                 <div className="grid gap-2">
                                                     <div className="flex">
+                                                        <div className="w-36 text-sm text-muted-foreground">電話番号</div>
+                                                        <div className="flex-1">
+                                                            {user.phone_number ? (
+                                                                <a
+                                                                    href={`tel:${user.phone_number}`}
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    className="text-indigo-600 hover:underline"
+                                                                >
+                                                                    {user.phone_number}
+                                                                </a>
+                                                            ) : (
+                                                                '—'
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex">
                                                         <div className="w-36 text-sm text-muted-foreground">採用条件</div>
                                                         <div className="flex-1">
                                                             {user.employment_condition === 'dormitory'
@@ -762,6 +778,22 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                                     <TableCell colSpan={6} className="bg-gray-50">
                                                         <div className="p-3 text-sm text-muted-foreground">
                                                             <div className="grid gap-2">
+                                                                <div className="flex">
+                                                                    <div className="w-36 text-sm text-muted-foreground">電話番号</div>
+                                                                    <div className="flex-1">
+                                                                        {user.phone_number ? (
+                                                                            <a
+                                                                                href={`tel:${user.phone_number}`}
+                                                                                onClick={(e) => e.stopPropagation()}
+                                                                                className="text-indigo-600 hover:underline"
+                                                                            >
+                                                                                {user.phone_number}
+                                                                            </a>
+                                                                        ) : (
+                                                                            '—'
+                                                                        )}
+                                                                    </div>
+                                                                </div>
                                                                 <div className="flex">
                                                                     <div className="w-36 text-sm text-muted-foreground">採用条件</div>
                                                                     <div className="flex-1">
