@@ -17,6 +17,7 @@ use App\Policies\ShiftApplicationPolicy;
 use App\Policies\UserShiftSettingPolicy;
 use App\Policies\DefaultShiftPolicy;
 use App\Policies\AnnouncementPolicy;
+use App\Policies\AccountingPolicy;
 use App\Models\Poll;
 use App\Policies\PollPolicy;
 
@@ -60,5 +61,8 @@ class AuthServiceProvider extends ServiceProvider
                 return true;
             }
         });
+
+        // Define accounting view ability using AccountingPolicy
+        Gate::define('accounting.view', [AccountingPolicy::class, 'view']);
     }
 }

@@ -130,6 +130,7 @@ export default function RolePermissionsPage() {
         properties: '物件管理',
         task: 'タスク管理',
         announcement: 'お知らせ',
+        accounting: '経理',
         // 必要に応じてここに追加
     };
 
@@ -213,6 +214,8 @@ export default function RolePermissionsPage() {
         'announcement.create': 'お知らせ作成',
         // activity log
         'activitylog.view': '活動ログ閲覧',
+        // accounting
+        'accounting.view': '経理向け閲覧',
     };
 
     const allSelected = permissions.length > 0 && permissions.every((p) => !!checked[p.id]);

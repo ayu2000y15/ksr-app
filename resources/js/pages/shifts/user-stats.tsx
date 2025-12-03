@@ -1,16 +1,15 @@
 declare const route: any;
 import HeadingSmall from '@/components/heading-small';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { BreadcrumbItem } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
+import { ArrowLeft } from 'lucide-react';
 
-const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'シフト管理', href: route('shifts.index') },
-    { title: 'ユーザー別統計', href: route('shifts.user-stats') },
-];
+const breadcrumbs: BreadcrumbItem[] = [{ title: 'ユーザー別統計', href: route('shifts.user-stats') }];
 
 export default function UserStats(props: any) {
     const page = usePage();
@@ -43,8 +42,15 @@ export default function UserStats(props: any) {
         <AppSidebarLayout breadcrumbs={breadcrumbs}>
             <Head title="ユーザー別統計" />
             <div className="p-4 sm:p-6 lg:p-8">
-                <div className="my-6">
+                <div className="mb-3 flex items-center justify-between">
                     <HeadingSmall title="ユーザー別統計" description="各ユーザーの月別出勤日数・出勤時間合計を表示します。" />
+                    <div className="mt-3">
+                        <Link href={route('shifts.index')} className="inline-block">
+                            <Button variant="outline">
+                                <ArrowLeft className="mr-2 h-4 w-4" /> 戻る
+                            </Button>
+                        </Link>
+                    </div>
                 </div>
 
                 <Card>

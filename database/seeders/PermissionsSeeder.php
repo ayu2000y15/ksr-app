@@ -101,6 +101,8 @@ class PermissionsSeeder extends Seeder
             'properties.edit',
             'properties.delete',
             'properties.reorder',
+            // accounting (経理)
+            'accounting.view',
         ];
 
         // 既存の権限はそのままに、新しい権限のみを作成

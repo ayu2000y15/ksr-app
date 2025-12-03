@@ -208,7 +208,7 @@ export default function Show({
             <Head title={`ユーザー: ${user.name}`} />
             <div className="p-4 sm:p-6 lg:p-8">
                 <div className="mb-6 flex items-center justify-between">
-                    <h2 className="text-lg font-medium">ユーザー詳細</h2>
+                    <h2 className="text-lg font-medium">ユーザー詳細：{user.name}</h2>
                     <div className="flex gap-2">
                         <Button variant="outline" onClick={() => window.history.back()} title="前のページへ戻る">
                             戻る
@@ -448,12 +448,14 @@ export default function Show({
 
                 <Card className="mt-6">
                     <CardHeader>
-                        <CardTitle>
-                            {user.name} (ID: {user.position ?? user.id})
-                        </CardTitle>
+                        <CardTitle>詳細情報</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                            <div>
+                                <div className="text-sm text-muted-foreground">電話番号</div>
+                                <div className="font-medium">{user.phone_number || '—'}</div>
+                            </div>
                             <div>
                                 <div className="text-sm text-muted-foreground">採用条件</div>
                                 <div className="font-medium">

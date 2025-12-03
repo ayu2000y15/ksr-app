@@ -29,4 +29,9 @@ class Shift extends BaseModel
     {
         return $this->belongsTo(User::class);
     }
+
+    public function details()
+    {
+        return $this->hasMany(ShiftDetail::class);
+    }
 }

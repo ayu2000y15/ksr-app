@@ -831,8 +831,8 @@ class UserController extends Controller
      */
     public function stats(Request $request)
     {
-        // Authorization: 管理者または shift.view 権限を持つユーザーのみ
-        if (! (Auth::user()->hasRole('システム管理者') || Auth::user()->hasPermissionTo('shift.view'))) {
+        // Authorization: 管理者、shift.view、または accounting.view 権限を持つユーザーのみ
+        if (! (Auth::user()->hasRole('システム管理者') || Auth::user()->hasPermissionTo('shift.view') || Auth::user()->hasPermissionTo('accounting.view'))) {
             $this->authorize('viewAny', User::class);
         }
 

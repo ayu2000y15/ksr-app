@@ -72,6 +72,10 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
     // ユーザー統計ページ（shifts 配下のパスに移動）
     Route::get('/shifts/user-stats', [UserController::class, 'stats'])->name('shifts.user-stats');
 
+    // --- 経理向け画面 ---
+    Route::get('/accounting', [\App\Http\Controllers\AccountingController::class, 'index'])->name('accounting.index');
+    Route::get('/accounting/daily-detail', [\App\Http\Controllers\AccountingController::class, 'dailyDetail'])->name('accounting.daily_detail');
+
     // --- 貸出物マスタ管理ルート ---
     Route::get('/rental-items', [App\Http\Controllers\RentalItemController::class, 'index'])->name('rental-items.index');
     Route::get('/rental-items/create', [App\Http\Controllers\RentalItemController::class, 'create'])->name('rental-items.create');

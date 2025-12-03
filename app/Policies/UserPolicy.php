@@ -37,7 +37,7 @@ class UserPolicy
             if ($user->id === $model->id) {
                 return true;
             }
-            return $user->hasPermissionTo('user.view');
+            return $user->hasPermissionTo('user.view') || $user->hasPermissionTo('accounting.view');
         } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
             return false;
         }
