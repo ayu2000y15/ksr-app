@@ -254,14 +254,17 @@ export default function AccountingIndex(props: any) {
                                                 <Badge variant="outline" className="mb-2 text-xs">
                                                     出勤 {summary.count}人
                                                 </Badge>
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    className="w-full text-xs"
-                                                    onClick={() => handleOpenDetail(dateStr)}
-                                                >
-                                                    <Eye className="mr-1 h-3 w-3" /> 詳細
-                                                </Button>
+                                                {/* 当日以降は詳細ボタンを非表示 */}
+                                                {!isTodayCell && d < new Date() && (
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="w-full text-xs"
+                                                        onClick={() => handleOpenDetail(dateStr)}
+                                                    >
+                                                        <Eye className="mr-1 h-3 w-3" /> 詳細
+                                                    </Button>
+                                                )}
                                             </div>
                                         )}
                                     </div>
