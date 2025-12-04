@@ -43,6 +43,10 @@ class PermissionsSeeder extends Seeder
             'shift.viewAny',
             'shift.manage',
 
+            // daily timeline management (日間タイムライン管理)
+            'shift.daily.view',
+            'shift.daily.manage',
+
             // explicit shift detail permissions (used in some checks / future extension)
             'shift_detail.view',
             'shift_detail.create',

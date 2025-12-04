@@ -30,10 +30,21 @@ export default function Daily() {
             return displayDate;
         }
     })();
-    const breadcrumbs: BreadcrumbItem[] = [
-        { title: 'シフト管理', href: route('shifts.index') },
-        { title: `日間タイムライン: ${displayDateWithWeekday}`, href: '' },
-    ];
+
+    // シフト管理権限チェック
+    const authPermissions: string[] = (page.props as any)?.auth?.permissions || [];
+    const hasShiftView = authPermissions.includes('shift.view');
+    const isSysAdmin = (page.props as any)?.auth?.isSuperAdmin || false;
+    const canViewShiftManagement = hasShiftView || isSysAdmin;
+
+    // パンくずリスト: シフト管理権限がない場合はシフト管理リンクを非表示
+    const breadcrumbs: BreadcrumbItem[] = canViewShiftManagement
+        ? [
+              { title: 'シフト管理', href: route('shifts.index') },
+              { title: `日間タイムライン: ${displayDateWithWeekday}`, href: '' },
+          ]
+        : [{ title: `日間タイムライン: ${displayDateWithWeekday}`, href: '' }];
+
     // keep a local copy so edits can be applied without a full page reload
     const initialShiftDetails = (props?.shiftDetails || []) as unknown as any[];
     const [shiftDetails, setShiftDetails] = useState<any[]>(initialShiftDetails);
@@ -151,9 +162,11 @@ export default function Daily() {
             // ignore
         }
     }, [breakLocked]);
-    const permissions = props?.permissions || {};
-    const canUpdateBreak = permissions?.shift?.update || permissions?.is_system_admin;
-    const canDeleteBreak = permissions?.shift?.delete || permissions?.is_system_admin;
+    const hasShiftUpdate = authPermissions.includes('shift.update');
+    const hasShiftDelete = authPermissions.includes('shift.delete');
+    const hasDailyManage = authPermissions.includes('shift.daily.manage');
+    const canUpdateBreak = hasShiftUpdate || hasDailyManage || isSysAdmin;
+    const canDeleteBreak = hasShiftDelete || hasDailyManage || isSysAdmin;
 
     const [editingBreakId, setEditingBreakId] = useState<number | null>(null);
     const [editStartVal, setEditStartVal] = useState<string>('');
@@ -1565,9 +1578,13 @@ function EditableShiftRow({
 }) {
     const page = usePage();
     const props = page.props as any;
-    const permissions = props?.permissions || {};
-    const canUpdate = permissions?.shift?.update || permissions?.is_system_admin;
-    const canDelete = permissions?.shift?.delete || permissions?.is_system_admin;
+    const authPermissions: string[] = props?.auth?.permissions || [];
+    const hasShiftUpdate = authPermissions.includes('shift.update');
+    const hasShiftDelete = authPermissions.includes('shift.delete');
+    const hasDailyManage = authPermissions.includes('shift.daily.manage');
+    const isSysAdmin = (page.props as any)?.auth?.isSuperAdmin || false;
+    const canUpdate = hasShiftUpdate || hasDailyManage || isSysAdmin;
+    const canDelete = hasShiftDelete || hasDailyManage || isSysAdmin;
 
     const [editing, setEditing] = useState(false);
     const [startVal, setStartVal] = useState<string>(padTimeForInput(timeValueFromRaw(sd.start_time ?? sd.startRaw ?? null)));

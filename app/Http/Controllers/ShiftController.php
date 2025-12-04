@@ -18,9 +18,11 @@ class ShiftController extends Controller
 {
     public function index(Request $request)
     {
+        // シフト管理画面の権限チェック
         if (Auth::user()->hasRole('システム管理者')) {
             // システム管理者は全て表示可
         } else {
+            // shift.viewAny 権限が必要
             $this->authorize('viewAny', Shift::class);
         }
 
@@ -102,11 +104,11 @@ class ShiftController extends Controller
      */
     public function daily(Request $request)
     {
-        try {
-            $this->authorize('viewAny', Shift::class);
-        } catch (\Exception $e) {
-            // don't block the response for now; log for diagnosis
-            logger()->debug('ShiftController::daily authorize failed: ' . $e->getMessage());
+        // 日間タイムライン画面の権限チェック
+        if (Auth::user()->hasRole('システム管理者')) {
+            // システム管理者は全て表示可
+        } elseif (!Auth::user()->hasPermissionTo('shift.daily.view')) {
+            abort(403, '日間タイムラインを表示する権限がありません。');
         }
 
         $date = $request->get('date');

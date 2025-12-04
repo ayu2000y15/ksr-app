@@ -17,6 +17,14 @@ import { AppLogo } from './app-logo';
 import { SidebarSettingsMenu, useHasVisibleSettingsItems } from './sidebar-settings-menu';
 
 // メインのナビゲーション項目を定義
+const getTodayDate = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
 const mainNavItems: NavItem[] = [
     { title: 'ユーザー管理', href: '/users', icon: Users, permission: 'user.view' },
     { title: '各種申請', href: '/shift-applications', icon: CalendarCheck, permission: 'shift_application.view' },
@@ -24,6 +32,7 @@ const mainNavItems: NavItem[] = [
     { title: 'タスク・予定', href: '/tasks', icon: CheckSquare, permission: 'task.view' },
     { title: '掲示板・マニュアル', href: '/posts', icon: MessageSquare, permission: '' },
     { title: 'シフト管理', href: '/shifts', icon: Calendar, permission: 'shift.view' },
+    { title: '日間タイムライン', href: `/shifts/daily?date=${getTodayDate()}`, icon: Calendar, permission: 'shift.daily.view' },
     { title: '在庫管理', href: '/inventory', icon: Package },
     { title: '破損在庫管理', href: '/inventory/damaged', icon: AlertTriangle, permission: 'damaged_inventory.view' },
     { title: '物件管理', href: '/properties', icon: Home, permission: 'properties.view' },

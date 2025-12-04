@@ -347,15 +347,21 @@ export default function Dashboard() {
     let canViewShifts = false;
     if (isSuperAdmin) canViewShifts = true;
     else {
-        const perm = 'shift.view';
-        const hasFlat = permissions.includes(perm);
-        let hasNested = false;
-        const parts = perm.split('.');
-        if (parts.length === 2 && nestedPermissions && nestedPermissions[parts[0]]) {
-            const key = parts[1];
-            hasNested = Boolean(nestedPermissions[parts[0]][key]);
+        // Check for shift.view or shift.daily.view permission
+        const perms = ['shift.view', 'shift.daily.view'];
+        for (const perm of perms) {
+            const hasFlat = permissions.includes(perm);
+            let hasNested = false;
+            const parts = perm.split('.');
+            if (parts.length === 2 && nestedPermissions && nestedPermissions[parts[0]]) {
+                const key = parts[1];
+                hasNested = Boolean(nestedPermissions[parts[0]][key]);
+            }
+            if (hasFlat || hasNested) {
+                canViewShifts = true;
+                break;
+            }
         }
-        if (hasFlat || hasNested) canViewShifts = true;
     }
     // determine if user may view tasks (calendar)
     let canViewTasks = false;

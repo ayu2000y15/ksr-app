@@ -332,18 +332,6 @@ export default function PostShow() {
         (props as any).auth.user.roles.some((r: any) => r && r.name === 'システム管理者')
     );
 
-    // Debug: Log admin status
-    console.log(
-        'Post Show - isAdmin:',
-        isAdmin,
-        'user:',
-        (props as any).auth?.user,
-        'roles:',
-        (props as any).auth?.user?.roles,
-        'post.user:',
-        post?.user,
-    );
-
     const [modalOpen, setModalOpen] = useState(false);
     const [modalStartIndex, setModalStartIndex] = useState(0);
     const [manualModalOpen, setManualModalOpen] = useState(false);

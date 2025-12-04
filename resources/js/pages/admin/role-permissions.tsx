@@ -159,6 +159,8 @@ export default function RolePermissionsPage() {
         'shift.delete': 'シフト削除',
         'shift.viewAny': 'シフト一覧閲覧',
         'shift.manage': 'シフト管理',
+        'shift.daily.view': '日間タイムライン閲覧',
+        'shift.daily.manage': '日間タイムライン管理',
         // shift details
         'shift_detail.view': 'シフト詳細閲覧',
         'shift_detail.create': 'シフト詳細作成',

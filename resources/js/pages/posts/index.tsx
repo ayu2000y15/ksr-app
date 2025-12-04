@@ -73,9 +73,6 @@ export default function PostsIndex() {
         (page.props as any).auth.user.roles.some((r: any) => r && r.name === 'システム管理者')
     );
 
-    // Debug: Log admin status
-    console.log('Posts Index - isAdmin:', isAdmin, 'user:', (page.props as any).auth?.user, 'roles:', (page.props as any).auth?.user?.roles);
-
     const loadInitial = useCallback(
         async (options?: {
             tag?: string | null;

@@ -22,7 +22,7 @@ class ShiftDetailPolicy
     public function viewAny(User $user)
     {
         try {
-            return $user->hasPermissionTo('shift.view');
+            return $user->hasPermissionTo('shift.view') || $user->hasPermissionTo('shift.daily.view');
         } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
             return false;
         }
@@ -30,9 +30,11 @@ class ShiftDetailPolicy
 
     public function view(User $user, ShiftDetail $shiftDetail)
     {
-        // allow viewing if has general shift.view permission or owns the record
+        // allow viewing if has general shift.view permission, daily timeline permission, or owns the record
         try {
-            return $user->hasPermissionTo('shift.view') || $user->id === $shiftDetail->user_id;
+            return $user->hasPermissionTo('shift.view')
+                || $user->hasPermissionTo('shift.daily.view')
+                || $user->id === $shiftDetail->user_id;
         } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
             return $user->id === $shiftDetail->user_id;
         }
@@ -41,7 +43,7 @@ class ShiftDetailPolicy
     public function create(User $user)
     {
         try {
-            return $user->hasPermissionTo('shift.create');
+            return $user->hasPermissionTo('shift.create') || $user->hasPermissionTo('shift.daily.manage');
         } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
             return false;
         }
@@ -49,9 +51,11 @@ class ShiftDetailPolicy
 
     public function update(User $user, ShiftDetail $shiftDetail)
     {
-        // allow update if has permission or owns the record
+        // allow update if has permission, daily manage permission, or owns the record
         try {
-            return $user->hasPermissionTo('shift.update') || $user->id === $shiftDetail->user_id;
+            return $user->hasPermissionTo('shift.update')
+                || $user->hasPermissionTo('shift.daily.manage')
+                || $user->id === $shiftDetail->user_id;
         } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
             return $user->id === $shiftDetail->user_id;
         }
@@ -60,7 +64,9 @@ class ShiftDetailPolicy
     public function delete(User $user, ShiftDetail $shiftDetail)
     {
         try {
-            return $user->hasPermissionTo('shift.delete') || $user->id === $shiftDetail->user_id;
+            return $user->hasPermissionTo('shift.delete')
+                || $user->hasPermissionTo('shift.daily.manage')
+                || $user->id === $shiftDetail->user_id;
         } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
             return $user->id === $shiftDetail->user_id;
         }
