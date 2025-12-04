@@ -326,6 +326,11 @@ export default function PostShow() {
         return false;
     };
     const currentUserId = (props as any).auth?.user?.id;
+    const isAdmin = !!(
+        (props as any).auth?.user &&
+        Array.isArray((props as any).auth.user.roles) &&
+        (props as any).auth.user.roles.some((r: any) => r && r.name === 'システム管理者')
+    );
 
     const [modalOpen, setModalOpen] = useState(false);
     const [modalStartIndex, setModalStartIndex] = useState(0);
@@ -959,7 +964,7 @@ export default function PostShow() {
                                         </Button>
                                     )}
                                     {post?.user &&
-                                        currentUserId === post.user.id &&
+                                        (currentUserId === post.user.id || isAdmin) &&
                                         // 投稿が poll タイプで、かつ有効期限が過ぎている場合は編集を不可にする
                                         (() => {
                                             const isPoll = post?.type === 'poll';

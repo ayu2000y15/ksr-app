@@ -67,6 +67,11 @@ export default function PostsIndex() {
         }
     });
     const currentUserId = Number((page.props as any).auth?.user?.id) || null;
+    const isAdmin = !!(
+        (page.props as any).auth?.user &&
+        Array.isArray((page.props as any).auth.user.roles) &&
+        (page.props as any).auth.user.roles.some((r: any) => r && r.name === 'システム管理者')
+    );
 
     const loadInitial = useCallback(
         async (options?: {
@@ -740,7 +745,8 @@ export default function PostsIndex() {
                                                         <TableCell>{formatDateTime(post.updated_at)}</TableCell>
                                                         <TableCell className="text-right">
                                                             <div className="inline-flex items-center justify-end gap-2">
-                                                                {postOwnerId && currentUserId && Number(postOwnerId) === currentUserId ? (
+                                                                {(postOwnerId && currentUserId && Number(postOwnerId) === currentUserId) ||
+                                                                isAdmin ? (
                                                                     <div className="inline-flex justify-end gap-2">
                                                                         {/* 編集は poll かつ期限切れの場合は非表示にする */}
                                                                         {!pollExpired && (
@@ -940,7 +946,7 @@ export default function PostsIndex() {
                                                             </button>
                                                         ) : null}
 
-                                                        {postOwnerId && currentUserId && Number(postOwnerId) === currentUserId ? (
+                                                        {(postOwnerId && currentUserId && Number(postOwnerId) === currentUserId) || isAdmin ? (
                                                             <>
                                                                 {/* モバイル: 編集は poll かつ期限切れの場合は非表示 */}
                                                                 {!pollExpiredMobile && (
