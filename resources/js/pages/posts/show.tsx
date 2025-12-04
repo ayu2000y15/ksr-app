@@ -332,6 +332,18 @@ export default function PostShow() {
         (props as any).auth.user.roles.some((r: any) => r && r.name === 'システム管理者')
     );
 
+    // Debug: Log admin status
+    console.log(
+        'Post Show - isAdmin:',
+        isAdmin,
+        'user:',
+        (props as any).auth?.user,
+        'roles:',
+        (props as any).auth?.user?.roles,
+        'post.user:',
+        post?.user,
+    );
+
     const [modalOpen, setModalOpen] = useState(false);
     const [modalStartIndex, setModalStartIndex] = useState(0);
     const [manualModalOpen, setManualModalOpen] = useState(false);
@@ -963,39 +975,39 @@ export default function PostShow() {
                                             <Printer className="mr-2 h-4 w-4" /> 印刷
                                         </Button>
                                     )}
-                                    {post?.user &&
-                                        (currentUserId === post.user.id || isAdmin) &&
-                                        // 投稿が poll タイプで、かつ有効期限が過ぎている場合は編集を不可にする
-                                        (() => {
-                                            const isPoll = post?.type === 'poll';
-                                            let pollExpired = false;
-                                            try {
-                                                if (isPoll && post?.poll?.expires_at) {
-                                                    const exp = new Date(post.poll.expires_at);
-                                                    if (!isNaN(exp.getTime())) {
-                                                        pollExpired = exp < new Date();
-                                                    }
-                                                }
-                                            } catch {
-                                                // ignore parsing errors and treat as not expired
-                                                pollExpired = false;
-                                            }
+                                    {(post?.user && currentUserId === post.user.id) || isAdmin
+                                        ? // 投稿が poll タイプで、かつ有効期限が過ぎている場合は編集を不可にする
+                                          (() => {
+                                              const isPoll = post?.type === 'poll';
+                                              let pollExpired = false;
+                                              try {
+                                                  if (isPoll && post?.poll?.expires_at) {
+                                                      const exp = new Date(post.poll.expires_at);
+                                                      if (!isNaN(exp.getTime())) {
+                                                          pollExpired = exp < new Date();
+                                                      }
+                                                  }
+                                              } catch {
+                                                  // ignore parsing errors and treat as not expired
+                                                  pollExpired = false;
+                                              }
 
-                                            return (
-                                                <>
-                                                    {!pollExpired && (
-                                                        <Link href={post ? route('posts.edit', post.id) : '#'}>
-                                                            <Button variant="outline">
-                                                                <Edit className="mr-2 h-4 w-4" /> 編集
-                                                            </Button>
-                                                        </Link>
-                                                    )}
-                                                    <Button size="sm" variant="destructive" onClick={handleDelete}>
-                                                        <Trash className="mr-2 h-4 w-4" /> 削除
-                                                    </Button>
-                                                </>
-                                            );
-                                        })()}
+                                              return (
+                                                  <>
+                                                      {!pollExpired && (
+                                                          <Link href={post ? route('posts.edit', post.id) : '#'}>
+                                                              <Button variant="outline">
+                                                                  <Edit className="mr-2 h-4 w-4" /> 編集
+                                                              </Button>
+                                                          </Link>
+                                                      )}
+                                                      <Button size="sm" variant="destructive" onClick={handleDelete}>
+                                                          <Trash className="mr-2 h-4 w-4" /> 削除
+                                                      </Button>
+                                                  </>
+                                              );
+                                          })()
+                                        : null}
                                 </div>
                             </div>
                         </CardHeader>

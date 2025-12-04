@@ -59,6 +59,7 @@ class HandleInertiaRequests extends Middleware
                         'id' => $user->id,
                         'name' => $user->name,
                         'email' => $user->email,
+                        'roles' => $user->roles->map(fn($role) => ['id' => $role->id, 'name' => $role->name])->toArray(),
                     ],
                     // Whether the user is a system administrator (frontend can bypass checks)
                     'isSuperAdmin' => $isSuperAdmin,
