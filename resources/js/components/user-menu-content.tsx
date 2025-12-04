@@ -1,5 +1,4 @@
-import { DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
-import { UserInfo } from '@/components/user-info';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { useMobileNavigation } from '@/hooks/use-mobile-navigation';
 import { type User } from '@/types';
 import { Link, router } from '@inertiajs/react';
@@ -19,7 +18,7 @@ export function UserMenuContent({ user }: UserMenuContentProps) {
 
     return (
         <>
-            <DropdownMenuLabel className="p-0 font-normal">
+            {/* <DropdownMenuLabel className="p-0 font-normal">
                 <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                     <Link
                         href={route('users.show', user.id)}
@@ -33,7 +32,7 @@ export function UserMenuContent({ user }: UserMenuContentProps) {
                     </Link>
                 </div>
             </DropdownMenuLabel>
-            <DropdownMenuSeparator />
+            <DropdownMenuSeparator /> */}
             {/* <DropdownMenuGroup>
                 <DropdownMenuItem asChild>
                     <Link className="block w-full" href={route('profile.edit')} as="button" prefetch onClick={cleanup}>
