@@ -4,9 +4,24 @@ namespace App\Policies;
 
 use App\Models\User;
 use App\Models\Post;
+use Illuminate\Auth\Access\HandlesAuthorization;
 
 class PostPolicy
 {
+    use HandlesAuthorization;
+
+    /**
+     * システム管理者は全ての操作を許可
+     */
+    public function before(User $user, string $ability): bool|null
+    {
+        if ($user->hasRole('システム管理者')) {
+            return true;
+        }
+
+        return null;
+    }
+
     /** Determine whether the user can view any posts. */
     public function viewAny(User $user)
     {
