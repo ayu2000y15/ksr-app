@@ -263,8 +263,9 @@ class ShiftController extends Controller
                 }
             }
 
-            // Skip if this weekday is a preferred holiday (same logic as autoRegisterEmploymentPeriod)
-            if (in_array($weekday, $preferredHolidayWeekdays, true)) {
+            // 固定休の日でも、手動で出勤（day/night）を設定した場合は許可する
+            // shift_typeがnullまたはleaveの場合のみ、固定休チェックを適用
+            if (in_array($weekday, $preferredHolidayWeekdays, true) && ($entry['shift_type'] === null || $entry['shift_type'] === 'leave')) {
                 // Remove existing shift and details for this date
                 $existingShift = Shift::where('user_id', $entry['user_id'])->whereRaw('date(date) = ?', [$entry['date']])->first();
                 if ($existingShift) {
