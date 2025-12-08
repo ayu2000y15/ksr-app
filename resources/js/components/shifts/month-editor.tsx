@@ -17,6 +17,8 @@ export default function MonthEditor({
     attendanceCounts,
     // optional array of default shift patterns from server
     defaultShifts,
+    // optional array of published dates
+    publishedDates = [],
     onMonthChange,
     accentClass,
 }: {
@@ -27,6 +29,7 @@ export default function MonthEditor({
     shiftDetails?: any[];
     attendanceCounts?: Record<number, number>;
     defaultShifts?: Array<any>;
+    publishedDates?: string[];
     onMonthChange?: (monthIso: string) => void;
     accentClass?: string;
 }) {
@@ -126,6 +129,14 @@ export default function MonthEditor({
 
     const [selectedDates, setSelectedDates] = useState<Set<string>>(() => new Set());
     const [selectedUsers, setSelectedUsers] = useState<Set<number>>(() => new Set());
+
+    // published dates state
+    const [publishedDatesState, setPublishedDatesState] = useState<Set<string>>(() => new Set(publishedDates || []));
+
+    // sync publishedDatesState when prop changes
+    useEffect(() => {
+        setPublishedDatesState(new Set(publishedDates || []));
+    }, [publishedDates]);
 
     // attendance map shown in UI; initialized from prop if provided
     const [attendanceMap, setAttendanceMap] = useState<Record<number, number>>(() =>
@@ -585,6 +596,35 @@ export default function MonthEditor({
         }, 500);
     };
 
+    const togglePublishDate = async (date: string) => {
+        try {
+            const res = await axios.post(route('shifts.toggle_publish_date'), { date });
+            const data = res?.data || {};
+            const isPublished = data.is_published === true;
+
+            // Update local state
+            setPublishedDatesState((prev) => {
+                const next = new Set(prev);
+                if (isPublished) {
+                    next.add(date);
+                } else {
+                    next.delete(date);
+                }
+                return next;
+            });
+
+            setToast({ message: data.message || '更新しました', type: 'success' });
+        } catch (err: any) {
+            let msg = '公開状態の切り替えに失敗しました';
+            try {
+                if (err?.response?.data?.message) msg = err.response.data.message;
+            } catch {
+                // ignore
+            }
+            setToast({ message: msg, type: 'error' });
+        }
+    };
+
     return (
         <div className="rounded border bg-white">
             <div className="p-2">
@@ -745,7 +785,7 @@ export default function MonthEditor({
                         {/* 左側: 固定ユーザー名列 */}
                         <div className="flex w-24 flex-shrink-0 flex-col border-r bg-white md:w-48">
                             {/* ヘッダー部分 */}
-                            <div className="sticky top-0 z-30 flex h-20 items-end border-b bg-white p-2">
+                            <div className="sticky top-0 z-30 flex h-30 items-end border-b bg-white p-2">
                                 <div className="flex items-center gap-2">
                                     <input
                                         type="checkbox"
@@ -830,7 +870,7 @@ export default function MonthEditor({
                             >
                                 <div className="min-w-full" style={{ minWidth: `${visibleDays.length * 48}px` }}>
                                     {/* ヘッダー行 */}
-                                    <div className="sticky top-0 z-20 h-20 border-b bg-white">
+                                    <div className="sticky top-0 z-20 h-30 border-b bg-white">
                                         <div className="flex">
                                             {visibleDays.map((d) => {
                                                 const dt = parseLocal(d);
@@ -899,6 +939,21 @@ export default function MonthEditor({
                                                             </Link>
                                                             {/* button shown above (in the mb-1 area) for past dates */}
                                                         </div>
+                                                        {/* 公開ボタン */}
+                                                        <button
+                                                            className={`mt-1 rounded border px-0.5 py-0.5 text-[10px] ${
+                                                                publishedDatesState.has(d)
+                                                                    ? 'border-green-300 bg-green-100 text-green-800'
+                                                                    : 'border-gray-300 bg-gray-100 text-gray-700'
+                                                            }`}
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                togglePublishDate(d);
+                                                            }}
+                                                            title={publishedDatesState.has(d) ? 'クリックで公開を解除' : 'クリックで公開'}
+                                                        >
+                                                            {publishedDatesState.has(d) ? '公開中' : '非公開'}
+                                                        </button>
                                                     </div>
                                                 );
                                             })}

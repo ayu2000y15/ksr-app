@@ -331,7 +331,15 @@ class ShiftDetailController extends Controller
         $startOfDay = Carbon::parse($d)->startOfDay()->toDateTimeString();
         $endOfDay = Carbon::parse($d)->endOfDay()->toDateTimeString();
 
+        // Get published shifts for this date
+        $publishedShifts = \App\Models\Shift::where('is_published', true)
+            ->whereRaw('date(date) = ?', [$d])
+            ->pluck('user_id')
+            ->toArray();
+
+        // Only return shift details for users who have published shifts on this date
         $query = ShiftDetail::with('user')
+            ->whereIn('user_id', $publishedShifts)
             ->where(function ($q) use ($d, $startOfDay, $endOfDay) {
                 $q->whereRaw('date(date) = ?', [$d])
                     ->orWhere(function ($qq) use ($startOfDay, $endOfDay) {

@@ -329,6 +329,7 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                         holidays={(page.props as any).holidays || []}
                         existingShifts={existingShiftsMap as any}
                         shiftDetails={(page.props as any).shiftDetails || []}
+                        publishedDates={(page.props as any).publishedDates || []}
                         defaultShifts={serverDefaultShifts}
                         onMonthChange={async (monthIso: string) => {
                             // request only the props we need to update the editor and list
@@ -338,7 +339,7 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                                 { month: monthIso },
                                 {
                                     preserveState: true,
-                                    only: ['existingShifts', 'shiftDetails', 'holidays', 'users', 'queryParams', 'defaultShifts'],
+                                    only: ['existingShifts', 'shiftDetails', 'holidays', 'users', 'queryParams', 'defaultShifts', 'publishedDates'],
                                 },
                             );
                         }}

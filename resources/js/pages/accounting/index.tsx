@@ -216,11 +216,11 @@ export default function AccountingIndex(props: any) {
                                 let borderClass = 'border-gray-200';
 
                                 if (isTodayCell) {
-                                    bgClass = 'bg-indigo-50';
-                                    borderClass = 'border-indigo-500';
-                                } else if (holiday) {
                                     bgClass = 'bg-green-50';
-                                    borderClass = 'border-green-200';
+                                    borderClass = 'border-green-500';
+                                } else if (holiday) {
+                                    bgClass = 'bg-red-50';
+                                    borderClass = 'border-red-200';
                                 } else if (isSaturday) {
                                     bgClass = 'bg-blue-50';
                                     borderClass = 'border-blue-200';
@@ -235,7 +235,7 @@ export default function AccountingIndex(props: any) {
                                             <span
                                                 className={`text-sm font-medium ${
                                                     isTodayCell
-                                                        ? 'text-indigo-700'
+                                                        ? 'text-green-700'
                                                         : holiday
                                                           ? 'text-red-600'
                                                           : d.getDay() === 0

@@ -45,11 +45,16 @@ class ShiftController extends Controller
 
         // build existing shifts map: user_id => [ 'YYYY-MM-DD' => shift_type ]
         $existingShifts = [];
+        $publishedDates = [];
         foreach ($shifts as $s) {
             $uid = $s->user_id;
             $date = Carbon::parse($s->date)->toDateString();
             if (!isset($existingShifts[$uid])) $existingShifts[$uid] = [];
             $existingShifts[$uid][$date] = $s->shift_type;
+            // Track published dates
+            if ($s->is_published) {
+                $publishedDates[$date] = true;
+            }
         }
 
         // load shift_details for the month with user relation
@@ -89,6 +94,7 @@ class ShiftController extends Controller
             'users' => $users,
             'holidays' => $holidays,
             'existingShifts' => $existingShifts,
+            'publishedDates' => array_keys($publishedDates),
             'shiftDetails' => $shiftDetails,
             // upcoming shift applications (future dates only, include user relation)
             'upcomingApplications' => ShiftApplication::with('user')->where('date', '>', Carbon::now()->startOfDay())->orderBy('date', 'asc')->get(),
@@ -202,6 +208,19 @@ class ShiftController extends Controller
             'entries.*.shift_type' => 'nullable|in:day,night,leave',
         ]);
 
+        // Check if any date in the entries is already published
+        $datePublishStatus = [];
+        foreach ($data['entries'] as $entry) {
+            $dateStr = Carbon::parse($entry['date'])->toDateString();
+            if (!isset($datePublishStatus[$dateStr])) {
+                // Check if this date has any published shifts
+                $hasPublished = Shift::whereRaw('date(date) = ?', [$dateStr])
+                    ->where('is_published', true)
+                    ->exists();
+                $datePublishStatus[$dateStr] = $hasPublished;
+            }
+        }
+
         foreach ($data['entries'] as $entry) {
             // Check if this date falls on a user's preferred holiday weekday
             $user = User::find($entry['user_id']);
@@ -294,10 +313,15 @@ class ShiftController extends Controller
                 }
             } else {
                 if (!is_null($entry['shift_type']) && $entry['shift_type'] !== '') {
+                    // Check if this date is already published, and auto-publish new shifts
+                    $dateStr = Carbon::parse($entry['date'])->toDateString();
+                    $isPublished = $datePublishStatus[$dateStr] ?? false;
+
                     $new = Shift::create([
                         'user_id' => $entry['user_id'],
                         'date' => $entry['date'],
                         'shift_type' => $entry['shift_type'],
+                        'is_published' => $isPublished, // Auto-publish if date is already published
                     ]);
                     // If leave was set, ensure there are no scheduled shift_details; otherwise create from defaults
                     if ($entry['shift_type'] === 'leave') {
@@ -306,6 +330,14 @@ class ShiftController extends Controller
                     } else {
                         $this->applyDefaultShiftDetails($entry['user_id'], $entry['date'], $entry['shift_type']);
                     }
+                }
+            }
+
+            // Also update existing shifts to published if the date is published
+            if ($shift && !$shift->is_published) {
+                $dateStr = Carbon::parse($entry['date'])->toDateString();
+                if ($datePublishStatus[$dateStr] ?? false) {
+                    $shift->update(['is_published' => true]);
                 }
             }
         }
@@ -1162,6 +1194,53 @@ class ShiftController extends Controller
 
         return response()->json([
             'message' => "完了しました。作成: {$created} 件、スキップ: {$skipped} 件"
+        ], 200);
+    }
+
+    /**
+     * Toggle publish status for a specific date
+     * Expects POST param: date=YYYY-MM-DD
+     */
+    public function togglePublishDate(Request $request)
+    {
+        if (Auth::user()->hasRole('システム管理者')) {
+            // bypass
+        } else {
+            $this->authorize('create', Shift::class);
+        }
+
+        $data = $request->validate([
+            'date' => 'required|date',
+        ]);
+
+        try {
+            $date = Carbon::parse($data['date'])->toDateString();
+        } catch (\Exception $e) {
+            return response()->json(['message' => '無効な日付です。'], 400);
+        }
+
+        // Get all shifts for this date
+        $shifts = Shift::whereRaw('date(date) = ?', [$date])->get();
+
+        if ($shifts->isEmpty()) {
+            return response()->json(['message' => 'この日付にシフトが登録されていません。', 'is_published' => false], 400);
+        }
+
+        // Check current publish status (if any shift is published, we'll unpublish; otherwise publish all)
+        $hasPublished = $shifts->where('is_published', true)->isNotEmpty();
+        $newStatus = !$hasPublished;
+
+        // Update all shifts for this date
+        \DB::transaction(function () use ($date, $newStatus) {
+            Shift::whereRaw('date(date) = ?', [$date])->update(['is_published' => $newStatus]);
+
+            // If publishing (newStatus = true), also publish any shifts created on this date after the publish action
+            // This is handled in the store/bulkUpdate methods below
+        });
+
+        return response()->json([
+            'message' => $newStatus ? 'シフトを公開しました。' : 'シフトの公開を解除しました。',
+            'is_published' => $newStatus
         ], 200);
     }
 }

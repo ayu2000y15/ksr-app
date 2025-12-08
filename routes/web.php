@@ -27,7 +27,31 @@ Route::get('/', function () {
 });
 
 Route::get('/dashboard', function () {
-    return Inertia::render('dashboard'); // ファイル名を小文字に
+    // Get today's date
+    $today = \Carbon\Carbon::today();
+
+    // Get published shifts for today
+    $publishedShifts = \App\Models\Shift::with('user')
+        ->where('is_published', true)
+        ->whereRaw('date(date) = ?', [$today->toDateString()])
+        ->get();
+
+    // Get published dates for calendar (current month)
+    $monthStart = $today->copy()->startOfMonth();
+    $monthEnd = $today->copy()->endOfMonth();
+    $publishedDates = \App\Models\Shift::where('is_published', true)
+        ->whereBetween('date', [$monthStart, $monthEnd])
+        ->get()
+        ->pluck('date')
+        ->map(fn($d) => \Carbon\Carbon::parse($d)->toDateString())
+        ->unique()
+        ->values()
+        ->toArray();
+
+    return Inertia::render('dashboard', [
+        'publishedShifts' => $publishedShifts,
+        'publishedDates' => $publishedDates,
+    ]);
 })->middleware(['auth', 'verified'])->name('dashboard');
 
 
@@ -146,6 +170,12 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
 
     // Auto-register shifts for users based on their employment period
     Route::post('/shifts/auto-register-employment-period', [App\Http\Controllers\ShiftController::class, 'autoRegisterEmploymentPeriod'])->name('shifts.auto_register_employment_period');
+
+    // Toggle publish status for a specific date
+    Route::post('/shifts/toggle-publish-date', [App\Http\Controllers\ShiftController::class, 'togglePublishDate'])->name('shifts.toggle_publish_date');
+
+    // My Shifts - View own shifts calendar
+    Route::get('/my-shifts', [App\Http\Controllers\MyShiftController::class, 'index'])->name('my-shifts.index');
 
     // ShiftDetail 単体更新（開始/終了時刻の編集）
     Route::patch('/shift-details/{shift_detail}', [App\Http\Controllers\ShiftDetailController::class, 'update'])->name('shift-details.update');

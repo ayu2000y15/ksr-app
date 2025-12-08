@@ -406,6 +406,10 @@ export default function Dashboard() {
     const [totalAnnouncements, setTotalAnnouncements] = useState<number | null>(null);
     const [loadingMore, setLoadingMore] = useState(false);
 
+    // Published dates from server
+    const publishedDates = ((page.props as any).publishedDates || []) as string[];
+    const publishedDatesSet = new Set(publishedDates);
+
     useEffect(() => {
         if (hasCarFlag !== null) return; // already known
         (async () => {
@@ -1040,6 +1044,18 @@ export default function Dashboard() {
                                                 ? '本日のシフト'
                                                 : `${currentDate.getMonth() + 1}/${currentDate.getDate()} のシフト`}
                                         </Button>
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => {
+                                                try {
+                                                    router.get(route('my-shifts.index'));
+                                                } catch {
+                                                    window.location.href = route('my-shifts.index');
+                                                }
+                                            }}
+                                        >
+                                            自分のシフトを確認
+                                        </Button>
 
                                         {/* 送迎申請モーダルを開く（車所持かつ申請期間内かつ当日のシフトに含まれるユーザーのみ表示） */}
                                         {(() => {
@@ -1096,6 +1112,15 @@ export default function Dashboard() {
                                                     handleDateSelect(date);
                                                     return;
                                                 }
+                                                const pad = (n: number) => String(n).padStart(2, '0');
+                                                const dateKey = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+
+                                                // Check if date is published
+                                                if (!publishedDatesSet.has(dateKey)) {
+                                                    // ignore selection of unpublished dates
+                                                    return;
+                                                }
+
                                                 if (maxSelectableDate) {
                                                     const d = new Date(date);
                                                     d.setHours(0, 0, 0, 0);
@@ -1109,7 +1134,19 @@ export default function Dashboard() {
                                             initialFocus
                                             locale={ja}
                                             toDate={maxSelectableDate ?? undefined}
-                                            disabled={maxSelectableDate ? { after: maxSelectableDate } : undefined}
+                                            disabled={(date) => {
+                                                const pad = (n: number) => String(n).padStart(2, '0');
+                                                const dateKey = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+                                                // Disable if not published
+                                                if (!publishedDatesSet.has(dateKey)) return true;
+                                                // Disable if after max selectable date
+                                                if (maxSelectableDate) {
+                                                    const d = new Date(date);
+                                                    d.setHours(0, 0, 0, 0);
+                                                    return d.getTime() > maxSelectableDate.getTime();
+                                                }
+                                                return false;
+                                            }}
                                         />
                                     </PopoverContent>
                                 </Popover>
