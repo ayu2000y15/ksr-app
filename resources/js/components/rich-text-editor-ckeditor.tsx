@@ -23,7 +23,7 @@ export default function RichTextEditor({
     const [previewHtml, setPreviewHtml] = useState('');
 
     const editorConfig = {
-        toolbar: ['heading', 'bold', 'italic', 'bulletedList', 'insertTable'],
+        toolbar: ['heading', 'bold', 'italic', '|', 'fontColor', 'fontBackgroundColor', '|', 'bulletedList', 'insertTable'],
         heading: {
             options: [
                 { model: 'paragraph', title: '段落', class: 'ck-heading_paragraph' },
@@ -31,6 +31,30 @@ export default function RichTextEditor({
                 { model: 'heading2', view: 'h2', title: '見出し 2', class: 'ck-heading_heading2' },
                 { model: 'heading3', view: 'h3', title: '見出し 3', class: 'ck-heading_heading3' },
                 { model: 'heading4', view: 'h4', title: '見出し 4', class: 'ck-heading_heading4' },
+            ],
+        },
+        fontColor: {
+            colors: [
+                { color: '#000000', label: '黒' },
+                { color: '#4a5568', label: 'グレー' },
+                { color: '#dc2626', label: '赤' },
+                { color: '#ea580c', label: 'オレンジ' },
+                { color: '#ca8a04', label: '黄色' },
+                { color: '#16a34a', label: '緑' },
+                { color: '#0284c7', label: '青' },
+                { color: '#7c3aed', label: '紫' },
+                { color: '#db2777', label: 'ピンク' },
+            ],
+        },
+        fontBackgroundColor: {
+            colors: [
+                { color: '#ffffff', label: '白' },
+                { color: '#fef3c7', label: '黄色背景' },
+                { color: '#fee2e2', label: '赤背景' },
+                { color: '#dbeafe', label: '青背景' },
+                { color: '#dcfce7', label: '緑背景' },
+                { color: '#f3e8ff', label: '紫背景' },
+                { color: '#fce7f3', label: 'ピンク背景' },
             ],
         },
         language: 'ja',

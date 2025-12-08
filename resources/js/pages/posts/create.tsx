@@ -1,6 +1,6 @@
 import InputError from '@/components/input-error';
 import ImageModal from '@/components/posts/image-modal';
-import RichTextEditor from '@/components/rich-text-editor-ckeditor';
+import RichTextEditor from '@/components/rich-text-editor-tiptap';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -95,6 +95,7 @@ export default function PostCreate() {
     const [manualModalStartIndex, setManualModalStartIndex] = useState(0);
     const [bodyHtml, setBodyHtml] = useState<string>('');
     const [manualTag, setManualTag] = useState<string>('');
+    const [boardTags, setBoardTags] = useState<string>('');
 
     function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
         if (!e.target.files) return;
@@ -269,22 +270,13 @@ export default function PostCreate() {
         if (data.type === 'board') {
             form.append('body', bodyHtml);
             attachments.forEach((f) => form.append('attachments[]', f));
-            // 本文からタグを抽出
-            try {
-                const tmp = document.createElement('div');
-                tmp.innerHTML = bodyHtml;
-                const text = tmp.textContent || tmp.innerText || '';
-                const re = /#([^\s#@]+)/g;
-                let m: RegExpExecArray | null = null;
-                const seen = new Set<string>();
-                while ((m = re.exec(text))) {
-                    if (m[1] && !seen.has(m[1].trim())) {
-                        const cleanTag = m[1].trim();
-                        seen.add(cleanTag);
-                        form.append('tags[]', cleanTag);
-                    }
-                }
-            } catch {}
+            // タグ入力欄からタグを追加
+            if (boardTags && boardTags.trim()) {
+                boardTags
+                    .split(/[,，\s]+/)
+                    .filter(Boolean)
+                    .forEach((t) => form.append('tags[]', t.trim()));
+            }
         }
 
         if (data.type === 'manual') {
@@ -776,13 +768,20 @@ export default function PostCreate() {
                                                 className="mt-2"
                                             />
                                         </div>
-                                        <div className="text-sm text-muted-foreground">
-                                            <p>
-                                                <span className="font-medium">タグの付け方</span>
-                                                <br></br>・本文中に <span className="font-medium">#タグ名</span> の形式で記載してください。
-                                                <br></br>・複数指定する場合はスペースで区切ります。<br></br>
-                                                ・タグは投稿後に一覧で表示され、タグをクリックするとそのタグが付いた投稿のみ検索できます。
-                                            </p>
+
+                                        <div>
+                                            <Label htmlFor="board_tags">タグ</Label>
+                                            <Input
+                                                id="board_tags"
+                                                type="text"
+                                                value={boardTags}
+                                                onChange={(e) => setBoardTags(e.target.value)}
+                                                placeholder="タグをカンマで区切って入力 (例: 重要, お知らせ)"
+                                                className="mt-2"
+                                            />
+                                            <div className="mt-1 text-sm text-muted-foreground">
+                                                複数のタグはカンマまたはスペースで区切ってください
+                                            </div>
                                         </div>
 
                                         <div>
@@ -868,17 +867,10 @@ export default function PostCreate() {
                                             type="text"
                                             value={manualTag}
                                             onChange={(e) => setManualTag(e.target.value)}
-                                            placeholder="タグを入力 (例: 機材名)"
+                                            placeholder="タグをカンマで区切って入力 (例: 機材名, 重要)"
                                             className="mt-2"
                                         />
-                                        <div className="text-sm text-muted-foreground">
-                                            <p>
-                                                <span className="font-medium">タグの付け方</span>
-                                                <br></br>・本文中に <span className="font-medium">#タグ名</span> の形式で記載してください。
-                                                <br></br>・複数指定する場合はスペースで区切ります。<br></br>
-                                                ・タグは投稿後に一覧で表示され、タグをクリックするとそのタグが付いた投稿のみ検索できます。
-                                            </p>
-                                        </div>
+                                        <div className="mt-1 text-sm text-muted-foreground">複数のタグはカンマまたはスペースで区切ってください</div>
                                     </div>
                                 )}
 
