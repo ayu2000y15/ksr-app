@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button';
 import Toast from '@/components/ui/toast';
 import { Link, router } from '@inertiajs/react';
 import axios from 'axios';
-import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Info } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Car, ChevronLeft, ChevronRight, Info } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 type Cell = '' | 'day' | 'night' | 'leave';
@@ -824,8 +824,14 @@ export default function MonthEditor({
                                             aria-label={`ユーザー ${u.name} を選択`}
                                             className="mr-2 flex-shrink-0"
                                         />
-                                        <span className="truncate text-sm">
-                                            <span className="mr-2 inline-block w-8 text-right font-mono text-sm">{u.position}</span>
+                                        <span className="flex items-center gap-1 truncate text-sm">
+                                            <span className="inline-block w-3 flex-shrink-0">
+                                                {u.has_car && (
+                                                    <Car className="h-3 w-3 rounded-full bg-violet-50 text-violet-600 shadow-sm" title="車あり" />
+                                                )}
+                                            </span>
+                                            <span className="inline-block w-6 text-right font-mono text-sm">{u.position}</span>
+
                                             <Link
                                                 href={route('users.show', { user: u.id })}
                                                 className="truncate text-sm text-blue-600 hover:underline"
