@@ -1015,86 +1015,92 @@ export default function Dashboard() {
                 {/* シフトエリア */}
                 <div>
                     <Card>
-                        <CardHeader className="flex flex-wrap items-center justify-between md:flex-row">
-                            <div className="flex items-center gap-2">
-                                <CardTitle className="text-ms sm:text-xl">{formattedDate} のシフト</CardTitle>
-                                {canViewShifts && (
-                                    <>
-                                        <Button
-                                            onClick={() => {
-                                                const d = new Date(currentDate);
-                                                const pad = (n: number) => String(n).padStart(2, '0');
-                                                const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-                                                // navigate to daily timeline for the currently displayed date
-                                                try {
-                                                    router.get(
-                                                        route('shifts.daily'),
-                                                        { date: iso },
-                                                        { preserveState: true, only: ['shiftDetails', 'queryParams'] },
-                                                    );
-                                                } catch {
-                                                    // fallback: direct link navigation
-                                                    window.location.href = route('shifts.daily', { date: iso });
-                                                }
-                                            }}
-                                        >
-                                            {currentDate.getFullYear() === new Date().getFullYear() &&
-                                            currentDate.getMonth() === new Date().getMonth() &&
-                                            currentDate.getDate() === new Date().getDate()
-                                                ? '本日のシフト'
-                                                : `${currentDate.getMonth() + 1}/${currentDate.getDate()} のシフト`}
-                                        </Button>
-                                        <Button
-                                            variant="outline"
-                                            onClick={() => {
-                                                try {
-                                                    router.get(route('my-shifts.index'));
-                                                } catch {
-                                                    window.location.href = route('my-shifts.index');
-                                                }
-                                            }}
-                                        >
-                                            自分のシフトを確認
-                                        </Button>
+                        <CardHeader className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                            <CardTitle className="text-base sm:text-xl">{formattedDate} のシフト</CardTitle>
+                            {canViewShifts && (
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                    <Button
+                                        className="w-full sm:w-auto"
+                                        onClick={() => {
+                                            const d = new Date(currentDate);
+                                            const pad = (n: number) => String(n).padStart(2, '0');
+                                            const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+                                            // navigate to daily timeline for the currently displayed date
+                                            try {
+                                                router.get(
+                                                    route('shifts.daily'),
+                                                    { date: iso },
+                                                    { preserveState: true, only: ['shiftDetails', 'queryParams'] },
+                                                );
+                                            } catch {
+                                                // fallback: direct link navigation
+                                                window.location.href = route('shifts.daily', { date: iso });
+                                            }
+                                        }}
+                                    >
+                                        {currentDate.getFullYear() === new Date().getFullYear() &&
+                                        currentDate.getMonth() === new Date().getMonth() &&
+                                        currentDate.getDate() === new Date().getDate()
+                                            ? '本日のシフト'
+                                            : `${currentDate.getMonth() + 1}/${currentDate.getDate()} のシフト`}
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        className="w-full sm:w-auto"
+                                        onClick={() => {
+                                            try {
+                                                router.get(route('my-shifts.index'));
+                                            } catch {
+                                                window.location.href = route('my-shifts.index');
+                                            }
+                                        }}
+                                    >
+                                        自分のシフトを確認
+                                    </Button>
 
-                                        {/* 送迎申請モーダルを開く（車所持かつ申請期間内かつ当日のシフトに含まれるユーザーのみ表示） */}
-                                        {(() => {
-                                            const canActAsDriver =
-                                                (auth && auth.user && (auth.user.has_car === 1 || auth.user.has_car === true)) || hasCarFlag;
-                                            const userId = auth && auth.user ? Number(auth.user.id) : null;
-                                            const isUserInShifts =
-                                                userId !== null &&
-                                                Array.isArray(shifts) &&
-                                                shifts.some((s: any) => Number(s.user?.id ?? s.user_id ?? 0) === userId);
-                                            const showTransportControl = Boolean(canActAsDriver && withinTransportWindow && isUserInShifts);
-                                            if (!showTransportControl) return null;
-                                            return (
-                                                <>
-                                                    {hasTransportRequestForDate ? (
-                                                        <Badge variant="outline">送迎申請済</Badge>
-                                                    ) : (
-                                                        <TransportRequestModal
-                                                            dateIso={`${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(
-                                                                currentDate.getDate(),
-                                                            ).padStart(2, '0')}`}
-                                                            trigger={<Button variant="outline">送迎申請</Button>}
-                                                            onSuccess={(m) => {
-                                                                setToast({ message: m, type: 'success' });
-                                                                setTimeout(() => setToast(null), 3500);
-                                                                // re-fetch to determine if both directions are now requested by current user
-                                                                (async () => {
-                                                                    const both = await fetchTransportBothForDate(currentDate);
-                                                                    setHasTransportRequestForDate(Boolean(both));
-                                                                })();
-                                                            }}
-                                                        />
-                                                    )}
-                                                </>
-                                            );
-                                        })()}
-                                    </>
-                                )}
-                            </div>
+                                    {/* 送迎申請モーダルを開く（車所持かつ申請期間内かつ当日のシフトに含まれるユーザーのみ表示） */}
+                                    {(() => {
+                                        const canActAsDriver =
+                                            (auth && auth.user && (auth.user.has_car === 1 || auth.user.has_car === true)) || hasCarFlag;
+                                        const userId = auth && auth.user ? Number(auth.user.id) : null;
+                                        const isUserInShifts =
+                                            userId !== null &&
+                                            Array.isArray(shifts) &&
+                                            shifts.some((s: any) => Number(s.user?.id ?? s.user_id ?? 0) === userId);
+                                        const showTransportControl = Boolean(canActAsDriver && withinTransportWindow && isUserInShifts);
+                                        if (!showTransportControl) return null;
+                                        return (
+                                            <>
+                                                {hasTransportRequestForDate ? (
+                                                    <Badge variant="outline" className="w-full justify-center sm:w-auto">
+                                                        送迎申請済
+                                                    </Badge>
+                                                ) : (
+                                                    <TransportRequestModal
+                                                        dateIso={`${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(
+                                                            currentDate.getDate(),
+                                                        ).padStart(2, '0')}`}
+                                                        trigger={
+                                                            <Button variant="outline" className="w-full sm:w-auto">
+                                                                送迎申請
+                                                            </Button>
+                                                        }
+                                                        onSuccess={(m) => {
+                                                            setToast({ message: m, type: 'success' });
+                                                            setTimeout(() => setToast(null), 3500);
+                                                            // re-fetch to determine if both directions are now requested by current user
+                                                            (async () => {
+                                                                const both = await fetchTransportBothForDate(currentDate);
+                                                                setHasTransportRequestForDate(Boolean(both));
+                                                            })();
+                                                        }}
+                                                    />
+                                                )}
+                                            </>
+                                        );
+                                    })()}
+                                </div>
+                            )}
 
                             <div className="flex flex-wrap items-center gap-2">
                                 <Popover open={isShiftCalendarOpen} onOpenChange={setIsShiftCalendarOpen}>
