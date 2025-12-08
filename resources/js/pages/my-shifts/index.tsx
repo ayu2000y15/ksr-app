@@ -204,6 +204,11 @@ export default function MyShifts() {
                                                         const isNight = shiftType === 'night';
                                                         const isLeave = shiftType === 'leave';
 
+                                                        // Get actual work time from shift details
+                                                        const workStartTime = shift.work_start_time || (isDay ? '8:30' : '17:00');
+                                                        const workEndTime = shift.work_end_time || (isDay ? '17:00' : '22:00');
+                                                        const timeDisplay = `${workStartTime}-${workEndTime}`;
+
                                                         const tooltipKey = `${dateKey}-${idx}`;
                                                         const isOpen = tooltipOpen[tooltipKey] || false;
 
@@ -233,21 +238,21 @@ export default function MyShifts() {
                                                                                         <>
                                                                                             <Sun className="h-3 w-3 flex-shrink-0" />
                                                                                             <span className="hidden truncate text-xs sm:inline">
-                                                                                                8:30-17:00
+                                                                                                {timeDisplay}
                                                                                             </span>
                                                                                         </>
                                                                                     ) : (
                                                                                         <>
                                                                                             <Moon className="h-3 w-3 flex-shrink-0" />
                                                                                             <span className="hidden truncate text-xs sm:inline">
-                                                                                                17:00-22:00
+                                                                                                {timeDisplay}
                                                                                             </span>
                                                                                         </>
                                                                                     )}
                                                                                 </Badge>
                                                                             </TooltipTrigger>
                                                                             <TooltipContent side="top" sideOffset={5}>
-                                                                                <p>{isDay ? '8:30-17:00' : '17:00-22:00'}</p>
+                                                                                <p>{timeDisplay}</p>
                                                                             </TooltipContent>
                                                                         </Tooltip>
                                                                     </TooltipProvider>

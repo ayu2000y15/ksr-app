@@ -28,7 +28,25 @@ class MyShiftController extends Controller
             ->where('is_published', true)
             ->whereBetween('date', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
             ->orderBy('date', 'asc')
-            ->get();
+            ->get()
+            ->map(function ($shift) use ($user) {
+                $shiftArray = $shift->toArray();
+                // Get work shift details for this user and date
+                $dateStr = Carbon::parse($shift->date)->toDateString();
+                $workDetails = \App\Models\ShiftDetail::where('user_id', $user->id)
+                    ->whereRaw('date(date) = ?', [$dateStr])
+                    ->where('type', 'work')
+                    ->orderBy('start_time')
+                    ->get();
+
+                if ($workDetails->isNotEmpty()) {
+                    $firstDetail = $workDetails->first();
+                    $lastDetail = $workDetails->last();
+                    $shiftArray['work_start_time'] = $firstDetail->start_time ? Carbon::parse($firstDetail->start_time)->format('H:i') : null;
+                    $shiftArray['work_end_time'] = $lastDetail->end_time ? Carbon::parse($lastDetail->end_time)->format('H:i') : null;
+                }
+                return $shiftArray;
+            });
 
         // Get holidays for the month
         $start = $month->copy()->startOfMonth();
