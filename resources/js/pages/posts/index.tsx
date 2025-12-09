@@ -591,13 +591,15 @@ export default function PostsIndex() {
                                                         }}
                                                     >
                                                         <TableCell>
-                                                            <button
-                                                                aria-label="ドラッグして並び替え"
-                                                                onClick={(e) => e.stopPropagation()}
-                                                                className="flex h-6 w-6 items-center justify-center rounded bg-gray-100 text-gray-600"
-                                                            >
-                                                                <GripVertical className="h-4 w-4" />
-                                                            </button>
+                                                            {isAdmin && (
+                                                                <button
+                                                                    aria-label="ドラッグして並び替え"
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    className="flex h-6 w-6 items-center justify-center rounded bg-gray-100 text-gray-600"
+                                                                >
+                                                                    <GripVertical className="h-4 w-4" />
+                                                                </button>
+                                                            )}
                                                         </TableCell>
                                                         <TableCell>
                                                             {/* pin icon on the left */}
@@ -958,8 +960,8 @@ export default function PostsIndex() {
                                                 className={`relative flex w-full flex-col gap-2 rounded border p-3 shadow-sm ${showDraft ? 'bg-gray-300' : 'bg-white'}`}
                                                 onClick={() => (window.location.href = route('posts.show', post.id) as unknown as string)}
                                             >
-                                                <div className="flex items-start justify-between">
-                                                    <div className="flex min-w-0 items-center gap-2">
+                                                <div className="flex items-start gap-2">
+                                                    {isAdmin && (
                                                         <button
                                                             aria-label="並び替え"
                                                             onClick={(e) => e.stopPropagation()}
@@ -967,48 +969,48 @@ export default function PostsIndex() {
                                                         >
                                                             <GripVertical className="h-4 w-4" />
                                                         </button>
-                                                        <div>
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="text-xs text-gray-600">#{post.id} </span>
-                                                                {showDraft ? (
-                                                                    <span className="ml-1 rounded bg-yellow-100 px-2 py-0.5 text-xs text-yellow-800">
-                                                                        下書き
-                                                                    </span>
-                                                                ) : null}
-                                                                {currentUserId
-                                                                    ? (() => {
-                                                                          try {
-                                                                              const views = post.views || post.viewers || post.post_views || [];
-                                                                              const read = Array.isArray(views)
-                                                                                  ? views.some((v: any) => {
-                                                                                        const uid = v?.user?.id ?? v?.user_id ?? v?.id ?? v;
-                                                                                        return Number(uid) === Number(currentUserId);
-                                                                                    })
-                                                                                  : false;
-                                                                              return read ? (
-                                                                                  <Badge className="ml-2 bg-gray-100 p-0.5 text-[10px] text-gray-400">
-                                                                                      既読
-                                                                                  </Badge>
-                                                                              ) : (
-                                                                                  <Badge className="ml-2 bg-sky-100 p-0.5 text-[10px] text-sky-800">
-                                                                                      未読
-                                                                                  </Badge>
-                                                                              );
-                                                                          } catch {
-                                                                              return null;
-                                                                          }
-                                                                      })()
-                                                                    : null}
-                                                            </div>
-                                                            <div>
-                                                                <h3 className="mt-1 truncate text-sm font-medium">{post.title || '(無題)'}</h3>
-                                                            </div>
-                                                            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                                                <span>{post.user ? post.user.name : '—'}</span>
-                                                            </div>
+                                                    )}
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-xs text-gray-600">#{post.id} </span>
+                                                            {showDraft ? (
+                                                                <span className="ml-1 rounded bg-yellow-100 px-2 py-0.5 text-xs text-yellow-800">
+                                                                    下書き
+                                                                </span>
+                                                            ) : null}
+                                                            {currentUserId
+                                                                ? (() => {
+                                                                      try {
+                                                                          const views = post.views || post.viewers || post.post_views || [];
+                                                                          const read = Array.isArray(views)
+                                                                              ? views.some((v: any) => {
+                                                                                    const uid = v?.user?.id ?? v?.user_id ?? v?.id ?? v;
+                                                                                    return Number(uid) === Number(currentUserId);
+                                                                                })
+                                                                              : false;
+                                                                          return read ? (
+                                                                              <Badge className="ml-2 bg-gray-100 p-0.5 text-[10px] text-gray-400">
+                                                                                  既読
+                                                                              </Badge>
+                                                                          ) : (
+                                                                              <Badge className="ml-2 bg-sky-100 p-0.5 text-[10px] text-sky-800">
+                                                                                  未読
+                                                                              </Badge>
+                                                                          );
+                                                                      } catch {
+                                                                          return null;
+                                                                      }
+                                                                  })()
+                                                                : null}
+                                                        </div>
+                                                        <div className="pt-1">
+                                                            <h3 className="mt-1 text-sm font-medium break-words">{post.title || '(無題)'}</h3>
+                                                        </div>
+                                                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                                            <span>{post.user ? post.user.name : '—'}</span>
                                                         </div>
                                                     </div>
-                                                    <div className="ml-2 flex items-center gap-1">
+                                                    <div className="absolute top-0.5 right-2 flex flex-shrink-0 items-center gap-1">
                                                         {/* Icon-only actions on mobile */}
                                                         {currentUserId ? (
                                                             <button

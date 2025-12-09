@@ -320,6 +320,7 @@ class PostController extends Controller
                 'is_public' => $data['is_public'] ?? true,
                 'audience' => $data['audience'] ?? 'all',
                 'type' => $data['type'] ?? 'board',
+                'sort_order' => 0,
             ]);
 
             if ($post->type === 'poll') {
