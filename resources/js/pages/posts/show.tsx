@@ -863,7 +863,7 @@ export default function PostShow() {
                 .post-body h4{font-size:15px}
                 .post-body ul{padding-left:1.25rem}
                 .post-body {
-                    line-height: 1.7;
+                    line-height: 1.4;
                 }
                 .post-body p,
                 .post-body h1,
@@ -875,17 +875,17 @@ export default function PostShow() {
                 .post-body blockquote,
                 .post-body pre {
                     margin-top: 0;
-                    margin-bottom: 0.9rem;
+                    margin-bottom: 0.3rem;
                 }
                 .post-body ul > li,
                 .post-body ol > li {
-                    margin-bottom: 0.45rem;
+                    margin-bottom: 0.2rem;
                 }
                 .post-body p + p,
                 .post-body p + h2,
                 .post-body h2 + p,
                 .post-body h3 + p {
-                    margin-top: 0.9rem;
+                    margin-top: 0.3rem;
                 }
             `}</style>
             <div className="py-12">
@@ -1001,8 +1001,21 @@ export default function PostShow() {
                         </CardHeader>
                         <CardContent className="space-y-6">
                             {post.type === 'board' && (
-                                <div className="prose dark:prose-invert max-w-none">
-                                    <div className="post-body text-sm whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: post.body || '' }} />
+                                <div className="max-w-none">
+                                    <style>{`
+                                        .post-body-content p { margin: 0 0 0.3em 0; line-height: 1.4; }
+                                        .post-body-content h1, .post-body-content h2, .post-body-content h3, .post-body-content h4 { margin: 0.4em 0 0.3em 0; }
+                                        .post-body-content ul, .post-body-content ol { margin: 0.3em 0; }
+                                        .post-body-content br { display: block; content: ""; margin: 0.15em 0; }
+                                        .post-body-content h1 { font-size: 20px; font-weight: bold; }
+                                        .post-body-content h2 { font-size: 18px; font-weight: bold; }
+                                        .post-body-content h3 { font-size: 16px; font-weight: bold; }
+                                        .post-body-content h4 { font-size: 15px; font-weight: bold; }
+                                        .post-body-content table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+                                        .post-body-content th, .post-body-content td { border: 1px solid #d1d5db; padding: 8px; text-align: left; }
+                                        .post-body-content ul { padding-left: 1.25rem; }
+                                    `}</style>
+                                    <div className="post-body-content text-sm" dangerouslySetInnerHTML={{ __html: post.body || '' }} />
                                 </div>
                             )}
                             {post.type === 'poll' && (

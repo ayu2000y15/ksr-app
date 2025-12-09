@@ -30,9 +30,15 @@ export default function RichTextEditorTiptap({
 
     const editor = useEditor({
         extensions: [
-            StarterKit,
+            StarterKit.configure({
+                hardBreak: {
+                    keepMarks: true,
+                },
+            }),
             TextStyle,
-            Color,
+            Color.configure({
+                types: ['textStyle'],
+            }),
             Heading.configure({
                 levels: [1, 2, 3, 4],
             }),
@@ -51,6 +57,30 @@ export default function RichTextEditorTiptap({
         editorProps: {
             attributes: {
                 class: 'prose max-w-none focus:outline-none min-h-[120px] p-3',
+            },
+            handleKeyDown: (view, event) => {
+                // Enterキーで改行（<br>）を挿入
+                if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
+                    const { state } = view;
+                    const { selection } = state;
+                    const { $from } = selection;
+
+                    // 見出しやリスト内では通常の挙動を維持
+                    if ($from.parent.type.name === 'heading' || $from.parent.type.name === 'listItem') {
+                        return false;
+                    }
+
+                    // 段落内でEnterを押したら<br>を挿入して新しい段落を作らない
+                    if ($from.parent.type.name === 'paragraph') {
+                        event.preventDefault();
+                        const { tr } = state;
+                        const hardBreak = state.schema.nodes.hardBreak.create();
+                        const newTr = tr.replaceSelectionWith(hardBreak, false);
+                        view.dispatch(newTr.scrollIntoView());
+                        return true;
+                    }
+                }
+                return false;
             },
         },
     });
@@ -173,16 +203,27 @@ export default function RichTextEditorTiptap({
         <div>
             <style>{`
                 .ProseMirror {
-                    line-height: 1.25 !important;
+                    line-height: 1.6 !important;
                 }
                 .ProseMirror p {
-                    margin: 0 0 0.4em 0 !important;
+                    margin: 0 !important;
+                    line-height: 1.6 !important;
                 }
-                .ProseMirror h1 { font-size: 1.5em; font-weight: bold; margin: 0.5em 0; }
-                .ProseMirror h2 { font-size: 1.3em; font-weight: bold; margin: 0.5em 0; }
-                .ProseMirror h3 { font-size: 1.17em; font-weight: bold; margin: 0.5em 0; }
-                .ProseMirror h4 { font-size: 1em; font-weight: bold; margin: 0.5em 0; }
-                .ProseMirror ul { padding-left: 1.25rem; }
+                .ProseMirror p + p {
+                    margin-top: 0.5em !important;
+                }
+                .ProseMirror br {
+                    content: "";
+                }
+                .ProseMirror br::after {
+                    content: "\\A";
+                    white-space: pre;
+                }
+                .ProseMirror h1 { font-size: 1.5em; font-weight: bold; margin: 0.75em 0 0.5em 0; }
+                .ProseMirror h2 { font-size: 1.3em; font-weight: bold; margin: 0.75em 0 0.5em 0; }
+                .ProseMirror h3 { font-size: 1.17em; font-weight: bold; margin: 0.75em 0 0.5em 0; }
+                .ProseMirror h4 { font-size: 1em; font-weight: bold; margin: 0.75em 0 0.5em 0; }
+                .ProseMirror ul, .ProseMirror ol { padding-left: 1.25rem; margin: 0.5em 0; }
                 .ProseMirror table { border-collapse: collapse; width: 100%; margin: 8px 0; }
                 .ProseMirror th, .ProseMirror td { border: 1px solid #d1d5db; padding: 8px; }
                 .ProseMirror th { background: #f9fafb; font-weight: 600; }
@@ -199,7 +240,11 @@ export default function RichTextEditorTiptap({
                         type="button"
                         size="sm"
                         variant={editor.isActive('heading', { level: 1 }) ? 'default' : 'outline'}
-                        onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+                        onClick={() => {
+                            const { from, to } = editor.state.selection;
+                            if (from === to) return; // 選択範囲がない場合は何もしない
+                            editor.chain().focus().toggleHeading({ level: 1 }).run();
+                        }}
                     >
                         H1
                     </Button>
@@ -207,7 +252,11 @@ export default function RichTextEditorTiptap({
                         type="button"
                         size="sm"
                         variant={editor.isActive('heading', { level: 2 }) ? 'default' : 'outline'}
-                        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+                        onClick={() => {
+                            const { from, to } = editor.state.selection;
+                            if (from === to) return; // 選択範囲がない場合は何もしない
+                            editor.chain().focus().toggleHeading({ level: 2 }).run();
+                        }}
                     >
                         H2
                     </Button>
@@ -215,7 +264,11 @@ export default function RichTextEditorTiptap({
                         type="button"
                         size="sm"
                         variant={editor.isActive('heading', { level: 3 }) ? 'default' : 'outline'}
-                        onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+                        onClick={() => {
+                            const { from, to } = editor.state.selection;
+                            if (from === to) return; // 選択範囲がない場合は何もしない
+                            editor.chain().focus().toggleHeading({ level: 3 }).run();
+                        }}
                     >
                         H3
                     </Button>
@@ -223,7 +276,11 @@ export default function RichTextEditorTiptap({
                         type="button"
                         size="sm"
                         variant={editor.isActive('bold') ? 'default' : 'outline'}
-                        onClick={() => editor.chain().focus().toggleBold().run()}
+                        onClick={() => {
+                            const { from, to } = editor.state.selection;
+                            if (from === to) return; // 選択範囲がない場合は何もしない
+                            editor.chain().focus().toggleBold().run();
+                        }}
                     >
                         太字
                     </Button>
@@ -231,7 +288,11 @@ export default function RichTextEditorTiptap({
                         type="button"
                         size="sm"
                         variant={editor.isActive('italic') ? 'default' : 'outline'}
-                        onClick={() => editor.chain().focus().toggleItalic().run()}
+                        onClick={() => {
+                            const { from, to } = editor.state.selection;
+                            if (from === to) return; // 選択範囲がない場合は何もしない
+                            editor.chain().focus().toggleItalic().run();
+                        }}
                     >
                         斜体
                     </Button>
@@ -250,6 +311,11 @@ export default function RichTextEditorTiptap({
                                             className="h-6 w-6 rounded border hover:scale-110"
                                             style={{ backgroundColor: c.color }}
                                             onClick={() => {
+                                                const { from, to } = editor.state.selection;
+                                                if (from === to) {
+                                                    setShowColorPicker(false);
+                                                    return; // 選択範囲がない場合は何もしない
+                                                }
                                                 editor.chain().focus().setColor(c.color).run();
                                                 setShowColorPicker(false);
                                             }}
@@ -260,6 +326,11 @@ export default function RichTextEditorTiptap({
                                         type="button"
                                         className="h-6 w-6 rounded border bg-white hover:scale-110"
                                         onClick={() => {
+                                            const { from, to } = editor.state.selection;
+                                            if (from === to) {
+                                                setShowColorPicker(false);
+                                                return; // 選択範囲がない場合は何もしない
+                                            }
                                             editor.chain().focus().unsetColor().run();
                                             setShowColorPicker(false);
                                         }}
@@ -275,7 +346,11 @@ export default function RichTextEditorTiptap({
                         type="button"
                         size="sm"
                         variant={editor.isActive('bulletList') ? 'default' : 'outline'}
-                        onClick={() => editor.chain().focus().toggleBulletList().run()}
+                        onClick={() => {
+                            const { from, to } = editor.state.selection;
+                            if (from === to) return; // 選択範囲がない場合は何もしない
+                            editor.chain().focus().toggleBulletList().run();
+                        }}
                     >
                         リスト
                     </Button>
