@@ -473,6 +473,7 @@ export default function PostsIndex() {
                                                 const isOwnDraft = Boolean(
                                                     isDraft && postOwnerId && currentUserId && Number(postOwnerId) === currentUserId,
                                                 );
+                                                const showDraft = isDraft && (isAdmin || isOwnDraft);
                                                 const roles = post.roles || post.role || [];
                                                 const allowedUsers = post.allowedUsers || post.allowed_users || post.allowed_user || [];
                                                 // poll 投稿で有効期限が過ぎているか判定する
@@ -528,7 +529,7 @@ export default function PostsIndex() {
                                                 return (
                                                     <TableRow
                                                         key={post.id}
-                                                        className={`cursor-pointer hover:bg-gray-50 ${isOwnDraft ? 'bg-gray-100' : ''}`}
+                                                        className={`cursor-pointer hover:bg-gray-50 ${showDraft ? 'bg-gray-300' : ''}`}
                                                         onClick={onRowClick}
                                                     >
                                                         <TableCell>
@@ -629,12 +630,13 @@ export default function PostsIndex() {
                                                                                     post.is_public === false ||
                                                                                     Number(post.is_public) === 0 ||
                                                                                     post.is_public === '0';
-                                                                                if (
+                                                                                const showDraft =
                                                                                     isDraft &&
-                                                                                    postOwnerId &&
-                                                                                    currentUserId &&
-                                                                                    Number(postOwnerId) === currentUserId
-                                                                                ) {
+                                                                                    (isAdmin ||
+                                                                                        (postOwnerId &&
+                                                                                            currentUserId &&
+                                                                                            Number(postOwnerId) === currentUserId));
+                                                                                if (showDraft) {
                                                                                     return (
                                                                                         <span className="rounded bg-yellow-100 px-2 py-0.5 text-xs text-yellow-800">
                                                                                             下書き
@@ -868,6 +870,7 @@ export default function PostsIndex() {
                                         const postOwnerId = post?.user?.id ?? post?.user_id ?? null;
                                         const isDraft = post.is_public === false || Number(post.is_public) === 0 || post.is_public === '0';
                                         const isOwnDraft = Boolean(isDraft && postOwnerId && currentUserId && Number(postOwnerId) === currentUserId);
+                                        const showDraft = isDraft && (isAdmin || isOwnDraft);
                                         const roles = post.roles || post.role || [];
                                         const allowedUsers = post.allowedUsers || post.allowed_users || post.allowed_user || [];
                                         // mobile list: poll expiry判定
@@ -885,14 +888,14 @@ export default function PostsIndex() {
                                         return (
                                             <div
                                                 key={post.id}
-                                                className={`relative flex w-full flex-col gap-2 rounded border p-3 shadow-sm ${isDraft ? 'bg-gray-300' : 'bg-white'}`}
+                                                className={`relative flex w-full flex-col gap-2 rounded border p-3 shadow-sm ${showDraft ? 'bg-gray-300' : 'bg-white'}`}
                                                 onClick={() => (window.location.href = route('posts.show', post.id) as unknown as string)}
                                             >
                                                 <div className="flex items-start justify-between">
                                                     <div className="min-w-0">
                                                         <div className="flex items-center gap-2">
                                                             <span className="text-xs text-gray-600">#{post.id} </span>
-                                                            {isDraft ? (
+                                                            {showDraft ? (
                                                                 <span className="ml-1 rounded bg-yellow-100 px-2 py-0.5 text-xs text-yellow-800">
                                                                     下書き
                                                                 </span>
