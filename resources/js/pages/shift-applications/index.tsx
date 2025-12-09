@@ -99,7 +99,15 @@ export default function Index({
     const canUpdate = permissions?.shift_application?.update || permissions?.is_system_admin;
     const canDelete = permissions?.shift_application?.delete || permissions?.is_system_admin;
     // calendar props from server (may be undefined for older calls)
-    const { month, holidays = [], currentUserLeave = null, application_deadline_days = 0, userShiftDates = [] } = props || {};
+    const {
+        month,
+        holidays = [],
+        currentUserLeave = null,
+        application_deadline_days = 0,
+        userShiftDates = [],
+        userEmploymentCondition = null,
+    } = props || {};
+    const isCommuteUser = userEmploymentCondition === 'commute';
     const shiftDetails = useMemo(() => ((page.props as any).shiftDetails || []) as any[], [page.props]);
     const shiftDetailsMap = useMemo(() => {
         const m: Record<string, { start_time?: string; end_time?: string }> = {};
@@ -715,7 +723,7 @@ export default function Index({
                                                                             )
                                                                         ) : null}
                                                                         {/* 休暇登録ボタン: シフトが存在しても表示 */}
-                                                                        {!holiday && dayIndex !== 0 && dayIndex !== 6 && (
+                                                                        {(isCommuteUser || (!holiday && dayIndex !== 0 && dayIndex !== 6)) && (
                                                                             <>
                                                                                 {(mealTicketButton ||
                                                                                     (showShiftActionsByDeadline && isStepOut !== undefined)) && (
@@ -755,7 +763,7 @@ export default function Index({
                                                             }
 
                                                             // No shift exists on this date -> decide between 申請 (withinDeadline) and 登録 (after deadline)
-                                                            if (!holiday && dayIndex !== 0 && dayIndex !== 6) {
+                                                            if (isCommuteUser || (!holiday && dayIndex !== 0 && dayIndex !== 6)) {
                                                                 if (withinDeadline) {
                                                                     // within deadline window: show 休暇申請
                                                                     return (
@@ -1029,7 +1037,7 @@ export default function Index({
                                                                                 </Button>
                                                                             )
                                                                         ) : null}
-                                                                        {!holiday && dayIndex !== 0 && dayIndex !== 6 && (
+                                                                        {(isCommuteUser || (!holiday && dayIndex !== 0 && dayIndex !== 6)) && (
                                                                             <>
                                                                                 {(mealTicketButton ||
                                                                                     (showShiftActionsByDeadline && isStepOut !== undefined)) && (
@@ -1057,7 +1065,7 @@ export default function Index({
                                                                 );
                                                             }
 
-                                                            if (!holiday && dayIndex !== 0 && dayIndex !== 6) {
+                                                            if (isCommuteUser || (!holiday && dayIndex !== 0 && dayIndex !== 6)) {
                                                                 if (withinDeadline) {
                                                                     return (
                                                                         <Button

@@ -138,6 +138,7 @@ class ShiftApplicationController extends Controller
             'userLeaves' => $userLeaves,
             'userShiftDates' => $userShiftDates,
             'shiftDetails' => $shiftDetails,
+            'userEmploymentCondition' => $user->employment_condition,
         ]);
     }
 
