@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Color } from '@tiptap/extension-color';
-import { Heading } from '@tiptap/extension-heading';
+import TiptapHeading from '@tiptap/extension-heading';
+import TiptapLink from '@tiptap/extension-link';
 import { Table } from '@tiptap/extension-table';
 import { TableCell } from '@tiptap/extension-table-cell';
 import { TableHeader } from '@tiptap/extension-table-header';
@@ -8,7 +9,7 @@ import { TableRow } from '@tiptap/extension-table-row';
 import { TextStyle } from '@tiptap/extension-text-style';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { StarterKit } from '@tiptap/starter-kit';
-import { Palette } from 'lucide-react';
+import { Link as LinkIcon, Palette } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 export default function RichTextEditorTiptap({
@@ -27,6 +28,9 @@ export default function RichTextEditorTiptap({
     const [previewOpen, setPreviewOpen] = useState(false);
     const [previewHtml, setPreviewHtml] = useState('');
     const [showColorPicker, setShowColorPicker] = useState(false);
+    const [showLinkDialog, setShowLinkDialog] = useState(false);
+    const [linkUrl, setLinkUrl] = useState('');
+    const [linkTitle, setLinkTitle] = useState('');
 
     const editor = useEditor({
         extensions: [
@@ -34,12 +38,20 @@ export default function RichTextEditorTiptap({
                 hardBreak: {
                     keepMarks: true,
                 },
+                heading: false, // StarterKitのheadingを無効化
             }),
             TextStyle,
             Color.configure({
                 types: ['textStyle'],
             }),
-            Heading.configure({
+            TiptapLink.configure({
+                openOnClick: false,
+                HTMLAttributes: {
+                    target: '_blank',
+                    rel: 'noopener noreferrer',
+                },
+            }),
+            TiptapHeading.configure({
                 levels: [1, 2, 3, 4],
             }),
             Table.configure({
@@ -164,6 +176,8 @@ export default function RichTextEditorTiptap({
                 .post-body br{display:block; content:""; margin:0.15em 0}
                 .post-body table{width:100%; border-collapse:collapse; margin:8px 0}
                 .post-body th, .post-body td{border:1px solid #d1d5db; padding:8px; text-align:left}
+                .post-body a{color:#0284c7; text-decoration:underline}
+                .post-body a:hover{color:#0369a1}
                 .hashtag{display:inline-block; background:#fff7ed; color:#c2410c; padding:2px 6px; border-radius:9999px; font-size:0.9em; margin:0 2px}
                 .mention{display:inline-block; background:#eff6ff; color:#1e40af; padding:2px 6px; border-radius:9999px; font-size:0.9em; margin:0 2px}
                 .post-body em, .post-body i {
@@ -227,6 +241,8 @@ export default function RichTextEditorTiptap({
                 .ProseMirror table { border-collapse: collapse; width: 100%; margin: 8px 0; }
                 .ProseMirror th, .ProseMirror td { border: 1px solid #d1d5db; padding: 8px; }
                 .ProseMirror th { background: #f9fafb; font-weight: 600; }
+                .ProseMirror a { color: #0284c7; text-decoration: underline; cursor: pointer; }
+                .ProseMirror a:hover { color: #0369a1; }
                 .rte-preview-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center; z-index:60; }
                 .rte-preview-modal { width: 90%; max-width: 900px; height: 70%; background: white; border-radius: 8px; overflow: hidden; display:flex; flex-direction:column }
                 .rte-preview-header { padding: 8px; border-bottom: 1px solid #eee; display:flex; justify-content:space-between; align-items:center }
@@ -345,6 +361,29 @@ export default function RichTextEditorTiptap({
                     <Button
                         type="button"
                         size="sm"
+                        variant={editor.isActive('link') ? 'default' : 'outline'}
+                        onClick={() => {
+                            const { from, to } = editor.state.selection;
+
+                            // 既存のリンクがあれば取得
+                            const previousUrl = editor.getAttributes('link').href || '';
+                            const selectedText = from !== to ? editor.state.doc.textBetween(from, to, '') : '';
+
+                            setLinkUrl(previousUrl);
+                            setLinkTitle(selectedText);
+                            setShowLinkDialog(true);
+                        }}
+                    >
+                        <LinkIcon className="h-4 w-4" />
+                    </Button>
+                    {editor.isActive('link') && (
+                        <Button type="button" size="sm" variant="outline" onClick={() => editor.chain().focus().unsetLink().run()}>
+                            リンク解除
+                        </Button>
+                    )}
+                    <Button
+                        type="button"
+                        size="sm"
                         variant={editor.isActive('bulletList') ? 'default' : 'outline'}
                         onClick={() => {
                             const { from, to } = editor.state.selection;
@@ -439,6 +478,84 @@ export default function RichTextEditorTiptap({
             <div className="rounded border">
                 <EditorContent editor={editor} />
             </div>
+
+            {/* Link Dialog */}
+            {showLinkDialog && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+                    <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+                        <h3 className="mb-4 text-lg font-semibold">リンクを挿入</h3>
+                        <div className="mb-4">
+                            <label className="mb-1 block text-sm font-medium">リンクテキスト</label>
+                            <input
+                                type="text"
+                                value={linkTitle}
+                                onChange={(e) => setLinkTitle(e.target.value)}
+                                className="w-full rounded border px-3 py-2"
+                                placeholder="表示するテキスト"
+                            />
+                        </div>
+                        <div className="mb-4">
+                            <label className="mb-1 block text-sm font-medium">URL</label>
+                            <input
+                                type="url"
+                                value={linkUrl}
+                                onChange={(e) => setLinkUrl(e.target.value)}
+                                className="w-full rounded border px-3 py-2"
+                                placeholder="https://example.com"
+                            />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                    setShowLinkDialog(false);
+                                    setLinkUrl('');
+                                    setLinkTitle('');
+                                }}
+                            >
+                                キャンセル
+                            </Button>
+                            <Button
+                                type="button"
+                                onClick={() => {
+                                    if (!editor) return;
+
+                                    if (linkUrl) {
+                                        // URLが入力されている場合
+                                        if (linkTitle) {
+                                            // タイトルも入力されている場合は、選択範囲を置き換えてリンクを設定
+                                            editor
+                                                .chain()
+                                                .focus()
+                                                .insertContent({
+                                                    type: 'text',
+                                                    text: linkTitle,
+                                                    marks: [
+                                                        {
+                                                            type: 'link',
+                                                            attrs: { href: linkUrl },
+                                                        },
+                                                    ],
+                                                })
+                                                .run();
+                                        } else {
+                                            // タイトルがない場合は、選択範囲にリンクを設定
+                                            editor.chain().focus().setLink({ href: linkUrl }).run();
+                                        }
+                                    }
+
+                                    setShowLinkDialog(false);
+                                    setLinkUrl('');
+                                    setLinkTitle('');
+                                }}
+                            >
+                                挿入
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {previewOpen && (
                 <div className="rte-preview-backdrop" role="dialog" aria-modal="true">

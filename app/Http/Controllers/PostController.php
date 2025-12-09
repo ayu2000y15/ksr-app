@@ -59,7 +59,7 @@ class PostController extends Controller
         }
         // サーバー側ソート: ?sort=column&direction=asc|desc を受け付ける
         // allow sorting by id as well (frontend may request ?sort=id)
-        $sortable = ['id', 'title', 'audience', 'type', 'updated_at', 'user'];
+        $sortable = ['id', 'title', 'audience', 'type', 'updated_at', 'user', 'sort_order'];
         $sort = $request->query('sort');
         $direction = strtolower($request->query('direction', 'desc')) === 'asc' ? 'asc' : 'desc';
         if (!empty($sort) && in_array($sort, $sortable)) {
@@ -70,13 +70,20 @@ class PostController extends Controller
                     ->orderBy('users.name', $direction);
             } elseif ($sort === 'updated_at') {
                 $query->orderBy('updated_at', $direction);
+            } elseif ($sort === 'sort_order') {
+                // sort_orderでソート（nullは最後に）
+                $query->orderByRaw('CASE WHEN sort_order IS NULL THEN 1 ELSE 0 END')
+                    ->orderBy('sort_order', $direction)
+                    ->orderBy('created_at', 'desc');
             } else {
                 // title, audience, type
                 $query->orderBy($sort, $direction);
             }
         } else {
-            // default ordering when no explicit sort requested
-            $query->orderBy('created_at', 'desc');
+            // default ordering when no explicit sort requested: sort_order優先、次にcreated_at
+            $query->orderByRaw('CASE WHEN sort_order IS NULL THEN 1 ELSE 0 END')
+                ->orderBy('sort_order', 'asc')
+                ->orderBy('created_at', 'desc');
         }
 
         // 任意: クエリパラメータ ?tag=tagname が提供された場合、タグ名でフィルタする
@@ -588,5 +595,28 @@ class PostController extends Controller
         $this->authorize('delete', $post);
         $post->delete();
         return response()->json(['message' => 'deleted']);
+    }
+
+    public function reorder(Request $request)
+    {
+        $validated = $request->validate([
+            'items' => 'required|array',
+            'items.*.id' => 'required|exists:posts,id',
+            'items.*.sort_order' => 'required|integer',
+        ]);
+
+        try {
+            DB::beginTransaction();
+
+            foreach ($validated['items'] as $item) {
+                Post::where('id', $item['id'])->update(['sort_order' => $item['sort_order']]);
+            }
+
+            DB::commit();
+            return response()->json(['message' => '並び順を更新しました']);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['message' => '並び順の更新に失敗しました', 'error' => $e->getMessage()], 500);
+        }
     }
 }

@@ -1014,6 +1014,8 @@ export default function PostShow() {
                                         .post-body-content table { width: 100%; border-collapse: collapse; margin: 8px 0; }
                                         .post-body-content th, .post-body-content td { border: 1px solid #d1d5db; padding: 8px; text-align: left; }
                                         .post-body-content ul { padding-left: 1.25rem; }
+                                        .post-body-content a { color: #0284c7; text-decoration: underline; }
+                                        .post-body-content a:hover { color: #0369a1; }
                                     `}</style>
                                     <div className="post-body-content text-sm" dangerouslySetInnerHTML={{ __html: post.body || '' }} />
                                 </div>

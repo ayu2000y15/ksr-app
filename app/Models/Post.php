@@ -9,7 +9,7 @@ class Post extends BaseModel
 {
     use HasFactory;
 
-    protected $fillable = ['user_id', 'type', 'title', 'body', 'is_public', 'audience'];
+    protected $fillable = ['user_id', 'type', 'title', 'body', 'is_public', 'audience', 'sort_order'];
 
     public function user()
     {

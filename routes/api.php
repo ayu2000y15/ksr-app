@@ -179,6 +179,7 @@ Route::middleware(['web', 'auth'])->group(function () {
 
     // 掲示板・投稿 API
     Route::apiResource('posts', \App\Http\Controllers\PostController::class);
+    Route::post('posts/reorder', [\App\Http\Controllers\PostController::class, 'reorder'])->name('posts.reorder');
     // 投票API
     Route::post('polls/{poll}/vote', [\App\Http\Controllers\PollController::class, 'vote'])->name('polls.vote');
     Route::post('polls/{poll}/reset', [\App\Http\Controllers\PollController::class, 'reset'])->name('polls.reset');

@@ -7,7 +7,8 @@ import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { BreadcrumbItem } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
 import PushPin from '@mui/icons-material/PushPin';
-import { Edit, Plus, Trash } from 'lucide-react';
+import axios from 'axios';
+import { Edit, GripVertical, Plus, Trash } from 'lucide-react';
 import { useCallback, useEffect, useState, type MouseEvent } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: '掲示板・マニュアル', href: route('posts.index') }];
@@ -371,6 +372,7 @@ export default function PostsIndex() {
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
+                                            <TableHead className="w-12"></TableHead>
                                             <TableHead> </TableHead>
                                             <TableHead>
                                                 <SortableHeader sort_key="id" queryParams={queryParams}>
@@ -531,7 +533,72 @@ export default function PostsIndex() {
                                                         key={post.id}
                                                         className={`cursor-pointer hover:bg-gray-50 ${showDraft ? 'bg-gray-300' : ''}`}
                                                         onClick={onRowClick}
+                                                        draggable={true}
+                                                        onDragStart={(e) => {
+                                                            e.dataTransfer?.setData('text/plain', String(post.id));
+                                                            e.dataTransfer!.effectAllowed = 'move';
+                                                            e.currentTarget.classList.add('opacity-60');
+                                                        }}
+                                                        onDragEnd={(e) => {
+                                                            e.currentTarget.classList.remove('opacity-60');
+                                                        }}
+                                                        onDragOver={(e) => {
+                                                            e.preventDefault();
+                                                            e.dataTransfer!.dropEffect = 'move';
+                                                            const target = e.currentTarget as HTMLElement;
+                                                            target.classList.add('bg-gray-100');
+                                                        }}
+                                                        onDragLeave={(e) => {
+                                                            const target = e.currentTarget as HTMLElement;
+                                                            target.classList.remove('bg-gray-100');
+                                                        }}
+                                                        onDrop={async (e) => {
+                                                            e.preventDefault();
+                                                            const target = e.currentTarget as HTMLElement;
+                                                            target.classList.remove('bg-gray-100');
+
+                                                            const draggedId = Number(e.dataTransfer?.getData('text/plain'));
+                                                            const targetId = post.id;
+                                                            if (!draggedId || draggedId === targetId) return;
+
+                                                            // build new order array
+                                                            const old = [...posts];
+                                                            const fromIndex = old.findIndex((p: any) => p.id === draggedId);
+                                                            const toIndex = old.findIndex((p: any) => p.id === targetId);
+                                                            if (fromIndex < 0 || toIndex < 0) return;
+
+                                                            const [moved] = old.splice(fromIndex, 1);
+                                                            old.splice(toIndex, 0, moved);
+
+                                                            // Optimistically update UI with new sort_order
+                                                            const reordered = old.map((p: any, i: number) => ({ ...p, sort_order: i + 1 }));
+                                                            setPosts(reordered);
+
+                                                            // send updated order to server
+                                                            try {
+                                                                const items = old.map((p: any, i: number) => ({
+                                                                    id: p.id,
+                                                                    sort_order: i + 1,
+                                                                }));
+                                                                const response = await axios.post('/api/posts/reorder', { items });
+                                                                console.log('並び順を保存しました:', response.data);
+                                                            } catch (err) {
+                                                                console.error('reorder failed', err);
+                                                                alert('並び順の保存に失敗しました。ページをリロードしてください。');
+                                                                // Reload on error
+                                                                window.location.reload();
+                                                            }
+                                                        }}
                                                     >
+                                                        <TableCell>
+                                                            <button
+                                                                aria-label="ドラッグして並び替え"
+                                                                onClick={(e) => e.stopPropagation()}
+                                                                className="flex h-6 w-6 items-center justify-center rounded bg-gray-100 text-gray-600"
+                                                            >
+                                                                <GripVertical className="h-4 w-4" />
+                                                            </button>
+                                                        </TableCell>
                                                         <TableCell>
                                                             {/* pin icon on the left */}
                                                             {currentUserId ? (
@@ -892,44 +959,53 @@ export default function PostsIndex() {
                                                 onClick={() => (window.location.href = route('posts.show', post.id) as unknown as string)}
                                             >
                                                 <div className="flex items-start justify-between">
-                                                    <div className="min-w-0">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="text-xs text-gray-600">#{post.id} </span>
-                                                            {showDraft ? (
-                                                                <span className="ml-1 rounded bg-yellow-100 px-2 py-0.5 text-xs text-yellow-800">
-                                                                    下書き
-                                                                </span>
-                                                            ) : null}
-                                                            {currentUserId
-                                                                ? (() => {
-                                                                      try {
-                                                                          const views = post.views || post.viewers || post.post_views || [];
-                                                                          const read = Array.isArray(views)
-                                                                              ? views.some((v: any) => {
-                                                                                    const uid = v?.user?.id ?? v?.user_id ?? v?.id ?? v;
-                                                                                    return Number(uid) === Number(currentUserId);
-                                                                                })
-                                                                              : false;
-                                                                          return read ? (
-                                                                              <Badge className="ml-2 bg-gray-100 p-0.5 text-[10px] text-gray-400">
-                                                                                  既読
-                                                                              </Badge>
-                                                                          ) : (
-                                                                              <Badge className="ml-2 bg-sky-100 p-0.5 text-[10px] text-sky-800">
-                                                                                  未読
-                                                                              </Badge>
-                                                                          );
-                                                                      } catch {
-                                                                          return null;
-                                                                      }
-                                                                  })()
-                                                                : null}
-                                                        </div>
+                                                    <div className="flex min-w-0 items-center gap-2">
+                                                        <button
+                                                            aria-label="並び替え"
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded bg-gray-100 text-gray-600"
+                                                        >
+                                                            <GripVertical className="h-4 w-4" />
+                                                        </button>
                                                         <div>
-                                                            <h3 className="mt-1 truncate text-sm font-medium">{post.title || '(無題)'}</h3>
-                                                        </div>
-                                                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                                            <span>{post.user ? post.user.name : '—'}</span>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-xs text-gray-600">#{post.id} </span>
+                                                                {showDraft ? (
+                                                                    <span className="ml-1 rounded bg-yellow-100 px-2 py-0.5 text-xs text-yellow-800">
+                                                                        下書き
+                                                                    </span>
+                                                                ) : null}
+                                                                {currentUserId
+                                                                    ? (() => {
+                                                                          try {
+                                                                              const views = post.views || post.viewers || post.post_views || [];
+                                                                              const read = Array.isArray(views)
+                                                                                  ? views.some((v: any) => {
+                                                                                        const uid = v?.user?.id ?? v?.user_id ?? v?.id ?? v;
+                                                                                        return Number(uid) === Number(currentUserId);
+                                                                                    })
+                                                                                  : false;
+                                                                              return read ? (
+                                                                                  <Badge className="ml-2 bg-gray-100 p-0.5 text-[10px] text-gray-400">
+                                                                                      既読
+                                                                                  </Badge>
+                                                                              ) : (
+                                                                                  <Badge className="ml-2 bg-sky-100 p-0.5 text-[10px] text-sky-800">
+                                                                                      未読
+                                                                                  </Badge>
+                                                                              );
+                                                                          } catch {
+                                                                              return null;
+                                                                          }
+                                                                      })()
+                                                                    : null}
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="mt-1 truncate text-sm font-medium">{post.title || '(無題)'}</h3>
+                                                            </div>
+                                                            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                                                <span>{post.user ? post.user.name : '—'}</span>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                     <div className="ml-2 flex items-center gap-1">
