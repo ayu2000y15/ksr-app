@@ -31,7 +31,13 @@ class PostPolicy
     /** Determine whether the user can view the post. */
     public function view(User $user, Post $post)
     {
+        // システム管理者は全て閲覧可能（beforeメソッドで処理されるが、明示的に記載）
+        if ($user->hasRole('システム管理者')) return true;
+
+        // 公開投稿は誰でも閲覧可能
         if ($post->is_public) return true;
+
+        // 下書きは作成者のみ閲覧可能
         return $user->id === $post->user_id;
     }
 

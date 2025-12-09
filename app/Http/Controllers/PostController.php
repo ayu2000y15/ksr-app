@@ -31,8 +31,11 @@ class PostController extends Controller
 
         // views.user を読み込んで、現在のユーザーが各投稿を閲覧したかどうかを判定できるようにする
         // Eager-load poll.options so that index responses include basic poll info
-        $query = Post::with(['user', 'attachments', 'comments', 'reactions', 'tags', 'roles', 'allowedUsers', 'views.user', 'pinnedByUsers', 'poll.options'])
-            ->where(function ($q) use ($user) {
+        $query = Post::with(['user', 'attachments', 'comments', 'reactions', 'tags', 'roles', 'allowedUsers', 'views.user', 'pinnedByUsers', 'poll.options']);
+
+        // システム管理者は全ての投稿を閲覧可能
+        if (!$user || !$user->hasRole('システム管理者')) {
+            $query->where(function ($q) use ($user) {
                 // 常に公開投稿を表示する
                 $q->where('is_public', true)->where('audience', 'all');
 
@@ -53,6 +56,7 @@ class PostController extends Controller
                     $q->orWhere('user_id', $user->id);
                 }
             });
+        }
         // サーバー側ソート: ?sort=column&direction=asc|desc を受け付ける
         // allow sorting by id as well (frontend may request ?sort=id)
         $sortable = ['id', 'title', 'audience', 'type', 'updated_at', 'user'];
