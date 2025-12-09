@@ -1008,7 +1008,7 @@ export default function PostShow() {
                                         .post-body-content ul, .post-body-content ol { margin: 0.3em 0; }
                                         .post-body-content br { display: block; content: ""; margin: 0.15em 0; }
                                         .post-body-content h1 { font-size: 20px; font-weight: bold; }
-                                        .post-body-content h2 { font-size: 18px; font-weight: bold; }
+                                        .post-body-content h2 { font-size: 18px; font-weight: bold; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.2em; }
                                         .post-body-content h3 { font-size: 16px; font-weight: bold; }
                                         .post-body-content h4 { font-size: 15px; font-weight: bold; }
                                         .post-body-content table { width: 100%; border-collapse: collapse; margin: 8px 0; }

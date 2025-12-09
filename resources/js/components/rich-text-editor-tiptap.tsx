@@ -154,7 +154,16 @@ export default function RichTextEditorTiptap({
                 .post-header{border-bottom:1px solid #e5e7eb; padding-bottom:12px; margin-bottom:16px}
                 .post-title{font-size:22px; font-weight:700; margin:0 0 6px}
                 .post-meta{font-size:13px; color:#6b7280}
-                .post-body{max-width:900px; margin-top:16px}
+                .post-body{max-width:900px; margin-top:16px; font-size:0.875rem; line-height:1.4;}
+                .post-body p{margin:0 0 0.3em 0; line-height:1.4}
+                .post-body h1{font-size:20px; font-weight:bold; margin:0.4em 0 0.3em 0}
+                .post-body h2{font-size:18px; font-weight:bold; margin:0.4em 0 0.3em 0; border-bottom:1px solid #e5e7eb; padding-bottom:0.2em}
+                .post-body h3{font-size:16px; font-weight:bold; margin:0.4em 0 0.3em 0}
+                .post-body h4{font-size:15px; font-weight:bold; margin:0.4em 0 0.3em 0}
+                .post-body ul, .post-body ol{margin:0.3em 0; padding-left:1.25rem}
+                .post-body br{display:block; content:""; margin:0.15em 0}
+                .post-body table{width:100%; border-collapse:collapse; margin:8px 0}
+                .post-body th, .post-body td{border:1px solid #d1d5db; padding:8px; text-align:left}
                 .hashtag{display:inline-block; background:#fff7ed; color:#c2410c; padding:2px 6px; border-radius:9999px; font-size:0.9em; margin:0 2px}
                 .mention{display:inline-block; background:#eff6ff; color:#1e40af; padding:2px 6px; border-radius:9999px; font-size:0.9em; margin:0 2px}
                 .post-body em, .post-body i {
@@ -164,13 +173,6 @@ export default function RichTextEditorTiptap({
                     padding: 0 3px;
                     border-radius: 3px;
                 }
-                .post-body table{width:100%; border-collapse:collapse; margin:8px 0}
-                .post-body th, .post-body td{border:1px solid #d1d5db; padding:8px; text-align:left}
-                .post-body h1{font-size:20px}
-                .post-body h2{font-size:18px}
-                .post-body h3{font-size:16px}
-                .post-body h4{font-size:15px}
-                ul{padding-left:1.25rem}
             </style>
         </head>
         <body>
@@ -203,27 +205,25 @@ export default function RichTextEditorTiptap({
         <div>
             <style>{`
                 .ProseMirror {
-                    line-height: 1.6 !important;
+                    line-height: 1.4 !important;
                 }
                 .ProseMirror p {
-                    margin: 0 !important;
-                    line-height: 1.6 !important;
+                    margin: 0 0 0.3em 0 !important;
+                    line-height: 1.4 !important;
                 }
                 .ProseMirror p + p {
-                    margin-top: 0.5em !important;
+                    margin-top: 0.3em !important;
                 }
                 .ProseMirror br {
+                    display: block;
                     content: "";
+                    margin: 0.15em 0;
                 }
-                .ProseMirror br::after {
-                    content: "\\A";
-                    white-space: pre;
-                }
-                .ProseMirror h1 { font-size: 1.5em; font-weight: bold; margin: 0.75em 0 0.5em 0; }
-                .ProseMirror h2 { font-size: 1.3em; font-weight: bold; margin: 0.75em 0 0.5em 0; }
-                .ProseMirror h3 { font-size: 1.17em; font-weight: bold; margin: 0.75em 0 0.5em 0; }
-                .ProseMirror h4 { font-size: 1em; font-weight: bold; margin: 0.75em 0 0.5em 0; }
-                .ProseMirror ul, .ProseMirror ol { padding-left: 1.25rem; margin: 0.5em 0; }
+                .ProseMirror h1 { font-size: 20px; font-weight: bold; margin: 0.4em 0 0.3em 0; }
+                .ProseMirror h2 { font-size: 18px; font-weight: bold; margin: 0.4em 0 0.3em 0; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.2em; }
+                .ProseMirror h3 { font-size: 16px; font-weight: bold; margin: 0.4em 0 0.3em 0; }
+                .ProseMirror h4 { font-size: 15px; font-weight: bold; margin: 0.4em 0 0.3em 0; }
+                .ProseMirror ul, .ProseMirror ol { padding-left: 1.25rem; margin: 0.3em 0; }
                 .ProseMirror table { border-collapse: collapse; width: 100%; margin: 8px 0; }
                 .ProseMirror th, .ProseMirror td { border: 1px solid #d1d5db; padding: 8px; }
                 .ProseMirror th { background: #f9fafb; font-weight: 600; }
