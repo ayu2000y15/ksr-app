@@ -414,7 +414,9 @@ export default function PostShow() {
         (post?.viewers || []).slice().sort((a: any, b: any) => Number(a?.id || 0) - Number(b?.id || 0)),
     );
     const [showViewersMobile, setShowViewersMobile] = useState(false);
+    const [showViewersDesktop, setShowViewersDesktop] = useState(false);
     const viewersRef = useRef<HTMLDivElement | null>(null);
+    const viewersDesktopRef = useRef<HTMLDivElement | null>(null);
     const [pickerOpen, setPickerOpen] = useState(false);
     const pickerToggleRef = useRef<HTMLDivElement | null>(null);
     const pickerContainerRef = useRef<HTMLDivElement | null>(null);
@@ -520,6 +522,19 @@ export default function PostShow() {
         document.addEventListener('click', onDocClick);
         return () => document.removeEventListener('click', onDocClick);
     }, [showViewersMobile]);
+
+    // Close desktop viewers popup when clicking outside
+    useEffect(() => {
+        if (!showViewersDesktop) return;
+        const onDocClick = (ev: MouseEvent) => {
+            if (!viewersDesktopRef.current) return;
+            if (!viewersDesktopRef.current.contains(ev.target as Node)) {
+                setShowViewersDesktop(false);
+            }
+        };
+        document.addEventListener('click', onDocClick);
+        return () => document.removeEventListener('click', onDocClick);
+    }, [showViewersDesktop]);
 
     const toggleReaction = useCallback(
         async (emoji: string) => {
@@ -1241,23 +1256,27 @@ export default function PostShow() {
                                     </div>
                                 </div>
                                 <div className="text-sm text-gray-600">
-                                    {/* Desktop: hover to show (existing behavior) */}
+                                    {/* Desktop: click to toggle */}
                                     <div className="hidden md:inline-block">
-                                        <div className="group relative inline-block">
-                                            <span className="cursor-default">既読: {viewers ? viewers.length : 0} 人</span>
-                                            <div className="pointer-events-none absolute top-full right-0 z-10 mt-1 hidden w-60 rounded border bg-white p-2 text-left text-xs shadow group-hover:block">
-                                                {viewers && viewers.length > 0 ? (
-                                                    <ul className="max-h-40 space-y-1 overflow-auto">
-                                                        {viewers.map((v) => (
-                                                            <li key={v.id} className="truncate">
-                                                                {v.name || v.email || '匿名'}
-                                                            </li>
-                                                        ))}
-                                                    </ul>
-                                                ) : (
-                                                    <div className="text-xs text-gray-500">まだ閲覧者はいません</div>
-                                                )}
-                                            </div>
+                                        <div className="relative inline-block" ref={viewersDesktopRef}>
+                                            <button type="button" className="cursor-pointer" onClick={() => setShowViewersDesktop((s) => !s)}>
+                                                既読: {viewers ? viewers.length : 0} 人
+                                            </button>
+                                            {showViewersDesktop && (
+                                                <div className="absolute top-full right-0 z-10 mt-1 w-60 rounded border bg-white p-2 text-left text-xs shadow">
+                                                    {viewers && viewers.length > 0 ? (
+                                                        <ul className="max-h-40 space-y-1 overflow-auto">
+                                                            {viewers.map((v) => (
+                                                                <li key={v.id} className="truncate">
+                                                                    {v.name || v.email || '匿名'}
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    ) : (
+                                                        <div className="text-xs text-gray-500">まだ閲覧者はいません</div>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
 
