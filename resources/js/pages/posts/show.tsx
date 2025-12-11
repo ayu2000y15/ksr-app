@@ -377,9 +377,12 @@ export default function PostShow() {
                 : [];
         // sort by explicit order if present, otherwise keep server order
         items.sort((a: any, b: any) => {
-            const oa = Number(a?.order || a?.sort || 0);
-            const ob = Number(b?.order || b?.sort || 0);
-            if (oa && ob) return oa - ob;
+            const oa = a?.order ?? a?.sort;
+            const ob = b?.order ?? b?.sort;
+            // if both have order defined (including 0), sort by order
+            if (oa !== undefined && oa !== null && ob !== undefined && ob !== null) {
+                return Number(oa) - Number(ob);
+            }
             // fall back to id if order not present
             return Number(a?.id || 0) - Number(b?.id || 0);
         });
