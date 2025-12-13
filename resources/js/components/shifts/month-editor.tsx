@@ -640,7 +640,7 @@ export default function MonthEditor({
                             <ChevronRight className="h-4 w-4" />
                         </Button>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="hidden items-center gap-2 md:flex">
                         <Button size="sm" variant="outline" onClick={toggleAllDates} aria-label="全日選択/解除" title="未来の全日付を選択/解除">
                             {selectedDates.size > 0 ? '全日解除' : '全日選択'}
                         </Button>
@@ -734,7 +734,7 @@ export default function MonthEditor({
                 </div>
 
                 {/* ユーザー向けヒント: 月切替ボタンの下に表示（背景 + アイコン） */}
-                <div className="mb-4">
+                <div className="mb-4 hidden md:block">
                     <div className="flex items-start gap-3 rounded border-l-4 border-yellow-200 bg-yellow-50 p-3 text-sm text-muted-foreground">
                         <Info className="h-5 w-5 flex-shrink-0 text-yellow-700" />
                         <div className="leading-tight">
@@ -762,7 +762,7 @@ export default function MonthEditor({
                 <div className="relative" style={{ height: 'calc(100vh - 200px)' }}>
                     {/* debug badge removed */}
                     <div
-                        className="absolute top-0 left-0 z-40 flex h-full items-center"
+                        className="absolute top-0 left-0 z-40 hidden h-full items-center md:flex"
                         onClick={() => scrollViewport(-1)}
                         onPointerDown={() => scrollViewport(-1)}
                     >
@@ -771,7 +771,7 @@ export default function MonthEditor({
                         </Button>
                     </div>
                     <div
-                        className="absolute top-0 right-0 z-40 flex h-full items-center"
+                        className="absolute top-0 right-0 z-40 hidden h-full items-center md:flex"
                         onClick={() => scrollViewport(1)}
                         onPointerDown={() => scrollViewport(1)}
                     >
@@ -781,13 +781,22 @@ export default function MonthEditor({
                     </div>
 
                     {/* カレンダーコンテナ */}
-                    <div className="flex h-full overflow-hidden" style={{ margin: '0 48px' }}>
+                    <div className="flex h-full overflow-hidden" style={{ margin: '0', marginLeft: '0', marginRight: '0' }} data-mobile-margin>
+                        <style>{`
+                            @media (min-width: 768px) {
+                                [data-mobile-margin] {
+                                    margin-left: 48px !important;
+                                    margin-right: 48px !important;
+                                }
+                            }
+                        `}</style>
                         {/* 左側: 固定ユーザー名列 */}
-                        <div className="flex w-24 flex-shrink-0 flex-col border-r bg-white md:w-48">
+                        <div className="flex w-30 flex-shrink-0 flex-col border-r bg-white md:w-48">
                             {/* ヘッダー部分 */}
                             <div className="sticky top-0 z-30 flex h-30 items-end border-b bg-white p-2">
-                                <div className="flex items-center gap-2">
+                                <div className="items-center gap-2">
                                     <input
+                                        className="hidden md:block"
                                         type="checkbox"
                                         checked={selectedUsers.size === sortedUsers.length && sortedUsers.length > 0}
                                         onChange={toggleAllUsers}
@@ -822,7 +831,7 @@ export default function MonthEditor({
                                             checked={selectedUsers.has(u.id)}
                                             onChange={() => toggleUserSelection(u.id)}
                                             aria-label={`ユーザー ${u.name} を選択`}
-                                            className="mr-2 flex-shrink-0"
+                                            className="mr-2 hidden flex-shrink-0 md:inline-block"
                                         />
                                         <span className="flex items-center gap-1 truncate text-sm">
                                             <span className="inline-block w-3 flex-shrink-0">
@@ -830,16 +839,17 @@ export default function MonthEditor({
                                                     <Car className="h-3 w-3 rounded-full bg-violet-50 text-violet-600 shadow-sm" title="車あり" />
                                                 )}
                                             </span>
-                                            <span className="inline-block w-6 text-right font-mono text-sm">{u.position}</span>
+                                            <span className="inline-block w-3 text-right font-mono text-sm md:w-6">{u.position}</span>
 
                                             <Link
                                                 href={route('users.show', { user: u.id })}
                                                 className="truncate text-sm text-blue-600 hover:underline"
                                                 title={`ユーザー詳細: ${u.name}`}
                                             >
-                                                {u.name}
+                                                <span className="md:hidden">{u.name.split(' ')[0] || u.name}</span>
+                                                <span className="hidden md:inline">{u.name}</span>
                                             </Link>
-                                            <span className="ml-2 text-xs text-muted-foreground">({String(getAttendanceCount(u))})</span>
+                                            <span className="text-xs text-muted-foreground md:ml-2">({String(getAttendanceCount(u))})</span>
                                         </span>
                                     </div>
                                 ))}

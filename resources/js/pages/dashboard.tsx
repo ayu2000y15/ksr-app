@@ -729,14 +729,14 @@ export default function Dashboard() {
                         }
                     });
 
-                // sort: day shifts first, then by user id ascending
+                // sort: day shifts first, then by user position ascending
                 annotatedWorks.sort((a: any, b: any) => {
                     const aIsNight = String(a.shift_type ?? a.type ?? '') === 'night';
                     const bIsNight = String(b.shift_type ?? b.type ?? '') === 'night';
                     if (aIsNight !== bIsNight) return aIsNight ? 1 : -1; // day (not night) first
-                    const aId = Number(a.user?.id ?? a.user_id ?? 0);
-                    const bId = Number(b.user?.id ?? b.user_id ?? 0);
-                    return aId - bId;
+                    const aPos = Number(a.user?.position ?? 0);
+                    const bPos = Number(b.user?.position ?? 0);
+                    return aPos - bPos;
                 });
 
                 if (annotatedWorks.length > 0) {

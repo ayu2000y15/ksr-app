@@ -34,6 +34,9 @@ Route::get('/dashboard', function () {
     $publishedShifts = \App\Models\Shift::with('user')
         ->where('is_published', true)
         ->whereRaw('date(date) = ?', [$today->toDateString()])
+        ->join('users', 'shifts.user_id', '=', 'users.id')
+        ->orderBy('users.position', 'asc')
+        ->select('shifts.*')
         ->get();
 
     // Get published dates for calendar (current month)

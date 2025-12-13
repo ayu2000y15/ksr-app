@@ -233,11 +233,13 @@ export default function BreakTimeline(props: {
         if (isSyncingRef.current) return;
         const li = labelsRef.current;
         const gi = ganttRef.current;
+        const fi = footerRightRef.current;
         if (!li || !gi) return;
         isSyncingRef.current = true;
         requestAnimationFrame(() => {
             try {
                 li.scrollTop = gi.scrollTop;
+                if (fi) fi.scrollLeft = gi.scrollLeft;
             } catch {}
             isSyncingRef.current = false;
         });
