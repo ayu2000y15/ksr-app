@@ -23,13 +23,29 @@ class MyShiftController extends Controller
             return redirect()->route('login');
         }
 
+        // Get transport requests for the user in the month
+        $transportRequests = \App\Models\TransportRequest::where('created_by', $user->id)
+            ->whereBetween('date', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
+            ->orderBy('date', 'asc')
+            ->get();
+
+        // Group transport requests by date
+        $transportsByDate = $transportRequests->groupBy(function ($tr) {
+            try {
+                $parsed = Carbon::parse($tr->date);
+                return $parsed->format('Y-m-d');
+            } catch (\Throwable $e) {
+                return $tr->date;
+            }
+        });
+
         // Get all published shifts for the current user in the specified month
         $shifts = Shift::where('user_id', $user->id)
             ->where('is_published', true)
             ->whereBetween('date', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
             ->orderBy('date', 'asc')
             ->get()
-            ->map(function ($shift) use ($user) {
+            ->map(function ($shift) use ($user, $transportsByDate) {
                 $shiftArray = $shift->toArray();
                 // Get work shift details for this user and date
                 $dateStr = Carbon::parse($shift->date)->toDateString();
@@ -45,6 +61,22 @@ class MyShiftController extends Controller
                     $shiftArray['work_start_time'] = $firstDetail->start_time ? Carbon::parse($firstDetail->start_time)->format('H:i') : null;
                     $shiftArray['work_end_time'] = $lastDetail->end_time ? Carbon::parse($lastDetail->end_time)->format('H:i') : null;
                 }
+
+                // Add transport request flags
+                $transports = $transportsByDate->get($dateStr) ?? collect();
+                $hasTransportTo = false;
+                $hasTransportFrom = false;
+                foreach ($transports as $tr) {
+                    $direction = isset($tr->direction) ? (string)$tr->direction : 'to';
+                    if ($direction === 'to') {
+                        $hasTransportTo = true;
+                    } else {
+                        $hasTransportFrom = true;
+                    }
+                }
+                $shiftArray['has_transport_to'] = $hasTransportTo;
+                $shiftArray['has_transport_from'] = $hasTransportFrom;
+
                 return $shiftArray;
             });
 

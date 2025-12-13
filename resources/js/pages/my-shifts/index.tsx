@@ -5,7 +5,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router, usePage } from '@inertiajs/react';
-import { ChevronLeft, ChevronRight, Moon, Sun } from 'lucide-react';
+import { Car, ChevronLeft, ChevronRight, Moon, Sun } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -62,6 +62,12 @@ export default function MyShifts() {
         });
         return map;
     }, [shifts]);
+
+    // Check if any shift on this date has transport requests
+    const hasTransportForDate = (dateKey: string, direction: 'to' | 'from') => {
+        const dayShifts = shiftsByDate[dateKey] || [];
+        return dayShifts.some((shift: any) => (direction === 'to' ? shift.has_transport_to : shift.has_transport_from));
+    };
 
     // Create a map of holidays by date
     const holidayMap = useMemo(() => {
@@ -122,6 +128,20 @@ export default function MyShifts() {
                         </div>
                     </CardHeader>
                     <CardContent>
+                        {/* 凡例 */}
+                        <div className="mb-4 rounded-md border bg-blue-50 px-3 py-2 sm:px-4">
+                            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground sm:gap-4 sm:text-sm">
+                                <div className="flex items-center gap-1">
+                                    <Car className="h-3 w-3 text-blue-600 sm:h-4 sm:w-4" />
+                                    <span>送迎（行き）</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <Car className="h-3 w-3 text-orange-600 sm:h-4 sm:w-4" />
+                                    <span>送迎（帰り）</span>
+                                </div>
+                            </div>
+                        </div>
+
                         <div className="grid grid-cols-7 gap-1">
                             {/* Header - Week days */}
                             {weekDays.map((day, idx) => (
@@ -282,6 +302,16 @@ export default function MyShifts() {
                                                     </Badge>
                                                 </div>
                                             ) : null}
+                                            {(hasTransportForDate(dateKey, 'to') || hasTransportForDate(dateKey, 'from')) && (
+                                                <div className="mt-1 flex items-center gap-1">
+                                                    {hasTransportForDate(dateKey, 'to') && (
+                                                        <Car className="h-3 w-3 text-blue-600 sm:h-4 sm:w-4" title="送迎（行き）" />
+                                                    )}
+                                                    {hasTransportForDate(dateKey, 'from') && (
+                                                        <Car className="h-3 w-3 text-orange-600 sm:h-4 sm:w-4" title="送迎（帰り）" />
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 );
