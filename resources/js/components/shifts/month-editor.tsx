@@ -796,7 +796,7 @@ export default function MonthEditor({
                             <div className="sticky top-0 z-30 flex h-30 items-end border-b bg-white p-2">
                                 <div className="items-center gap-2">
                                     <input
-                                        className="hidden md:block"
+                                        className="mr-2 hidden md:inline-block md:flex-shrink-0"
                                         type="checkbox"
                                         checked={selectedUsers.size === sortedUsers.length && sortedUsers.length > 0}
                                         onChange={toggleAllUsers}
