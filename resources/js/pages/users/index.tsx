@@ -521,7 +521,14 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                                             <div className="space-y-2">
                                                                 {user.rentals.map((rental: any) => (
                                                                     <div key={rental.id} className="rounded border bg-white p-2 text-xs">
-                                                                        <div className="font-medium">{rental.rental_item?.name || '—'}</div>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="font-medium">{rental.rental_item?.name || '—'}</span>
+                                                                            {rental.item_number && (
+                                                                                <span className="rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">
+                                                                                    {rental.item_number}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
                                                                         <div className="mt-1 text-muted-foreground">
                                                                             貸出日: {new Date(rental.rental_date).toLocaleDateString()} / 対応者:{' '}
                                                                             {rental.rental_user?.name || '—'}
@@ -866,8 +873,15 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                                                         <div className="space-y-2">
                                                                             {user.rentals.map((rental: any) => (
                                                                                 <div key={rental.id} className="rounded border bg-white p-2 text-xs">
-                                                                                    <div className="font-medium">
-                                                                                        {rental.rental_item?.name || '—'}
+                                                                                    <div className="flex items-center gap-2">
+                                                                                        <span className="font-medium">
+                                                                                            {rental.rental_item?.name || '—'}
+                                                                                        </span>
+                                                                                        {rental.item_number && (
+                                                                                            <span className="rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">
+                                                                                                {rental.item_number}
+                                                                                            </span>
+                                                                                        )}
                                                                                     </div>
                                                                                     <div className="mt-1 text-muted-foreground">
                                                                                         貸出日: {new Date(rental.rental_date).toLocaleDateString()} |

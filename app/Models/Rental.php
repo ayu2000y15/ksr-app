@@ -16,6 +16,7 @@ class Rental extends Model
     protected $fillable = [
         'user_id',
         'rental_item_id',
+        'item_number',
         'rental_date',
         'rental_user_id',
         'return_date',
