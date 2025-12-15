@@ -580,7 +580,7 @@ export default function Index({
                                                                 return null;
                                                             }
                                                             // If the user has a scheduled shift on this date, show shift-related actions regardless of weekend/holiday
-                                                            if (isShiftExists || (timeStr && timeStr !== '時間未設定')) {
+                                                            if (isShiftExists) {
                                                                 // meal ticket button on days with shifts
                                                                 const hasMealTicketFalse = (() => {
                                                                     if (!sd) return false;
@@ -902,7 +902,7 @@ export default function Index({
                                                                 }
                                                                 return null;
                                                             }
-                                                            if (isShiftExists || (timeStr && timeStr !== '時間未設定')) {
+                                                            if (isShiftExists) {
                                                                 const hasMealTicketFalse = (() => {
                                                                     if (!sd) return false;
                                                                     const mt = (sd as unknown as { meal_ticket?: number | string | boolean })

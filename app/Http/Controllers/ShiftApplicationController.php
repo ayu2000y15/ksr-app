@@ -92,6 +92,7 @@ class ShiftApplicationController extends Controller
 
         // collect any shift dates (any shift_type) for current user in the month so frontend can disable application where a shift already exists
         $userShiftDates = Shift::where('user_id', $user->id)
+            ->where('is_published', true)
             ->whereBetween('date', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
             ->pluck('date')
             ->map(function ($d) {
@@ -107,7 +108,7 @@ class ShiftApplicationController extends Controller
                 $attrs = $sd->getAttributes();
                 // find shift record for this user/date to expose shift_type and step_out
                 try {
-                    $shiftRec = \App\Models\Shift::where('user_id', $user->id)->whereRaw('date(date) = ?', [$dateStr])->first();
+                    $shiftRec = \App\Models\Shift::where('user_id', $user->id)->where('is_published', true)->whereRaw('date(date) = ?', [$dateStr])->first();
                     $shiftType = $shiftRec ? $shiftRec->shift_type : null;
                     $stepOut = $shiftRec ? ($shiftRec->step_out ?? 0) : 0;
                 } catch (\Exception $e) {
