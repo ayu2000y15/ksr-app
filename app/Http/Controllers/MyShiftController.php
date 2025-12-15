@@ -39,21 +39,28 @@ class MyShiftController extends Controller
             }
         });
 
+        // Get all shift details for the month (N+1問題を回避)
+        $allShiftDetails = \App\Models\ShiftDetail::where('user_id', $user->id)
+            ->whereBetween('date', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
+            ->where('type', 'work')
+            ->orderBy('date', 'asc')
+            ->orderBy('start_time', 'asc')
+            ->get()
+            ->groupBy(function ($detail) {
+                return Carbon::parse($detail->date)->toDateString();
+            });
+
         // Get all published shifts for the current user in the specified month
         $shifts = Shift::where('user_id', $user->id)
             ->where('is_published', true)
             ->whereBetween('date', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
             ->orderBy('date', 'asc')
             ->get()
-            ->map(function ($shift) use ($user, $transportsByDate) {
+            ->map(function ($shift) use ($allShiftDetails, $transportsByDate) {
                 $shiftArray = $shift->toArray();
-                // Get work shift details for this user and date
+                // Get work shift details for this user and date from cached collection
                 $dateStr = Carbon::parse($shift->date)->toDateString();
-                $workDetails = \App\Models\ShiftDetail::where('user_id', $user->id)
-                    ->whereRaw('date(date) = ?', [$dateStr])
-                    ->where('type', 'work')
-                    ->orderBy('start_time')
-                    ->get();
+                $workDetails = $allShiftDetails->get($dateStr) ?? collect();
 
                 if ($workDetails->isNotEmpty()) {
                     $firstDetail = $workDetails->first();

@@ -99,22 +99,27 @@ class ShiftApplicationController extends Controller
                 return Carbon::parse($d)->toDateString();
             })->toArray();
 
+        // 事前に全てのShiftを取得してN+1問題を回避
+        $monthShifts = \App\Models\Shift::where('user_id', $user->id)
+            ->where('is_published', true)
+            ->whereBetween('date', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
+            ->get()
+            ->keyBy(function ($shift) {
+                return Carbon::parse($shift->date)->toDateString();
+            });
+
         // collect scheduled shift details for the month for the current user (used to display times on calendar)
         $shiftDetails = \App\Models\ShiftDetail::where('user_id', $user->id)
             ->whereBetween('date', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
             ->get(['date', 'start_time', 'end_time'])
-            ->map(function ($sd) use ($user) {
+            ->map(function ($sd) use ($monthShifts) {
                 $dateStr = Carbon::parse($sd->date)->toDateString();
                 $attrs = $sd->getAttributes();
-                // find shift record for this user/date to expose shift_type and step_out
-                try {
-                    $shiftRec = \App\Models\Shift::where('user_id', $user->id)->where('is_published', true)->whereRaw('date(date) = ?', [$dateStr])->first();
-                    $shiftType = $shiftRec ? $shiftRec->shift_type : null;
-                    $stepOut = $shiftRec ? ($shiftRec->step_out ?? 0) : 0;
-                } catch (\Exception $e) {
-                    $shiftType = null;
-                    $stepOut = 0;
-                }
+
+                // キャッシュされたShiftコレクションから取得（N+1問題を回避）
+                $shiftRec = $monthShifts->get($dateStr);
+                $shiftType = $shiftRec ? $shiftRec->shift_type : null;
+                $stepOut = $shiftRec ? ($shiftRec->step_out ?? 0) : 0;
 
                 return [
                     'date' => $dateStr,
