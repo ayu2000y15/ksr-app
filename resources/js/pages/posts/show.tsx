@@ -1167,9 +1167,11 @@ export default function PostShow() {
                                                         />
                                                     ) : p.isVideo ? (
                                                         <video
-                                                            src={p.url}
+                                                            src={`${p.url}#t=0.001`}
                                                             preload="metadata"
-                                                            className="h-full w-full cursor-pointer bg-black object-cover"
+                                                            muted
+                                                            playsInline
+                                                            className="h-full w-full cursor-pointer bg-gray-600 object-cover"
                                                             onClick={() => {
                                                                 setModalStartIndex(idx);
                                                                 setModalOpen(true);
