@@ -1011,7 +1011,204 @@ export default function Dashboard() {
             <Head title="ダッシュボード" />
             <div className="p-4 sm:p-6 lg:p-8">
                 <style>{`.hide-scrollbar::-webkit-scrollbar{display:none}.hide-scrollbar{-ms-overflow-style:none;scrollbar-width:none;}`}</style>
-
+                {/* お知らせエリア */}
+                <div className="my-6">
+                    <Card>
+                        <CardHeader className="flex-row items-center justify-between">
+                            <CardTitle>お知らせ</CardTitle>
+                            {canCreateAnnouncements && (
+                                <Button
+                                    onClick={() => {
+                                        setCreateOpen(true);
+                                    }}
+                                >
+                                    <Plus className="mr-0 h-4 w-4 sm:mr-2" />
+                                    <span className="hidden sm:inline">新規作成</span>
+                                </Button>
+                            )}
+                        </CardHeader>
+                        <CardContent>
+                            {announcements.length === 0 ? (
+                                <p>現在、新しいお知らせはありません。</p>
+                            ) : (
+                                <div>
+                                    {announcements.map((a) => {
+                                        const d = new Date(a.created_at || a.createdAt || Date.now());
+                                        const dateLabel = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(
+                                            d.getDate(),
+                                        ).padStart(2, '0')}`;
+                                        const expanded = expandedAnnouncementId === Number(a.id);
+                                        return (
+                                            <div key={a.id} className="border-b border-gray-100">
+                                                <div
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    aria-expanded={expanded}
+                                                    onClick={async () => {
+                                                        const nextExpanded = expanded ? null : Number(a.id);
+                                                        setExpandedAnnouncementId(nextExpanded);
+                                                        if (nextExpanded && !a.read_by_current_user) {
+                                                            try {
+                                                                await axios.post(`/api/announcements/${a.id}/read`);
+                                                            } catch {}
+                                                            setAnnouncements((cur) =>
+                                                                cur.map((it) =>
+                                                                    Number(it.id) === Number(a.id) ? { ...it, read_by_current_user: true } : it,
+                                                                ),
+                                                            );
+                                                        }
+                                                    }}
+                                                    onKeyDown={async (e) => {
+                                                        if (e.key === 'Enter' || e.key === ' ') {
+                                                            const nextExpanded = expanded ? null : Number(a.id);
+                                                            setExpandedAnnouncementId(nextExpanded);
+                                                            if (nextExpanded && !a.read_by_current_user) {
+                                                                try {
+                                                                    await axios.post(`/api/announcements/${a.id}/read`);
+                                                                } catch {}
+                                                                setAnnouncements((cur) =>
+                                                                    cur.map((it) =>
+                                                                        Number(it.id) === Number(a.id) ? { ...it, read_by_current_user: true } : it,
+                                                                    ),
+                                                                );
+                                                            }
+                                                        }
+                                                    }}
+                                                    className="flex cursor-pointer items-start gap-2 py-2 hover:bg-gray-50 md:gap-4"
+                                                >
+                                                    <div className="flex-shrink-0 text-xs text-indigo-600 md:w-28 md:text-sm md:font-medium">
+                                                        {dateLabel}
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <div className="flex min-w-0 items-center justify-between">
+                                                            <div className="min-w-0 text-xs font-medium break-words break-all whitespace-normal text-gray-800 md:text-sm">
+                                                                <div className="break-words break-all">{a.title}</div>
+                                                            </div>
+                                                            {(() => {
+                                                                try {
+                                                                    const readByMe = Boolean(
+                                                                        a.read_by_current_user === true ||
+                                                                            a.readByCurrentUser === true ||
+                                                                            a.read_by_current_user === 1,
+                                                                    );
+                                                                    if (!readByMe) {
+                                                                        return (
+                                                                            <span className="ml-2 rounded bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">
+                                                                                New
+                                                                            </span>
+                                                                        );
+                                                                    }
+                                                                } catch {
+                                                                    return null;
+                                                                }
+                                                                return null;
+                                                            })()}
+                                                            {/* 投稿者の場合は編集・削除アイコンを表示 */}
+                                                            {auth && auth.user && Number(auth.user.id) === Number(a.user_id ?? a.user?.id) ? (
+                                                                <div className="ml-2 flex items-center gap-2">
+                                                                    <button
+                                                                        title="編集"
+                                                                        className="text-gray-600 hover:text-gray-900"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setEditingAnnouncement(a);
+                                                                        }}
+                                                                    >
+                                                                        <Edit className="h-4 w-4" />
+                                                                    </button>
+                                                                </div>
+                                                            ) : null}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                {expanded && (
+                                                    <div className="px-2 pt-1 pb-4 text-sm text-gray-700">
+                                                        <div>{renderContentWithLinks(a.content)}</div>
+                                                        {/* 削除は展開内のみ表示（誤操作防止） */}
+                                                        {auth && auth.user && Number(auth.user.id) === Number(a.user_id ?? a.user?.id) ? (
+                                                            <div className="mt-3 flex justify-end">
+                                                                <Button
+                                                                    variant="destructive"
+                                                                    size="sm"
+                                                                    onClick={async (e) => {
+                                                                        e.stopPropagation();
+                                                                        if (!confirm('本当に削除しますか？')) return;
+                                                                        try {
+                                                                            await axios.delete(`/api/announcements/${a.id}`);
+                                                                            setAnnouncements((cur) =>
+                                                                                cur.filter((it) => Number(it.id) !== Number(a.id)),
+                                                                            );
+                                                                            setToast({ message: 'お知らせを削除しました', type: 'success' });
+                                                                            setTimeout(() => setToast(null), 3000);
+                                                                        } catch {
+                                                                            setToast({ message: '削除に失敗しました', type: 'error' });
+                                                                            setTimeout(() => setToast(null), 3000);
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    <Trash className="mr-0 h-4 w-4" />
+                                                                </Button>
+                                                            </div>
+                                                        ) : null}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                            <div className="mt-2 text-xs text-muted-foreground" />
+                            <div className="mt-3 flex items-center justify-center">
+                                {totalAnnouncements === null ? (
+                                    <Button
+                                        variant="outline"
+                                        onClick={async () => {
+                                            const next = annPage + 1;
+                                            await loadAnnouncements(next, true);
+                                        }}
+                                        disabled={loadingMore}
+                                    >
+                                        {loadingMore ? '読み込み中...' : 'もっとみる'}
+                                    </Button>
+                                ) : announcements.length < (totalAnnouncements ?? 0) ? (
+                                    <Button
+                                        variant="outline"
+                                        onClick={async () => {
+                                            const next = annPage + 1;
+                                            await loadAnnouncements(next, true);
+                                        }}
+                                        disabled={loadingMore}
+                                    >
+                                        {loadingMore ? '読み込み中...' : 'もっとみる'}
+                                    </Button>
+                                ) : (
+                                    <div className="text-sm text-muted-foreground">これ以上、お知らせはありません</div>
+                                )}
+                            </div>
+                            <div className="my-3">
+                                {unreadPosts.length > 0 ? (
+                                    <div className="mb-3 rounded border border-gray-200 bg-yellow-50 p-3">
+                                        <p className="text-bold mb-2 text-sm">
+                                            <i className="fa-solid fa-triangle-exclamation mr-2"></i>未読の投稿があります
+                                        </p>
+                                        <ul className="space-y-1">
+                                            {unreadPosts.map((p) => (
+                                                <li key={p.id}>
+                                                    <button
+                                                        onClick={() => (window.location.href = route('posts.show', p.id) as unknown as string)}
+                                                        className="w-full truncate text-left text-sm text-sky-600 hover:underline"
+                                                    >
+                                                        {'#' + p.id + ' ' + (p.title || '（タイトルなし）')}
+                                                    </button>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                ) : null}
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
                 {/* シフトエリア */}
                 <div>
                     <Card>
@@ -1489,205 +1686,6 @@ export default function Dashboard() {
                         </Card>
                     </div>
                 )}
-
-                {/* お知らせエリア */}
-                <div className="my-6">
-                    <Card>
-                        <CardHeader className="flex-row items-center justify-between">
-                            <CardTitle>お知らせ</CardTitle>
-                            {canCreateAnnouncements && (
-                                <Button
-                                    onClick={() => {
-                                        setCreateOpen(true);
-                                    }}
-                                >
-                                    <Plus className="mr-0 h-4 w-4 sm:mr-2" />
-                                    <span className="hidden sm:inline">新規作成</span>
-                                </Button>
-                            )}
-                        </CardHeader>
-                        <CardContent>
-                            {announcements.length === 0 ? (
-                                <p>現在、新しいお知らせはありません。</p>
-                            ) : (
-                                <div>
-                                    {announcements.map((a) => {
-                                        const d = new Date(a.created_at || a.createdAt || Date.now());
-                                        const dateLabel = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(
-                                            d.getDate(),
-                                        ).padStart(2, '0')}`;
-                                        const expanded = expandedAnnouncementId === Number(a.id);
-                                        return (
-                                            <div key={a.id} className="border-b border-gray-100">
-                                                <div
-                                                    role="button"
-                                                    tabIndex={0}
-                                                    aria-expanded={expanded}
-                                                    onClick={async () => {
-                                                        const nextExpanded = expanded ? null : Number(a.id);
-                                                        setExpandedAnnouncementId(nextExpanded);
-                                                        if (nextExpanded && !a.read_by_current_user) {
-                                                            try {
-                                                                await axios.post(`/api/announcements/${a.id}/read`);
-                                                            } catch {}
-                                                            setAnnouncements((cur) =>
-                                                                cur.map((it) =>
-                                                                    Number(it.id) === Number(a.id) ? { ...it, read_by_current_user: true } : it,
-                                                                ),
-                                                            );
-                                                        }
-                                                    }}
-                                                    onKeyDown={async (e) => {
-                                                        if (e.key === 'Enter' || e.key === ' ') {
-                                                            const nextExpanded = expanded ? null : Number(a.id);
-                                                            setExpandedAnnouncementId(nextExpanded);
-                                                            if (nextExpanded && !a.read_by_current_user) {
-                                                                try {
-                                                                    await axios.post(`/api/announcements/${a.id}/read`);
-                                                                } catch {}
-                                                                setAnnouncements((cur) =>
-                                                                    cur.map((it) =>
-                                                                        Number(it.id) === Number(a.id) ? { ...it, read_by_current_user: true } : it,
-                                                                    ),
-                                                                );
-                                                            }
-                                                        }
-                                                    }}
-                                                    className="flex cursor-pointer items-start gap-2 py-2 hover:bg-gray-50 md:gap-4"
-                                                >
-                                                    <div className="flex-shrink-0 text-xs text-indigo-600 md:w-28 md:text-sm md:font-medium">
-                                                        {dateLabel}
-                                                    </div>
-                                                    <div className="flex-1">
-                                                        <div className="flex min-w-0 items-center justify-between">
-                                                            <div className="min-w-0 text-xs font-medium break-words break-all whitespace-normal text-gray-800 md:text-sm">
-                                                                <div className="break-words break-all">{a.title}</div>
-                                                            </div>
-                                                            {(() => {
-                                                                try {
-                                                                    const readByMe = Boolean(
-                                                                        a.read_by_current_user === true ||
-                                                                            a.readByCurrentUser === true ||
-                                                                            a.read_by_current_user === 1,
-                                                                    );
-                                                                    if (!readByMe) {
-                                                                        return (
-                                                                            <span className="ml-2 rounded bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">
-                                                                                New
-                                                                            </span>
-                                                                        );
-                                                                    }
-                                                                } catch {
-                                                                    return null;
-                                                                }
-                                                                return null;
-                                                            })()}
-                                                            {/* 投稿者の場合は編集・削除アイコンを表示 */}
-                                                            {auth && auth.user && Number(auth.user.id) === Number(a.user_id ?? a.user?.id) ? (
-                                                                <div className="ml-2 flex items-center gap-2">
-                                                                    <button
-                                                                        title="編集"
-                                                                        className="text-gray-600 hover:text-gray-900"
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            setEditingAnnouncement(a);
-                                                                        }}
-                                                                    >
-                                                                        <Edit className="h-4 w-4" />
-                                                                    </button>
-                                                                </div>
-                                                            ) : null}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                {expanded && (
-                                                    <div className="px-2 pt-1 pb-4 text-sm text-gray-700">
-                                                        <div>{renderContentWithLinks(a.content)}</div>
-                                                        {/* 削除は展開内のみ表示（誤操作防止） */}
-                                                        {auth && auth.user && Number(auth.user.id) === Number(a.user_id ?? a.user?.id) ? (
-                                                            <div className="mt-3 flex justify-end">
-                                                                <Button
-                                                                    variant="destructive"
-                                                                    size="sm"
-                                                                    onClick={async (e) => {
-                                                                        e.stopPropagation();
-                                                                        if (!confirm('本当に削除しますか？')) return;
-                                                                        try {
-                                                                            await axios.delete(`/api/announcements/${a.id}`);
-                                                                            setAnnouncements((cur) =>
-                                                                                cur.filter((it) => Number(it.id) !== Number(a.id)),
-                                                                            );
-                                                                            setToast({ message: 'お知らせを削除しました', type: 'success' });
-                                                                            setTimeout(() => setToast(null), 3000);
-                                                                        } catch {
-                                                                            setToast({ message: '削除に失敗しました', type: 'error' });
-                                                                            setTimeout(() => setToast(null), 3000);
-                                                                        }
-                                                                    }}
-                                                                >
-                                                                    <Trash className="mr-0 h-4 w-4" />
-                                                                </Button>
-                                                            </div>
-                                                        ) : null}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                            <div className="mt-2 text-xs text-muted-foreground" />
-                            <div className="mt-3 flex items-center justify-center">
-                                {totalAnnouncements === null ? (
-                                    <Button
-                                        variant="outline"
-                                        onClick={async () => {
-                                            const next = annPage + 1;
-                                            await loadAnnouncements(next, true);
-                                        }}
-                                        disabled={loadingMore}
-                                    >
-                                        {loadingMore ? '読み込み中...' : 'もっとみる'}
-                                    </Button>
-                                ) : announcements.length < (totalAnnouncements ?? 0) ? (
-                                    <Button
-                                        variant="outline"
-                                        onClick={async () => {
-                                            const next = annPage + 1;
-                                            await loadAnnouncements(next, true);
-                                        }}
-                                        disabled={loadingMore}
-                                    >
-                                        {loadingMore ? '読み込み中...' : 'もっとみる'}
-                                    </Button>
-                                ) : (
-                                    <div className="text-sm text-muted-foreground">これ以上、お知らせはありません</div>
-                                )}
-                            </div>
-                            <div className="my-3">
-                                {unreadPosts.length > 0 ? (
-                                    <div className="mb-3 rounded border border-gray-200 bg-yellow-50 p-3">
-                                        <p className="text-bold mb-2 text-sm">
-                                            <i className="fa-solid fa-triangle-exclamation mr-2"></i>未読の投稿があります
-                                        </p>
-                                        <ul className="space-y-1">
-                                            {unreadPosts.map((p) => (
-                                                <li key={p.id}>
-                                                    <button
-                                                        onClick={() => (window.location.href = route('posts.show', p.id) as unknown as string)}
-                                                        className="w-full truncate text-left text-sm text-sky-600 hover:underline"
-                                                    >
-                                                        {'#' + p.id + ' ' + (p.title || '（タイトルなし）')}
-                                                    </button>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                ) : null}
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
 
                 {/* Create Announcement Modal */}
                 {createOpen && (
