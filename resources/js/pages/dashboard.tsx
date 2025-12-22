@@ -1375,6 +1375,78 @@ export default function Dashboard() {
                             </div>
                         </CardHeader>
                         <CardContent>
+                            {/* 自分の休憩時間・外出時間（予定）を表示 */}
+                            {(() => {
+                                if (!auth?.user?.id) return null;
+                                const userId = Number(auth.user.id);
+                                const myShift = shifts.find((s) => Number(s.user?.id ?? s.user_id) === userId);
+                                if (!myShift) return null;
+
+                                const breaks = Array.isArray(myShift.breaks) ? myShift.breaks : [];
+                                if (breaks.length === 0) return null;
+
+                                // 休憩と外出に分類（予定のみ: status が 'actual' でないもの）
+                                const breakTimes = breaks.filter(
+                                    (b: any) =>
+                                        String(b.type || b.break_type || '').toLowerCase() === 'break' &&
+                                        String(b.status ?? '').toLowerCase() !== 'actual' &&
+                                        String(b.status ?? '').toLowerCase() !== 'absent',
+                                );
+                                const outingTimes = breaks.filter(
+                                    (b: any) =>
+                                        String(b.type || b.break_type || '').toLowerCase() === 'outing' &&
+                                        String(b.status ?? '').toLowerCase() !== 'actual' &&
+                                        String(b.status ?? '').toLowerCase() !== 'absent',
+                                );
+
+                                if (breakTimes.length === 0 && outingTimes.length === 0) return null;
+
+                                return (
+                                    <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3">
+                                        <div className="mb-2 text-sm font-medium text-blue-900">あなたの予定</div>
+
+                                        {/* 休憩時間 */}
+                                        {breakTimes.length > 0 && (
+                                            <div className="mb-2">
+                                                <div className="mb-1 text-xs font-medium text-blue-700">休憩時間（予定）</div>
+                                                <div className="space-y-1">
+                                                    {breakTimes.map((b: any, idx: number) => {
+                                                        const startTime = formatTime(b.start_time || b.break_start);
+                                                        const endTime = formatTime(b.end_time || b.break_end);
+                                                        return (
+                                                            <div key={idx} className="flex items-center gap-2 text-sm">
+                                                                <span className="text-blue-800">
+                                                                    {startTime} - {endTime}
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* 外出時間 */}
+                                        {outingTimes.length > 0 && (
+                                            <div>
+                                                <div className="mb-1 text-xs font-medium text-blue-700">外出時間（予定）</div>
+                                                <div className="space-y-1">
+                                                    {outingTimes.map((b: any, idx: number) => {
+                                                        const startTime = formatTime(b.start_time || b.break_start);
+                                                        const endTime = formatTime(b.end_time || b.break_end);
+                                                        return (
+                                                            <div key={idx} className="flex items-center gap-2 text-sm">
+                                                                <span className="text-blue-800">
+                                                                    {startTime} - {endTime}
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
                             {/* 注意書き：送迎申請ボタンが表示されている場合にのみ案内を表示 */}
                             {((auth && auth.user && (auth.user.has_car === 1 || auth.user.has_car === true)) || hasCarFlag) &&
                                 withinTransportWindow && (
