@@ -929,6 +929,7 @@ export default function MonthEditor({
                                                 const isSun = dt.getDay() === 0;
                                                 const isHoliday = (holidays || []).includes(d);
                                                 const textClass = isHoliday || isSun ? 'text-red-600' : isSat ? 'text-blue-600' : '';
+                                                const bgClass = isHoliday || isSun ? 'bg-red-50' : isSat ? 'bg-blue-50' : '';
                                                 const tDate = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
                                                 const today = new Date();
                                                 today.setHours(0, 0, 0, 0);
@@ -938,7 +939,7 @@ export default function MonthEditor({
                                                     <div
                                                         key={d}
                                                         data-date={d}
-                                                        className={`w-12 flex-shrink-0 border-r p-1 text-center ${isToday ? 'bg-green-100' : (accentClass ?? '')}`}
+                                                        className={`w-12 flex-shrink-0 border-r p-1 text-center ${isToday ? 'bg-green-100' : bgClass}`}
                                                     >
                                                         <div className="mb-1">
                                                             {(() => {
@@ -1017,7 +1018,7 @@ export default function MonthEditor({
                                             <div key={`row-${u.id}`} className="flex border-b" style={{ minHeight: '3rem' }}>
                                                 {visibleDays.map((d) => {
                                                     const cellVal = grid[u.id]?.[d] ?? '';
-                                                    const bgClass =
+                                                    const cellBgClass =
                                                         cellVal === 'day'
                                                             ? 'bg-yellow-100 text-yellow-800'
                                                             : cellVal === 'night'
@@ -1027,6 +1028,10 @@ export default function MonthEditor({
                                                                 : '';
                                                     // determine if this date is strictly before today (local) -> disable select
                                                     const dt = parseLocal(d);
+                                                    const isSat = dt.getDay() === 6;
+                                                    const isSun = dt.getDay() === 0;
+                                                    const isHoliday = (holidays || []).includes(d);
+                                                    const dayBgClass = isHoliday || isSun ? 'bg-red-50' : isSat ? 'bg-blue-50' : '';
                                                     const dayStart = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime();
                                                     const today = new Date();
                                                     today.setHours(0, 0, 0, 0);
@@ -1034,7 +1039,7 @@ export default function MonthEditor({
                                                     return (
                                                         <div
                                                             key={d}
-                                                            className="flex w-12 flex-shrink-0 items-center justify-center border-r p-1 text-center"
+                                                            className={`flex w-12 flex-shrink-0 items-center justify-center border-r p-1 text-center ${dayBgClass}`}
                                                         >
                                                             <select
                                                                 value={cellVal}
@@ -1043,7 +1048,7 @@ export default function MonthEditor({
                                                                     setCell(u.id, d, val);
                                                                     queueSave(u.id, d, val);
                                                                 }}
-                                                                className={`w-full rounded border py-1 text-xs ${bgClass} ${isPast ? 'cursor-not-allowed opacity-60' : ''}`}
+                                                                className={`w-full rounded border py-1 text-xs ${cellBgClass} ${isPast ? 'cursor-not-allowed opacity-60' : ''}`}
                                                                 disabled={isPast}
                                                                 title={
                                                                     isPast
