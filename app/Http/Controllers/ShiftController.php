@@ -29,14 +29,17 @@ class ShiftController extends Controller
         // determine the month to display (from query param or current month)
         $month = $request->get('month') ? Carbon::parse($request->get('month')) : Carbon::now();
 
-        // load shifts for the display month only
+        // load shifts for 4 months starting from the selected month
+        $startDate = $month->copy()->startOfMonth();
+        $endDate = $month->copy()->addMonths(3)->endOfMonth();
+
         $shifts = Shift::query()
-            ->whereBetween('date', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
+            ->whereBetween('date', [$startDate, $endDate])
             ->get();
 
         // only include active users in the month editor (prefer position ordering then id)
         $users = User::select('id', 'name', 'position', 'preferred_week_days', 'has_car')->where('status', 'active')->orderBy('position')->orderBy('id')->get();
-        $holidays = Holiday::whereBetween('date', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
+        $holidays = Holiday::whereBetween('date', [$startDate, $endDate])
             ->pluck('date')
             ->map(function ($d) {
                 return Carbon::parse($d)->toDateString();
@@ -57,9 +60,9 @@ class ShiftController extends Controller
             }
         }
 
-        // load shift_details for the month with user relation
+        // load shift_details for 4 months with user relation
         $shiftDetails = ShiftDetail::with('user')
-            ->whereBetween('date', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
+            ->whereBetween('date', [$startDate, $endDate])
             ->get()
             ->map(function ($sd) {
                 $arr = $sd->toArray();
@@ -1012,8 +1015,9 @@ class ShiftController extends Controller
             return response()->json(['message' => '無効な月です。'], 400);
         }
 
+        // Process 4 months starting from the selected month
         $monthStart = $month->copy()->startOfMonth();
-        $monthEnd = $month->copy()->endOfMonth();
+        $monthEnd = $month->copy()->addMonths(3)->endOfMonth();
 
         $users = User::where('status', 'active')
             ->whereNotNull('employment_start_date')
@@ -1113,6 +1117,13 @@ class ShiftController extends Controller
                 foreach ($period as $dt) {
                     $ymd = $dt->format('Y-m-d');
                     $wk = (int) $dt->format('w'); // 0 (Sun) - 6 (Sat)
+
+                    // Skip past dates (including today) - only register future dates
+                    $dateCarbon = Carbon::parse($ymd);
+                    if ($dateCarbon->lte(Carbon::now()->startOfDay())) {
+                        $skipped++;
+                        continue;
+                    }
 
                     // Skip if this weekday is a preferred holiday
                     if (in_array($wk, $preferredHolidayWeekdays, true)) {

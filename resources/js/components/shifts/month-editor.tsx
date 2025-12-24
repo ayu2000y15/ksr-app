@@ -82,16 +82,24 @@ export default function MonthEditor({
         }
     }, [days]);
 
-    // compute days for the currently displayed month
+    // compute days for 4 months starting from the currently displayed month
     const visibleDays = useMemo(() => {
         const pad = (n: number) => String(n).padStart(2, '0');
-        const year = currentYear;
-        const month = currentMonth; // 0-11
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
         const out: string[] = [];
-        for (let d = 1; d <= daysInMonth; d++) {
-            const dt = new Date(year, month, d);
-            out.push(`${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`);
+        // generate days for 4 consecutive months
+        for (let monthOffset = 0; monthOffset < 4; monthOffset++) {
+            let y = currentYear;
+            let m = currentMonth + monthOffset;
+            // handle year overflow
+            while (m > 11) {
+                y += 1;
+                m -= 12;
+            }
+            const daysInMonth = new Date(y, m + 1, 0).getDate();
+            for (let d = 1; d <= daysInMonth; d++) {
+                const dt = new Date(y, m, d);
+                out.push(`${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`);
+            }
         }
         return out;
     }, [currentYear, currentMonth]);
@@ -305,10 +313,11 @@ export default function MonthEditor({
 
     const handlePrev = () => {
         let ty = currentYear;
-        let tm = currentMonth - 1;
-        if (tm < 0) {
+        let tm = currentMonth - 4;
+        // handle year underflow
+        while (tm < 0) {
             ty -= 1;
-            tm = 11;
+            tm += 12;
         }
         const monthParam = `${ty}-${pad(tm + 1)}-01`;
         if (onMonthChange) return onMonthChange(monthParam);
@@ -317,10 +326,11 @@ export default function MonthEditor({
 
     const handleNext = () => {
         let ty = currentYear;
-        let tm = currentMonth + 1;
-        if (tm > 11) {
+        let tm = currentMonth + 4;
+        // handle year overflow
+        while (tm > 11) {
             ty += 1;
-            tm = 0;
+            tm -= 12;
         }
         const monthParam = `${ty}-${pad(tm + 1)}-01`;
         if (onMonthChange) return onMonthChange(monthParam);
@@ -630,13 +640,22 @@ export default function MonthEditor({
             <div className="p-2">
                 <div className="mb-2 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                        <Button size="sm" onClick={handlePrev} aria-label="前の月">
+                        <Button size="sm" onClick={handlePrev} aria-label="前の4ヶ月">
                             <ChevronLeft className="h-4 w-4" />
                         </Button>
                         <div className="text-sm font-medium">
-                            {currentYear}年{currentMonth + 1}月
+                            {currentYear}年{currentMonth + 1}月 〜{' '}
+                            {(() => {
+                                let endYear = currentYear;
+                                let endMonth = currentMonth + 3;
+                                while (endMonth > 11) {
+                                    endYear += 1;
+                                    endMonth -= 12;
+                                }
+                                return `${endYear}年${endMonth + 1}月`;
+                            })()}
                         </div>
-                        <Button size="sm" onClick={handleNext} aria-label="次の月">
+                        <Button size="sm" onClick={handleNext} aria-label="次の4ヶ月">
                             <ChevronRight className="h-4 w-4" />
                         </Button>
                     </div>
