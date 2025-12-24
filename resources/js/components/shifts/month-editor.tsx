@@ -182,6 +182,50 @@ export default function MonthEditor({
         return visibleDays.reduce((acc, d) => acc + (source[d] === 'day' || source[d] === 'night' ? 1 : 0), 0);
     };
 
+    // Calculate monthly attendance counts (16th to 15th) for each of the 4 months
+    const getMonthlyAttendanceCounts = (u: { id: number; [k: string]: unknown }) => {
+        const es = existingShifts as Record<string, Record<string, Cell>> | undefined;
+        const source = es?.[String(u.id)] ?? es?.[u.id];
+        if (!source) return [];
+
+        const counts: Array<{ label: string; count: number }> = [];
+
+        // Generate 4 periods starting from previous month's 16th
+        for (let i = 0; i < 4; i++) {
+            let y = currentYear;
+            let m = currentMonth + i;
+            while (m > 11) {
+                y += 1;
+                m -= 12;
+            }
+
+            // Period is from 16th of previous month to 15th of current month
+            let prevY = y;
+            let prevM = m - 1;
+            if (prevM < 0) {
+                prevY -= 1;
+                prevM = 11;
+            }
+
+            const startDate = `${prevY}-${pad(prevM + 1)}-16`;
+            const endDate = `${y}-${pad(m + 1)}-15`;
+
+            let count = 0;
+            for (const [date, val] of Object.entries(source)) {
+                if (date >= startDate && date <= endDate && (val === 'day' || val === 'night')) {
+                    count++;
+                }
+            }
+
+            counts.push({
+                label: `${m + 1}月`,
+                count,
+            });
+        }
+
+        return counts;
+    };
+
     const scrolledToTodayRef = useRef(false);
     // ref to store ongoing animation frames so we can cancel them
     const scrollAnimRef = useRef<Record<string, number | null>>({});
@@ -778,7 +822,7 @@ export default function MonthEditor({
                     </div>
                 </div>
 
-                <div className="relative" style={{ height: 'calc(100vh - 200px)' }}>
+                <div className="relative" style={{ height: 'calc(100vh - 100px)' }}>
                     {/* debug badge removed */}
                     <div
                         className="absolute top-0 left-0 z-40 hidden h-full items-center md:flex"
@@ -830,7 +874,6 @@ export default function MonthEditor({
                             <div
                                 className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden"
                                 style={{
-                                    height: 'calc(100% - 160px)',
                                     scrollbarWidth: 'none',
                                     msOverflowStyle: 'none',
                                 }}
@@ -843,35 +886,51 @@ export default function MonthEditor({
                                     }
                                 }}
                             >
-                                {users.map((u) => (
-                                    <div key={`user-${u.id}`} className="flex h-12 items-center border-b bg-white p-2" style={{ maxWidth: '12rem' }}>
-                                        <input
-                                            type="checkbox"
-                                            checked={selectedUsers.has(u.id)}
-                                            onChange={() => toggleUserSelection(u.id)}
-                                            aria-label={`ユーザー ${u.name} を選択`}
-                                            className="mr-2 hidden flex-shrink-0 md:inline-block"
-                                        />
-                                        <span className="flex items-center gap-1 truncate text-sm">
-                                            <span className="inline-block w-3 flex-shrink-0">
-                                                {u.has_car && (
-                                                    <Car className="h-3 w-3 rounded-full bg-violet-50 text-violet-600 shadow-sm" title="車あり" />
-                                                )}
-                                            </span>
-                                            <span className="inline-block w-3 text-right font-mono text-sm md:w-6">{u.position}</span>
+                                {users.map((u) => {
+                                    const monthlyCounts = getMonthlyAttendanceCounts(u);
+                                    return (
+                                        <div key={`user-${u.id}`} className="flex h-12 flex-col border-b bg-white p-2" style={{ maxWidth: '12rem' }}>
+                                            {/* 1行目: ユーザー名 */}
+                                            <div className="flex items-center">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedUsers.has(u.id)}
+                                                    onChange={() => toggleUserSelection(u.id)}
+                                                    aria-label={`ユーザー ${u.name} を選択`}
+                                                    className="mr-2 hidden flex-shrink-0 md:inline-block"
+                                                />
+                                                <span className="flex items-center gap-1 truncate text-sm">
+                                                    <span className="inline-block w-3 flex-shrink-0">
+                                                        {u.has_car && (
+                                                            <Car
+                                                                className="h-3 w-3 rounded-full bg-violet-50 text-violet-600 shadow-sm"
+                                                                title="車あり"
+                                                            />
+                                                        )}
+                                                    </span>
+                                                    <span className="inline-block w-3 text-right font-mono text-sm md:w-6">{u.position}</span>
 
-                                            <Link
-                                                href={route('users.show', { user: u.id })}
-                                                className="truncate text-sm text-blue-600 hover:underline"
-                                                title={`ユーザー詳細: ${u.name}`}
-                                            >
-                                                <span className="md:hidden">{u.name.split(' ')[0] || u.name}</span>
-                                                <span className="hidden md:inline">{u.name}</span>
-                                            </Link>
-                                            <span className="text-xs text-muted-foreground md:ml-2">({String(getAttendanceCount(u))})</span>
-                                        </span>
-                                    </div>
-                                ))}
+                                                    <Link
+                                                        href={route('users.show', { user: u.id })}
+                                                        className="truncate text-sm text-blue-600 hover:underline"
+                                                        title={`ユーザー詳細: ${u.name}`}
+                                                    >
+                                                        <span className="md:hidden">{u.name.split(' ')[0] || u.name}</span>
+                                                        <span className="hidden md:inline">{u.name}</span>
+                                                    </Link>
+                                                </span>
+                                            </div>
+                                            {/* 2行目: 月別出勤日数 */}
+                                            <div className="mt-1 flex gap-2 text-[9px] text-muted-foreground">
+                                                {monthlyCounts.map((mc, idx) => (
+                                                    <span key={idx} className="whitespace-nowrap">
+                                                        {mc.label} ({mc.count})
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
 
                             {/* 左側統計フッター */}
@@ -996,9 +1055,9 @@ export default function MonthEditor({
                                     </div>
 
                                     {/* データ行 */}
-                                    <div style={{ minHeight: 'calc(100vh - 520px)' }}>
+                                    <div style={{ minHeight: 'calc(100vh - 300px)' }}>
                                         {users.map((u) => (
-                                            <div key={`row-${u.id}`} className="flex h-12 border-b">
+                                            <div key={`row-${u.id}`} className="flex border-b" style={{ minHeight: '3rem' }}>
                                                 {visibleDays.map((d) => {
                                                     const cellVal = grid[u.id]?.[d] ?? '';
                                                     const bgClass =
