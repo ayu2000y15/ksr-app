@@ -554,7 +554,7 @@ export default function MonthEditor({
             });
             const msg = res?.data?.message ?? '自動登録が完了しました。';
             setToast({ message: msg, type: 'success' });
-            
+
             setSelectedDates(new Set());
             setSelectedUsers(new Set());
 

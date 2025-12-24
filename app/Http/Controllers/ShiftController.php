@@ -1273,13 +1273,29 @@ class ShiftController extends Controller
                     } else {
                         $s = strtolower(trim((string) $wk));
                         $map = [
-                            'sun' => 0, 'sunday' => 0, '日' => 0,
-                            'mon' => 1, 'monday' => 1, '月' => 1,
-                            'tue' => 2, 'tues' => 2, 'tuesday' => 2, '火' => 2,
-                            'wed' => 3, 'wednesday' => 3, '水' => 3,
-                            'thu' => 4, 'thurs' => 4, 'thursday' => 4, '木' => 4,
-                            'fri' => 5, 'friday' => 5, '金' => 5,
-                            'sat' => 6, 'saturday' => 6, '土' => 6,
+                            'sun' => 0,
+                            'sunday' => 0,
+                            '日' => 0,
+                            'mon' => 1,
+                            'monday' => 1,
+                            '月' => 1,
+                            'tue' => 2,
+                            'tues' => 2,
+                            'tuesday' => 2,
+                            '火' => 2,
+                            'wed' => 3,
+                            'wednesday' => 3,
+                            '水' => 3,
+                            'thu' => 4,
+                            'thurs' => 4,
+                            'thursday' => 4,
+                            '木' => 4,
+                            'fri' => 5,
+                            'friday' => 5,
+                            '金' => 5,
+                            'sat' => 6,
+                            'saturday' => 6,
+                            '土' => 6,
                         ];
                         if (isset($map[$s])) $wkInt = $map[$s];
                     }
