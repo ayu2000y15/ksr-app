@@ -1209,6 +1209,189 @@ class ShiftController extends Controller
     }
 
     /**
+     * Auto-register shifts for selected users and dates
+     * Expects POST params: user_ids (array), dates (array)
+     */
+    public function autoRegisterSelected(Request $request)
+    {
+        if (Auth::user()->hasRole('システム管理者')) {
+            // bypass
+        } else {
+            $this->authorize('create', Shift::class);
+        }
+
+        $data = $request->validate([
+            'user_ids' => 'required|array',
+            'user_ids.*' => 'integer|exists:users,id',
+            'dates' => 'required|array',
+            'dates.*' => 'date',
+        ]);
+
+        $userIds = $data['user_ids'];
+        $dates = array_map(function ($d) {
+            return Carbon::parse($d)->toDateString();
+        }, $data['dates']);
+
+        // Load users
+        $users = User::whereIn('id', $userIds)->where('status', 'active')->get();
+
+        // Load holidays
+        $minDate = min($dates);
+        $maxDate = max($dates);
+        $holidays = Holiday::whereBetween('date', [$minDate, $maxDate])
+            ->pluck('date')
+            ->map(function ($d) {
+                return Carbon::parse($d)->toDateString();
+            })
+            ->toArray();
+
+        // Load default shifts
+        $defaultShifts = DefaultShift::all();
+
+        $created = 0;
+        $skipped = 0;
+
+        \DB::transaction(function () use ($users, $dates, $holidays, $defaultShifts, &$created, &$skipped) {
+            foreach ($users as $u) {
+                // Parse preferred weekly holidays
+                $prefsRaw = $u->preferred_week_days ?? [];
+                if (!is_array($prefsRaw) && is_string($prefsRaw)) {
+                    $decoded = json_decode($prefsRaw, true);
+                    $prefs = is_array($decoded) ? $decoded : [$prefsRaw];
+                } elseif (is_array($prefsRaw)) {
+                    $prefs = $prefsRaw;
+                } else {
+                    $prefs = (array) $prefsRaw;
+                }
+
+                // Normalize preferred weekdays to integers (0-6)
+                $preferredHolidayWeekdays = [];
+                foreach ($prefs as $wk) {
+                    $wkInt = null;
+                    if (is_numeric($wk)) {
+                        $wkInt = (int) $wk;
+                    } else {
+                        $s = strtolower(trim((string) $wk));
+                        $map = [
+                            'sun' => 0, 'sunday' => 0, '日' => 0,
+                            'mon' => 1, 'monday' => 1, '月' => 1,
+                            'tue' => 2, 'tues' => 2, 'tuesday' => 2, '火' => 2,
+                            'wed' => 3, 'wednesday' => 3, '水' => 3,
+                            'thu' => 4, 'thurs' => 4, 'thursday' => 4, '木' => 4,
+                            'fri' => 5, 'friday' => 5, '金' => 5,
+                            'sat' => 6, 'saturday' => 6, '土' => 6,
+                        ];
+                        if (isset($map[$s])) $wkInt = $map[$s];
+                    }
+                    if ($wkInt !== null) {
+                        $preferredHolidayWeekdays[] = $wkInt;
+                    }
+                }
+
+                foreach ($dates as $ymd) {
+                    $dt = Carbon::parse($ymd);
+                    $wk = $dt->dayOfWeek; // 0 (Sun) - 6 (Sat)
+
+                    // Skip past dates (including today)
+                    if ($dt->lte(Carbon::now()->startOfDay())) {
+                        $skipped++;
+                        continue;
+                    }
+
+                    // Skip if this weekday is a preferred holiday
+                    if (in_array($wk, $preferredHolidayWeekdays, true)) {
+                        $skipped++;
+                        continue;
+                    }
+
+                    // Check if employment period includes this date
+                    $empStart = $u->employment_start_date ? Carbon::parse($u->employment_start_date) : null;
+                    $empEnd = $u->employment_end_date ? Carbon::parse($u->employment_end_date) : null;
+
+                    if ($empStart && $dt->lt($empStart)) {
+                        $skipped++;
+                        continue;
+                    }
+                    if ($empEnd && $dt->gt($empEnd)) {
+                        $skipped++;
+                        continue;
+                    }
+
+                    // Check if a shift already exists
+                    $existingShift = Shift::where('user_id', $u->id)
+                        ->whereRaw('date(date) = ?', [$ymd])
+                        ->first();
+
+                    if ($existingShift) {
+                        $skipped++;
+                        continue;
+                    }
+
+                    // Create a 'day' shift
+                    $shift = Shift::create([
+                        'user_id' => $u->id,
+                        'date' => $ymd,
+                        'shift_type' => 'day',
+                    ]);
+
+                    // Determine default shift times
+                    $startTime = null;
+                    $endTime = null;
+
+                    $useDefaultShift = false;
+                    if (
+                        (!$u->default_start_time || $u->default_start_time === '00:00' || $u->default_start_time === '00:00:00') &&
+                        (!$u->default_end_time || $u->default_end_time === '00:00' || $u->default_end_time === '00:00:00')
+                    ) {
+                        $useDefaultShift = true;
+                    }
+
+                    if ($useDefaultShift) {
+                        $isHoliday = in_array($ymd, $holidays, true);
+                        $patternType = $isHoliday ? 'holiday' : 'weekday';
+
+                        foreach ($defaultShifts as $ds) {
+                            if (
+                                (int)$ds->day_of_week === $wk &&
+                                $ds->shift_type === 'day' &&
+                                $ds->type === $patternType
+                            ) {
+                                $startTime = $ds->start_time ?? null;
+                                $endTime = $ds->end_time ?? null;
+                                break;
+                            }
+                        }
+
+                        if (!$startTime || !$endTime) {
+                            $startTime = '09:00';
+                            $endTime = '18:00';
+                        }
+                    } else {
+                        $startTime = $u->default_start_time ?? '09:00';
+                        $endTime = $u->default_end_time ?? '18:00';
+                    }
+
+                    ShiftDetail::create([
+                        'shift_id' => $shift->id,
+                        'user_id' => $u->id,
+                        'date' => $ymd,
+                        'type' => 'work',
+                        'status' => 'scheduled',
+                        'start_time' => $ymd . ' ' . $startTime,
+                        'end_time' => $ymd . ' ' . $endTime,
+                    ]);
+
+                    $created++;
+                }
+            }
+        });
+
+        return response()->json([
+            'message' => "自動登録が完了しました。作成: {$created} 件、スキップ: {$skipped} 件"
+        ], 200);
+    }
+
+    /**
      * Toggle publish status for a specific date
      * Expects POST param: date=YYYY-MM-DD
      */

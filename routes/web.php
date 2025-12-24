@@ -174,6 +174,9 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
     // Auto-register shifts for users based on their employment period
     Route::post('/shifts/auto-register-employment-period', [App\Http\Controllers\ShiftController::class, 'autoRegisterEmploymentPeriod'])->name('shifts.auto_register_employment_period');
 
+    // Auto-register shifts for selected users and dates
+    Route::post('/shifts/auto-register-selected', [App\Http\Controllers\ShiftController::class, 'autoRegisterSelected'])->name('shifts.auto_register_selected');
+
     // Toggle publish status for a specific date
     Route::post('/shifts/toggle-publish-date', [App\Http\Controllers\ShiftController::class, 'togglePublishDate'])->name('shifts.toggle_publish_date');
 

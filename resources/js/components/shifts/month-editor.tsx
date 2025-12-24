@@ -535,89 +535,46 @@ export default function MonthEditor({
         }
     };
 
-    const bulkSetSelectedToDay = () => {
+    const bulkAutoRegisterSelected = async () => {
         if (selectedDates.size === 0 || selectedUsers.size === 0) {
             setToast({ message: 'ユーザーと日付の両方を選択してください', type: 'info' });
             return;
         }
 
-        let setCount = 0;
-        selectedUsers.forEach((userId) => {
-            // Find user object to check preferred_week_days
-            const user = sortedUsers.find((u) => u.id === userId);
-            const preferredWeekDays = user?.preferred_week_days;
+        const ok = window.confirm(
+            '選択したユーザーと日付に対して自動登録を実行します。\n固定休希望と基本出勤時間が考慮され、すでに登録済みのシフトは変更されません。\nよろしいですか？',
+        );
+        if (!ok) return;
 
-            // Normalize preferred weekdays to integers (0-6)
-            const preferredHolidayWeekdays: number[] = [];
-            if (Array.isArray(preferredWeekDays)) {
-                preferredWeekDays.forEach((wk: any) => {
-                    let wkInt: number | null = null;
-                    if (typeof wk === 'number') {
-                        wkInt = wk;
-                    } else if (typeof wk === 'string') {
-                        const s = wk.toLowerCase().trim();
-                        const map: Record<string, number> = {
-                            sun: 0,
-                            sunday: 0,
-                            日: 0,
-                            mon: 1,
-                            monday: 1,
-                            月: 1,
-                            tue: 2,
-                            tues: 2,
-                            tuesday: 2,
-                            火: 2,
-                            wed: 3,
-                            wednesday: 3,
-                            水: 3,
-                            thu: 4,
-                            thurs: 4,
-                            thursday: 4,
-                            木: 4,
-                            fri: 5,
-                            friday: 5,
-                            金: 5,
-                            sat: 6,
-                            saturday: 6,
-                            土: 6,
-                        };
-                        if (map[s] !== undefined) wkInt = map[s];
-                    }
-                    if (wkInt !== null) {
-                        preferredHolidayWeekdays.push(wkInt);
-                    }
-                });
-            }
-
-            selectedDates.forEach((d) => {
-                // Check if this date falls on a user's preferred holiday weekday
-                const dateObj = parseLocal(d);
-                const weekday = dateObj.getDay(); // 0 (Sun) - 6 (Sat)
-
-                // Skip if this weekday is a preferred holiday
-                if (preferredHolidayWeekdays.includes(weekday)) {
-                    return;
-                }
-
-                // only set to 'day' if the cell is currently empty (do not overwrite existing assignments)
-                const cur = gridRef.current?.[userId]?.[d] ?? '';
-                if (cur === '') {
-                    setCell(userId, d, 'day');
-                    queueSave(userId, d, 'day');
-                    setCount++;
-                }
+        try {
+            setSaving(true);
+            const res = await axios.post(route('shifts.auto_register_selected'), {
+                user_ids: Array.from(selectedUsers),
+                dates: Array.from(selectedDates),
             });
-        });
+            const msg = res?.data?.message ?? '自動登録が完了しました。';
+            setToast({ message: msg, type: 'success' });
+            
+            setSelectedDates(new Set());
+            setSelectedUsers(new Set());
 
-        setToast({ message: `${setCount}件を昼に設定しました`, type: 'success' });
-        setSelectedDates(new Set());
-        setSelectedUsers(new Set());
-
-        // Reload page to reflect changes
-        setTimeout(() => {
-            const monthParam = `${currentYear}-${pad(currentMonth + 1)}-01`;
-            router.get(route('shifts.index', { month: monthParam }), {}, { preserveState: false, preserveScroll: false });
-        }, 500);
+            // Reload page to reflect changes
+            setTimeout(() => {
+                const monthParam = `${currentYear}-${pad(currentMonth + 1)}-01`;
+                router.get(route('shifts.index', { month: monthParam }), {}, { preserveState: false, preserveScroll: false });
+            }, 500);
+        } catch (err: unknown) {
+            let msg = '自動登録に失敗しました';
+            try {
+                const j = err as { response?: { data?: { message?: string } } };
+                if (j?.response?.data?.message) msg = j.response.data.message;
+            } catch {
+                // ignore extraction errors
+            }
+            setToast({ message: msg, type: 'error' });
+        } finally {
+            setSaving(false);
+        }
     };
 
     const bulkClearSelected = () => {
@@ -777,11 +734,11 @@ export default function MonthEditor({
                         </Button>
                         <Button
                             size="sm"
-                            onClick={bulkSetSelectedToDay}
-                            disabled={selectedDates.size === 0 || selectedUsers.size === 0}
-                            aria-label="選択日を昼に"
+                            onClick={bulkAutoRegisterSelected}
+                            disabled={selectedDates.size === 0 || selectedUsers.size === 0 || saving}
+                            aria-label="選択日を自動登録"
                         >
-                            選択日を昼に ({selectedUsers.size}人 × {selectedDates.size}日)
+                            選択日を自動登録 ({selectedUsers.size}人 × {selectedDates.size}日)
                         </Button>
                         <Button
                             size="sm"
@@ -806,8 +763,8 @@ export default function MonthEditor({
                                 過去日にのみ表示されます。確定ボタンを押せば勤務時間と休憩時間が確定され、統計情報が正しく計算されます。
                             </div>
                             <div className="mt-1">
-                                ・<strong> 「選択日を昼に」ボタン</strong>:
-                                ユーザーと日付のチェックボックスで選択した組み合わせを昼に設定します。すでに登録済みの予定は変更されません。
+                                ・<strong> 「選択日を自動登録」ボタン</strong>:
+                                ユーザーと日付のチェックボックスで選択した組み合わせに自動登録を適用します。固定休希望と基本出勤時間が考慮され、すでに登録済みの予定は変更されません。
                             </div>
                             <div className="mt-1">
                                 ・<strong> 「自動登録」ボタン</strong>:
