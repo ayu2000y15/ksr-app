@@ -53,8 +53,7 @@ export default function EditUserPage() {
         employment_notes: user.employment_notes || '',
         profile_image: null as File | null,
         remove_profile_image: false,
-        new_rental_items: [] as number[], // 新規貸出するアイテムID
-        new_rental_item_numbers: {} as Record<number, string>, // 新規貸出アイテムの番号
+        new_rental_items: [] as Array<{ rental_item_id: number; item_number: string; temp_id: string }>, // 新規貸出するアイテム（複数可）
         return_rental_items: [] as number[], // 返却するアイテムID
     });
 
@@ -558,67 +557,87 @@ export default function EditUserPage() {
                                         {/* 新規貸出可能なアイテム */}
                                         <div className="mt-4">
                                             <div className="mb-2 text-sm font-medium text-gray-700">新規貸出</div>
-                                            <div className="space-y-3 rounded-md border p-4">
-                                                {rentalItems
-                                                    .filter((item: any) => !currentRentalItemIds.includes(item.id))
-                                                    .map((item: any) => (
+                                            <div className="space-y-4 rounded-md border p-4">
+                                                {rentalItems.map((item: any) => {
+                                                    const addedItems = data.new_rental_items.filter((r) => r.rental_item_id === item.id);
+
+                                                    return (
                                                         <div key={item.id} className="space-y-2">
-                                                            <div className="flex items-center space-x-2">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    id={`rental-item-${item.id}`}
-                                                                    checked={data.new_rental_items.includes(item.id)}
-                                                                    onChange={(e) => {
-                                                                        if (e.target.checked) {
-                                                                            setData('new_rental_items', [...data.new_rental_items, item.id]);
-                                                                        } else {
-                                                                            setData(
-                                                                                'new_rental_items',
-                                                                                data.new_rental_items.filter((id: number) => id !== item.id),
-                                                                            );
-                                                                            // 番号もクリア
-                                                                            const newNumbers = { ...data.new_rental_item_numbers };
-                                                                            delete newNumbers[item.id];
-                                                                            setData('new_rental_item_numbers', newNumbers);
-                                                                        }
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="flex-1">
+                                                                    <span className="text-sm font-medium text-gray-700">
+                                                                        {item.name}
+                                                                        {item.description && (
+                                                                            <span className="ml-2 text-xs text-gray-500">({item.description})</span>
+                                                                        )}
+                                                                    </span>
+                                                                </div>
+                                                                <Button
+                                                                    type="button"
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    onClick={() => {
+                                                                        const tempId = `temp_${Date.now()}_${Math.random()}`;
+                                                                        setData('new_rental_items', [
+                                                                            ...data.new_rental_items,
+                                                                            {
+                                                                                rental_item_id: item.id,
+                                                                                item_number: '',
+                                                                                temp_id: tempId,
+                                                                            },
+                                                                        ]);
                                                                     }}
-                                                                    className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                                                                />
-                                                                <label
-                                                                    htmlFor={`rental-item-${item.id}`}
-                                                                    className="cursor-pointer text-sm font-medium text-gray-700"
                                                                 >
-                                                                    {item.name}
-                                                                    {item.description && (
-                                                                        <span className="ml-2 text-xs text-gray-500">({item.description})</span>
-                                                                    )}
-                                                                </label>
+                                                                    + 追加
+                                                                </Button>
                                                             </div>
-                                                            {data.new_rental_items.includes(item.id) && (
-                                                                <div className="ml-6 flex items-center gap-2">
-                                                                    <Label htmlFor={`rental-number-${item.id}`} className="text-xs">
-                                                                        番号:
-                                                                    </Label>
-                                                                    <Input
-                                                                        id={`rental-number-${item.id}`}
-                                                                        type="text"
-                                                                        placeholder="例: A-001"
-                                                                        value={data.new_rental_item_numbers[item.id] || ''}
-                                                                        onChange={(e) => {
-                                                                            setData('new_rental_item_numbers', {
-                                                                                ...data.new_rental_item_numbers,
-                                                                                [item.id]: e.target.value,
-                                                                            });
-                                                                        }}
-                                                                        className="h-8 max-w-[200px] text-sm"
-                                                                    />
+
+                                                            {addedItems.length > 0 && (
+                                                                <div className="ml-6 space-y-2">
+                                                                    {addedItems.map((addedItem, idx) => (
+                                                                        <div
+                                                                            key={addedItem.temp_id}
+                                                                            className="flex items-center gap-2 rounded-md border border-gray-200 bg-gray-50 p-2"
+                                                                        >
+                                                                            <Label className="text-xs">番号:</Label>
+                                                                            <Input
+                                                                                type="text"
+                                                                                placeholder="例: A-001"
+                                                                                value={addedItem.item_number}
+                                                                                onChange={(e) => {
+                                                                                    const updated = data.new_rental_items.map((r) =>
+                                                                                        r.temp_id === addedItem.temp_id
+                                                                                            ? { ...r, item_number: e.target.value }
+                                                                                            : r,
+                                                                                    );
+                                                                                    setData('new_rental_items', updated);
+                                                                                }}
+                                                                                className="h-8 max-w-[200px] text-sm"
+                                                                            />
+                                                                            <Button
+                                                                                type="button"
+                                                                                size="sm"
+                                                                                variant="ghost"
+                                                                                onClick={() => {
+                                                                                    setData(
+                                                                                        'new_rental_items',
+                                                                                        data.new_rental_items.filter(
+                                                                                            (r) => r.temp_id !== addedItem.temp_id,
+                                                                                        ),
+                                                                                    );
+                                                                                }}
+                                                                                className="text-red-500 hover:text-red-700"
+                                                                            >
+                                                                                削除
+                                                                            </Button>
+                                                                        </div>
+                                                                    ))}
                                                                 </div>
                                                             )}
                                                         </div>
-                                                    ))}
-                                                {rentalItems.filter((item: any) => !currentRentalItemIds.includes(item.id)).length === 0 && (
-                                                    <p className="text-sm text-gray-500">新規貸出可能なアイテムはありません</p>
-                                                )}
+                                                    );
+                                                })}
+                                                {rentalItems.length === 0 && <p className="text-sm text-gray-500">貸出可能なアイテムはありません</p>}
                                             </div>
                                         </div>
                                     </div>

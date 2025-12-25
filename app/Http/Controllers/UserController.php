@@ -773,11 +773,19 @@ class UserController extends Controller
         // 貸出物の更新処理
         // 新規貸出
         if ($request->has('new_rental_items')) {
-            $newRentalItemIds = $request->input('new_rental_items', []);
-            $newRentalItemNumbers = $request->input('new_rental_item_numbers', []);
+            $newRentalItems = $request->input('new_rental_items', []);
 
-            foreach ($newRentalItemIds as $rentalItemId) {
-                $itemNumber = isset($newRentalItemNumbers[$rentalItemId]) ? $newRentalItemNumbers[$rentalItemId] : null;
+            // 新しいデータ構造: [{ rental_item_id: number, item_number: string, temp_id: string }, ...]
+            foreach ($newRentalItems as $rentalItem) {
+                // 配列の場合（新しい構造）
+                if (is_array($rentalItem) && isset($rentalItem['rental_item_id'])) {
+                    $rentalItemId = $rentalItem['rental_item_id'];
+                    $itemNumber = $rentalItem['item_number'] ?? null;
+                } else {
+                    // 数値の場合（旧構造との互換性維持）
+                    $rentalItemId = $rentalItem;
+                    $itemNumber = null;
+                }
 
                 \App\Models\Rental::create([
                     'user_id' => $user->id,
