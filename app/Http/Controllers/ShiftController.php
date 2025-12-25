@@ -160,7 +160,7 @@ class ShiftController extends Controller
             $arr['start_time'] = $attrs['start_time'] ?? null;
             $arr['end_time'] = $attrs['end_time'] ?? null;
             $arr['date'] = $attrs['date'] ?? ($arr['date'] ?? null);
-            // attach shift_type and step_out from shifts table for the same user/date
+            // attach shift_type, step_out, meal_ticket, and position from shifts table for the same user/date
             try {
                 $rawDate = $attrs['date'] ?? ($arr['date'] ?? null);
                 $shiftDate = $rawDate ? Carbon::parse($rawDate)->toDateString() : null;
@@ -168,15 +168,18 @@ class ShiftController extends Controller
                     $shiftRec = Shift::where('user_id', $attrs['user_id'])->whereRaw('date(date) = ?', [$shiftDate])->first();
                     $arr['shift_type'] = $shiftRec ? $shiftRec->shift_type : null;
                     $arr['step_out'] = $shiftRec ? ($shiftRec->step_out ?? 0) : 0;
+                    $arr['meal_ticket'] = $shiftRec ? ($shiftRec->meal_ticket ?? 1) : 1;
                     $arr['position'] = $shiftRec ? ($shiftRec->position ?? null) : null;
                 } else {
                     $arr['shift_type'] = null;
                     $arr['step_out'] = 0;
+                    $arr['meal_ticket'] = 1;
                     $arr['position'] = null;
                 }
             } catch (\Exception $e) {
                 $arr['shift_type'] = null;
                 $arr['step_out'] = 0;
+                $arr['meal_ticket'] = 1;
             }
             return $arr;
         });

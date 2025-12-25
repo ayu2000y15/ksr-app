@@ -120,6 +120,7 @@ class ShiftApplicationController extends Controller
                 $shiftRec = $monthShifts->get($dateStr);
                 $shiftType = $shiftRec ? $shiftRec->shift_type : null;
                 $stepOut = $shiftRec ? ($shiftRec->step_out ?? 0) : 0;
+                $mealTicket = $shiftRec ? ($shiftRec->meal_ticket ?? 1) : 1;
 
                 return [
                     'date' => $dateStr,
@@ -127,6 +128,7 @@ class ShiftApplicationController extends Controller
                     'end_time' => $attrs['end_time'] ? Carbon::parse($attrs['end_time'])->format('H:i:s') : null,
                     'shift_type' => $shiftType,
                     'step_out' => $stepOut,
+                    'meal_ticket' => $mealTicket,
                 ];
             })->toArray();
 
