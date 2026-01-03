@@ -203,7 +203,10 @@ class ShiftController extends Controller
         if (Auth::user()->hasRole('システム管理者')) {
             // bypass
         } else {
-            $this->authorize('create', Shift::class);
+            // Allow users with shift.create or shift.view permission
+            if (!Auth::user()->hasPermissionTo('shift.create') && !Auth::user()->hasPermissionTo('shift.daily.view')) {
+                abort(403, 'この操作を行う権限がありません。');
+            }
         }
 
         $data = $request->validate([

@@ -167,6 +167,7 @@ export default function Daily() {
     const hasDailyManage = authPermissions.includes('shift.daily.manage');
     const canUpdateBreak = hasShiftUpdate || hasDailyManage || isSysAdmin;
     const canDeleteBreak = hasShiftDelete || hasDailyManage || isSysAdmin;
+    const canAddUser = hasShiftView || hasDailyManage || isSysAdmin;
 
     const [editingBreakId, setEditingBreakId] = useState<number | null>(null);
     const [editStartVal, setEditStartVal] = useState<string>('');
@@ -559,6 +560,7 @@ export default function Daily() {
                             }, 120);
                         }}
                         onDateChange={handleDateChange}
+                        canAddUser={canAddUser}
                     />
                 ) : (
                     <BreakTimeline

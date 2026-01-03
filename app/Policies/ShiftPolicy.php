@@ -40,7 +40,8 @@ class ShiftPolicy
     public function create(User $user)
     {
         try {
-            return $user->hasPermissionTo('shift.create');
+            // Allow users with shift.create or shift.view permission to create shifts
+            return $user->hasPermissionTo('shift.create') || $user->hasPermissionTo('shift.daily.view');
         } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist $e) {
             return false;
         }

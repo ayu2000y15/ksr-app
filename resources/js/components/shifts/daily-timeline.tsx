@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { usePage } from '@inertiajs/react';
+import { router, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -497,6 +497,11 @@ export default function DailyTimeline(props: {
             setShowAddUser(false);
             setSelectedUserId(null);
             setSelectedShiftType('day');
+
+            // Reload the page to reflect the changes
+            setTimeout(() => {
+                router.reload({ only: ['shiftDetails'] });
+            }, 500);
         } catch (err) {
             console.error('failed to add user shift', err);
             const msg =
