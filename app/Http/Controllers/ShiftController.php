@@ -186,11 +186,15 @@ class ShiftController extends Controller
 
         // (debug removed)
 
+        // 10分休憩のデータも取得
+        $shortBreaks = \App\Models\ShortBreak::where('date', $d)->get()->keyBy('user_id');
+
         return Inertia::render('shifts/daily', [
             'date' => $d,
             'shiftDetails' => $shiftDetails,
             // include active users so the daily page can show a user picker for quick-add
             'users' => User::select('id', 'name', 'status', 'position')->where('status', 'active')->orderBy('position')->orderBy('id')->get(),
+            'shortBreaks' => $shortBreaks,
             'queryParams' => $request->query() ?: null,
         ]);
     }

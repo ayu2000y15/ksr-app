@@ -168,6 +168,7 @@ export default function Daily() {
     const canUpdateBreak = hasShiftUpdate || hasDailyManage || isSysAdmin;
     const canDeleteBreak = hasShiftDelete || hasDailyManage || isSysAdmin;
     const canAddUser = hasShiftView || hasDailyManage || isSysAdmin;
+    const canManageShortBreak = hasDailyManage || isSysAdmin;
 
     const [editingBreakId, setEditingBreakId] = useState<number | null>(null);
     const [editStartVal, setEditStartVal] = useState<string>('');
@@ -561,6 +562,7 @@ export default function Daily() {
                         }}
                         onDateChange={handleDateChange}
                         canAddUser={canAddUser}
+                        canManageShortBreak={canManageShortBreak}
                     />
                 ) : (
                     <BreakTimeline
@@ -579,6 +581,7 @@ export default function Daily() {
                         }}
                         outingMode={breakType === 'outing'}
                         onDateChange={handleDateChange}
+                        canManageShortBreak={canManageShortBreak}
                     />
                 )}
 

@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button';
+import { usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -49,8 +50,27 @@ export default function BreakTimeline(props: {
     onDeleteBreak?: (id: number) => void;
     // optional callback when date navigation is requested (pass number of days to add/subtract)
     onDateChange?: (daysDelta: number) => void;
+    canManageShortBreak?: boolean;
 }) {
     const { date, shiftDetails = [], initialInterval = 15, breakType = 'planned', onCreateBreak, breaks = [], locked = false } = props;
+
+    // Get short breaks data from page props
+    const page = usePage();
+    const pageProps = (page && (page.props as any)) || {};
+    const shortBreaksData = pageProps.shortBreaks || {};
+    const [shortBreaks, setShortBreaks] = useState<Record<number, { start_time: string }>>({});
+
+    // Initialize shortBreaks from pageProps
+    useEffect(() => {
+        const breaks: Record<number, { start_time: string }> = {};
+        Object.keys(shortBreaksData).forEach((userId) => {
+            const userIdNum = Number(userId);
+            if (shortBreaksData[userId]) {
+                breaks[userIdNum] = { start_time: shortBreaksData[userId].start_time };
+            }
+        });
+        setShortBreaks(breaks);
+    }, [shortBreaksData]);
 
     const displayDate = date ? String(date).slice(0, 10).replace(/-/g, '/') : '';
     const displayDateWithWeekday = (() => {
@@ -282,6 +302,76 @@ export default function BreakTimeline(props: {
         };
     }, []);
 
+    // 10分休憩を記録する
+    const recordShortBreak = async (userId: number) => {
+        try {
+            const response = await axios.post(route('short_breaks.store'), {
+                user_id: userId,
+                date: date,
+            });
+
+            const now = new Date();
+            const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+
+            setShortBreaks((prev) => ({
+                ...prev,
+                [userId]: { start_time: timeStr },
+            }));
+
+            if (typeof window !== 'undefined' && window.dispatchEvent) {
+                window.dispatchEvent(
+                    new CustomEvent('ksr.shiftDetail.toast', {
+                        detail: { message: response.data.message || '10分休憩を記録しました', type: 'success' },
+                    }),
+                );
+            }
+        } catch (err) {
+            console.error('failed to record short break', err);
+            if (typeof window !== 'undefined' && window.dispatchEvent) {
+                window.dispatchEvent(
+                    new CustomEvent('ksr.shiftDetail.toast', {
+                        detail: { message: '10分休憩の記録に失敗しました', type: 'error' },
+                    }),
+                );
+            }
+        }
+    };
+
+    // 10分休憩を削除する
+    const deleteShortBreak = async (userId: number) => {
+        try {
+            await axios.delete(route('short_breaks.destroy'), {
+                data: {
+                    user_id: userId,
+                    date: date,
+                },
+            });
+
+            setShortBreaks((prev) => {
+                const updated = { ...prev };
+                delete updated[userId];
+                return updated;
+            });
+
+            if (typeof window !== 'undefined' && window.dispatchEvent) {
+                window.dispatchEvent(
+                    new CustomEvent('ksr.shiftDetail.toast', {
+                        detail: { message: '10分休憩を削除しました', type: 'success' },
+                    }),
+                );
+            }
+        } catch (err) {
+            console.error('failed to delete short break', err);
+            if (typeof window !== 'undefined' && window.dispatchEvent) {
+                window.dispatchEvent(
+                    new CustomEvent('ksr.shiftDetail.toast', {
+                        detail: { message: '10分休憩の削除に失敗しました', type: 'error' },
+                    }),
+                );
+            }
+        }
+    };
+
     // track external absent updates so break UI updates immediately when another component
     // (e.g. DailyTimeline) marks a shift as absent without the parent shifting props
     const [externalAbsentMap, setExternalAbsentMap] = useState<Record<number, boolean>>({});
@@ -428,7 +518,7 @@ export default function BreakTimeline(props: {
                 <div
                     ref={labelsRef}
                     onScroll={() => syncScrollFromLabels()}
-                    className="labels-scroll w-28 flex-shrink-0 sm:w-48"
+                    className="labels-scroll w-30 flex-shrink-0 sm:w-52"
                     style={{
                         overflowY: areaHeight ? 'auto' : undefined,
                         maxHeight: areaHeight ? `${areaHeight}px` : undefined,
@@ -466,6 +556,30 @@ export default function BreakTimeline(props: {
                                         </>
                                     );
                                 })()}
+                                {/* 10分休憩ボタン - shift.daily.manage権限がある場合のみ表示 */}
+                                {props.canManageShortBreak && it.user_id && (
+                                    <div className="ml-auto">
+                                        {shortBreaks[Number(it.user_id)] ? (
+                                            <button
+                                                type="button"
+                                                title="クリックで削除"
+                                                className="rounded bg-green-100 px-2 py-0.5 text-xs text-green-800 hover:bg-green-200"
+                                                onClick={() => deleteShortBreak(Number(it.user_id))}
+                                            >
+                                                {shortBreaks[Number(it.user_id)].start_time.substring(0, 5)}～
+                                            </button>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                title="10分休憩を記録"
+                                                className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-200"
+                                                onClick={() => recordShortBreak(Number(it.user_id))}
+                                            >
+                                                10分
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>

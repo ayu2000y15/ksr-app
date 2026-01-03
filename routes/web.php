@@ -168,6 +168,10 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
     // Toggle confirm/unconfirm for all scheduled work ShiftDetails on a date
     Route::post('/shifts/toggle-confirm-date', [App\Http\Controllers\ShiftController::class, 'toggleConfirmDate'])->name('shifts.toggle_confirm_date');
 
+    // 10分休憩の記録・削除
+    Route::post('/short-breaks', [App\Http\Controllers\ShortBreakController::class, 'store'])->name('short_breaks.store');
+    Route::delete('/short-breaks', [App\Http\Controllers\ShortBreakController::class, 'destroy'])->name('short_breaks.destroy');
+
     // Apply preferred weekly holidays for a month: create 'leave' shifts on users' preferred_week_days
     Route::post('/shifts/apply-preferred-holidays', [App\Http\Controllers\ShiftController::class, 'applyPreferredHolidays'])->name('shifts.apply_preferred_holidays');
 
