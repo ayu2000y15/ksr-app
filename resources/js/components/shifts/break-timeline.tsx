@@ -528,11 +528,11 @@ export default function BreakTimeline(props: {
                     <div className="h-10 border-b bg-white" style={{ position: 'sticky', top: 0, zIndex: 30, background: 'white' }} />
                     <div className="space-y-2">
                         {(visibleItems || []).map((it) => (
-                            <div key={`label-${it.id}`} className="flex h-10 items-center border-b bg-white pr-2">
-                                <span className="mr-2 w-6 text-right font-mono text-sm">
+                            <div key={`label-${it.id}`} className="flex h-10 items-center gap-1 border-b bg-white pr-2">
+                                <span className="mr-1 w-6 flex-shrink-0 text-right font-mono text-sm">
                                     {it.user?.position ?? it.user_id ?? (it.user && it.user.id) ?? '—'}
                                 </span>
-                                <span className="truncate">{it.user ? it.user.name : '—'}</span>
+                                <span className="min-w-0 flex-1 truncate text-sm">{it.user ? it.user.name : '—'}</span>
                                 {(() => {
                                     // step_out may be present on the shiftDetail or nested under `shift`
                                     const sVal = (it as any).step_out ?? ((it as any).shift && (it as any).shift.step_out);
@@ -541,13 +541,13 @@ export default function BreakTimeline(props: {
                                     return (
                                         <>
                                             <span
-                                                className={`ml-2 hidden items-center rounded bg-orange-100 px-1 text-xs text-orange-700 md:inline-flex ${op}`}
+                                                className={`hidden flex-shrink-0 items-center rounded bg-orange-100 px-1 text-xs text-orange-700 md:inline-flex ${op}`}
                                                 title="中抜け"
                                             >
-                                                中抜け
+                                                ○
                                             </span>
                                             <span
-                                                className={`ml-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-xs text-orange-700 md:hidden ${op}`}
+                                                className={`inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-orange-100 text-xs text-orange-700 md:hidden ${op}`}
                                                 title="中抜け"
                                                 aria-label="中抜け"
                                             >
@@ -558,12 +558,12 @@ export default function BreakTimeline(props: {
                                 })()}
                                 {/* 10分休憩ボタン - shift.daily.manage権限がある場合のみ表示 */}
                                 {props.canManageShortBreak && it.user_id && (
-                                    <div className="ml-auto">
+                                    <div className="flex-shrink-0">
                                         {shortBreaks[Number(it.user_id)] ? (
                                             <button
                                                 type="button"
                                                 title="クリックで削除"
-                                                className="rounded bg-green-100 px-2 py-0.5 text-xs text-green-800 hover:bg-green-200"
+                                                className="rounded bg-green-100 px-2 py-0.5 text-xs whitespace-nowrap text-green-800 hover:bg-green-200"
                                                 onClick={() => deleteShortBreak(Number(it.user_id))}
                                             >
                                                 {shortBreaks[Number(it.user_id)].start_time.substring(0, 5)}～
@@ -572,7 +572,7 @@ export default function BreakTimeline(props: {
                                             <button
                                                 type="button"
                                                 title="10分休憩を記録"
-                                                className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-200"
+                                                className="rounded bg-gray-100 px-2 py-0.5 text-xs whitespace-nowrap text-gray-700 hover:bg-gray-200"
                                                 onClick={() => recordShortBreak(Number(it.user_id))}
                                             >
                                                 10分
