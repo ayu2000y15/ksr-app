@@ -87,11 +87,13 @@ function GanttBar({
     isAbsent,
     visualOffsetMinutes,
     currentDate,
+    canViewShifts,
 }: {
     shift: Shift;
     isAbsent?: boolean;
     visualOffsetMinutes: number;
     currentDate: Date;
+    canViewShifts?: boolean;
 }) {
     const parse = (s: string | null) => (s ? new Date(s) : null);
     const dayStart = new Date(currentDate);
@@ -148,91 +150,92 @@ function GanttBar({
                 style={{ left: `${left}px`, width: `${width}px` }}
             >
                 <span className="truncate text-left">{`${s.getHours()}:${String(s.getMinutes()).padStart(2, '0')} - ${e.getHours()}:${String(e.getMinutes()).padStart(2, '0')}`}</span>
-                {(shift.breaks || []).map((b: any, idx: number) => {
-                    const bs = parse(b.start_time);
-                    const be = parse(b.end_time);
-                    if (!bs || !be) return null;
-                    const bStartM = minutesFromStart(bs);
-                    const bEndM = minutesFromStart(be);
-                    const bLeft = bStartM - visualOffsetMinutes;
-                    const bWidth = Math.max(4, bEndM - bStartM);
-                    const relLeft = bLeft - left;
+                {canViewShifts &&
+                    (shift.breaks || []).map((b: any, idx: number) => {
+                        const bs = parse(b.start_time);
+                        const be = parse(b.end_time);
+                        if (!bs || !be) return null;
+                        const bStartM = minutesFromStart(bs);
+                        const bEndM = minutesFromStart(be);
+                        const bLeft = bStartM - visualOffsetMinutes;
+                        const bWidth = Math.max(4, bEndM - bStartM);
+                        const relLeft = bLeft - left;
 
-                    const bStatus = String(b.status ?? '');
-                    const isOuting = String(b.type ?? '') === 'outing';
-                    let bgColor = '';
-                    if (bStatus === 'absent') {
-                        bgColor = 'rgba(107,114,128,0.25)';
-                    } else if (isOuting) {
-                        // outings: scheduled = lighter orange, actual = darker orange
-                        bgColor = bStatus === 'actual' ? 'rgba(234,88,12,0.65)' : 'rgb(216, 27, 96,0.4)';
-                    } else {
-                        // normal breaks: actual = green, scheduled = gray
-                        bgColor = bStatus === 'actual' ? 'rgba(34, 197, 94, 0.55)' : 'rgba(156, 163, 175, 0.8)';
-                    }
+                        const bStatus = String(b.status ?? '');
+                        const isOuting = String(b.type ?? '') === 'outing';
+                        let bgColor = '';
+                        if (bStatus === 'absent') {
+                            bgColor = 'rgba(107,114,128,0.25)';
+                        } else if (isOuting) {
+                            // outings: scheduled = lighter orange, actual = darker orange
+                            bgColor = bStatus === 'actual' ? 'rgba(234,88,12,0.65)' : 'rgb(216, 27, 96,0.4)';
+                        } else {
+                            // normal breaks: actual = green, scheduled = gray
+                            bgColor = bStatus === 'actual' ? 'rgba(34, 197, 94, 0.55)' : 'rgba(156, 163, 175, 0.8)';
+                        }
 
-                    return (
-                        <div
-                            key={idx}
-                            role="button"
-                            tabIndex={0}
-                            data-break="true"
-                            onMouseEnter={(e) => {
-                                if (hideTimer.current) {
-                                    window.clearTimeout(hideTimer.current);
-                                    hideTimer.current = null;
-                                }
-                                setActiveBreak(idx);
-                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                setTooltipPos({ x: rect.left + rect.width / 2, y: rect.top });
-                                activeBreakElRef.current = e.currentTarget as HTMLElement;
-                            }}
-                            onMouseLeave={() => {
-                                if (hideTimer.current) window.clearTimeout(hideTimer.current);
-                                hideTimer.current = window.setTimeout(() => {
-                                    setActiveBreak(null);
-                                    setTooltipPos(null);
-                                    hideTimer.current = null;
-                                }, 300);
-                            }}
-                            onClick={(e) => {
-                                // On touch devices, treat click as tap: toggle and install outside handler to close when tapping outside
-                                if (isTouchDevice) {
-                                    if (touchTimer.current) window.clearTimeout(touchTimer.current);
-                                    setActiveBreak((cur) => (cur === idx ? null : idx));
+                        return (
+                            <div
+                                key={idx}
+                                role="button"
+                                tabIndex={0}
+                                data-break="true"
+                                onMouseEnter={(e) => {
+                                    if (hideTimer.current) {
+                                        window.clearTimeout(hideTimer.current);
+                                        hideTimer.current = null;
+                                    }
+                                    setActiveBreak(idx);
                                     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                                     setTooltipPos({ x: rect.left + rect.width / 2, y: rect.top });
                                     activeBreakElRef.current = e.currentTarget as HTMLElement;
-                                    touchPersistent.current = true;
-
-                                    const handleOutside = (ev: Event) => {
-                                        const target = ev.target as Node;
-                                        if (activeBreakElRef.current && activeBreakElRef.current.contains(target)) return;
-                                        if (tooltipElRef.current && tooltipElRef.current.contains(target)) return;
+                                }}
+                                onMouseLeave={() => {
+                                    if (hideTimer.current) window.clearTimeout(hideTimer.current);
+                                    hideTimer.current = window.setTimeout(() => {
                                         setActiveBreak(null);
                                         setTooltipPos(null);
-                                        touchPersistent.current = false;
-                                        if (outsideHandlerRef.current) {
-                                            document.removeEventListener('touchstart', outsideHandlerRef.current);
-                                            document.removeEventListener('mousedown', outsideHandlerRef.current);
-                                            outsideHandlerRef.current = null;
-                                        }
-                                    };
-                                    outsideHandlerRef.current = handleOutside;
-                                    document.addEventListener('touchstart', handleOutside);
-                                    document.addEventListener('mousedown', handleOutside);
-                                } else {
-                                    // desktop: keep click behavior (toggle) but don't install outside handler (hover handles hide)
-                                    setActiveBreak((cur) => (cur === idx ? null : idx));
-                                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                    setTooltipPos({ x: rect.left + rect.width / 2, y: rect.top });
-                                }
-                            }}
-                            className="absolute top-0 z-20 h-full rounded"
-                            style={{ left: `${relLeft}px`, width: `${bWidth}px`, backgroundColor: bgColor, cursor: 'pointer' }}
-                        />
-                    );
-                })}
+                                        hideTimer.current = null;
+                                    }, 300);
+                                }}
+                                onClick={(e) => {
+                                    // On touch devices, treat click as tap: toggle and install outside handler to close when tapping outside
+                                    if (isTouchDevice) {
+                                        if (touchTimer.current) window.clearTimeout(touchTimer.current);
+                                        setActiveBreak((cur) => (cur === idx ? null : idx));
+                                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                        setTooltipPos({ x: rect.left + rect.width / 2, y: rect.top });
+                                        activeBreakElRef.current = e.currentTarget as HTMLElement;
+                                        touchPersistent.current = true;
+
+                                        const handleOutside = (ev: Event) => {
+                                            const target = ev.target as Node;
+                                            if (activeBreakElRef.current && activeBreakElRef.current.contains(target)) return;
+                                            if (tooltipElRef.current && tooltipElRef.current.contains(target)) return;
+                                            setActiveBreak(null);
+                                            setTooltipPos(null);
+                                            touchPersistent.current = false;
+                                            if (outsideHandlerRef.current) {
+                                                document.removeEventListener('touchstart', outsideHandlerRef.current);
+                                                document.removeEventListener('mousedown', outsideHandlerRef.current);
+                                                outsideHandlerRef.current = null;
+                                            }
+                                        };
+                                        outsideHandlerRef.current = handleOutside;
+                                        document.addEventListener('touchstart', handleOutside);
+                                        document.addEventListener('mousedown', handleOutside);
+                                    } else {
+                                        // desktop: keep click behavior (toggle) but don't install outside handler (hover handles hide)
+                                        setActiveBreak((cur) => (cur === idx ? null : idx));
+                                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                        setTooltipPos({ x: rect.left + rect.width / 2, y: rect.top });
+                                    }
+                                }}
+                                className="absolute top-0 z-20 h-full rounded"
+                                style={{ left: `${relLeft}px`, width: `${bWidth}px`, backgroundColor: bgColor, cursor: 'pointer' }}
+                            />
+                        );
+                    })}
 
                 {activeBreak !== null && tooltipPos && shift.breaks && shift.breaks[activeBreak]
                     ? (() => {
@@ -1375,78 +1378,79 @@ export default function Dashboard() {
                             </div>
                         </CardHeader>
                         <CardContent>
-                            {/* 自分の休憩時間・外出時間（予定）を表示 */}
-                            {(() => {
-                                if (!auth?.user?.id) return null;
-                                const userId = Number(auth.user.id);
-                                const myShift = shifts.find((s) => Number(s.user?.id ?? s.user_id) === userId);
-                                if (!myShift) return null;
+                            {/* 自分の休憩時間・外出時間（予定）を表示 - 日間タイムライン権限を持つユーザーのみ */}
+                            {canViewShifts &&
+                                (() => {
+                                    if (!auth?.user?.id) return null;
+                                    const userId = Number(auth.user.id);
+                                    const myShift = shifts.find((s) => Number(s.user?.id ?? s.user_id) === userId);
+                                    if (!myShift) return null;
 
-                                const breaks = Array.isArray(myShift.breaks) ? myShift.breaks : [];
-                                if (breaks.length === 0) return null;
+                                    const breaks = Array.isArray(myShift.breaks) ? myShift.breaks : [];
+                                    if (breaks.length === 0) return null;
 
-                                // 休憩と外出に分類（予定のみ: status が 'actual' でないもの）
-                                const breakTimes = breaks.filter(
-                                    (b: any) =>
-                                        String(b.type || b.break_type || '').toLowerCase() === 'break' &&
-                                        String(b.status ?? '').toLowerCase() !== 'actual' &&
-                                        String(b.status ?? '').toLowerCase() !== 'absent',
-                                );
-                                const outingTimes = breaks.filter(
-                                    (b: any) =>
-                                        String(b.type || b.break_type || '').toLowerCase() === 'outing' &&
-                                        String(b.status ?? '').toLowerCase() !== 'actual' &&
-                                        String(b.status ?? '').toLowerCase() !== 'absent',
-                                );
+                                    // 休憩と外出に分類（予定のみ: status が 'actual' でないもの）
+                                    const breakTimes = breaks.filter(
+                                        (b: any) =>
+                                            String(b.type || b.break_type || '').toLowerCase() === 'break' &&
+                                            String(b.status ?? '').toLowerCase() !== 'actual' &&
+                                            String(b.status ?? '').toLowerCase() !== 'absent',
+                                    );
+                                    const outingTimes = breaks.filter(
+                                        (b: any) =>
+                                            String(b.type || b.break_type || '').toLowerCase() === 'outing' &&
+                                            String(b.status ?? '').toLowerCase() !== 'actual' &&
+                                            String(b.status ?? '').toLowerCase() !== 'absent',
+                                    );
 
-                                if (breakTimes.length === 0 && outingTimes.length === 0) return null;
+                                    if (breakTimes.length === 0 && outingTimes.length === 0) return null;
 
-                                return (
-                                    <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3">
-                                        <div className="mb-2 text-sm font-medium text-blue-900">あなたの予定</div>
+                                    return (
+                                        <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3">
+                                            <div className="mb-2 text-sm font-medium text-blue-900">あなたの予定</div>
 
-                                        {/* 休憩時間 */}
-                                        {breakTimes.length > 0 && (
-                                            <div className="mb-2">
-                                                <div className="mb-1 text-xs font-medium text-blue-700">休憩時間（予定）</div>
-                                                <div className="space-y-1">
-                                                    {breakTimes.map((b: any, idx: number) => {
-                                                        const startTime = formatTime(b.start_time || b.break_start);
-                                                        const endTime = formatTime(b.end_time || b.break_end);
-                                                        return (
-                                                            <div key={idx} className="flex items-center gap-2 text-sm">
-                                                                <span className="text-blue-800">
-                                                                    {startTime} - {endTime}
-                                                                </span>
-                                                            </div>
-                                                        );
-                                                    })}
+                                            {/* 休憩時間 */}
+                                            {breakTimes.length > 0 && (
+                                                <div className="mb-2">
+                                                    <div className="mb-1 text-xs font-medium text-blue-700">休憩時間（予定）</div>
+                                                    <div className="space-y-1">
+                                                        {breakTimes.map((b: any, idx: number) => {
+                                                            const startTime = formatTime(b.start_time || b.break_start);
+                                                            const endTime = formatTime(b.end_time || b.break_end);
+                                                            return (
+                                                                <div key={idx} className="flex items-center gap-2 text-sm">
+                                                                    <span className="text-blue-800">
+                                                                        {startTime} - {endTime}
+                                                                    </span>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        )}
+                                            )}
 
-                                        {/* 外出時間 */}
-                                        {outingTimes.length > 0 && (
-                                            <div>
-                                                <div className="mb-1 text-xs font-medium text-blue-700">外出時間（予定）</div>
-                                                <div className="space-y-1">
-                                                    {outingTimes.map((b: any, idx: number) => {
-                                                        const startTime = formatTime(b.start_time || b.break_start);
-                                                        const endTime = formatTime(b.end_time || b.break_end);
-                                                        return (
-                                                            <div key={idx} className="flex items-center gap-2 text-sm">
-                                                                <span className="text-blue-800">
-                                                                    {startTime} - {endTime}
-                                                                </span>
-                                                            </div>
-                                                        );
-                                                    })}
+                                            {/* 外出時間 */}
+                                            {outingTimes.length > 0 && (
+                                                <div>
+                                                    <div className="mb-1 text-xs font-medium text-blue-700">外出時間（予定）</div>
+                                                    <div className="space-y-1">
+                                                        {outingTimes.map((b: any, idx: number) => {
+                                                            const startTime = formatTime(b.start_time || b.break_start);
+                                                            const endTime = formatTime(b.end_time || b.break_end);
+                                                            return (
+                                                                <div key={idx} className="flex items-center gap-2 text-sm">
+                                                                    <span className="text-blue-800">
+                                                                        {startTime} - {endTime}
+                                                                    </span>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })()}
+                                            )}
+                                        </div>
+                                    );
+                                })()}
                             {/* 注意書き：送迎申請ボタンが表示されている場合にのみ案内を表示 */}
                             {((auth && auth.user && (auth.user.has_car === 1 || auth.user.has_car === true)) || hasCarFlag) &&
                                 withinTransportWindow && (
@@ -1572,6 +1576,7 @@ export default function Dashboard() {
                                                                                     isAbsent={absent}
                                                                                     visualOffsetMinutes={ganttOffset}
                                                                                     currentDate={currentDate}
+                                                                                    canViewShifts={canViewShifts}
                                                                                 />
                                                                             </div>
                                                                         </div>
