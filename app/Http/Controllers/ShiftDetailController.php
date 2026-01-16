@@ -291,13 +291,14 @@ class ShiftDetailController extends Controller
         // capture fields before deletion
         $detailDate = $shiftDetail->date;
         $userId = $shiftDetail->user_id;
-        $wasBreak = ((string) ($shiftDetail->type ?? '')) === 'break';
+        // Check if this is a break OR outing - both should not cause removal of the parent Shift
+        $wasBreakOrOuting = in_array((string) ($shiftDetail->type ?? ''), ['break', 'outing'], true);
 
         $shiftDetail->delete();
 
-        // Only delete the corresponding Shift record when the deleted detail is NOT a break.
-        // Break records should not cause removal of the parent Shift.
-        if (!$wasBreak && $detailDate) {
+        // Only delete the corresponding Shift record when the deleted detail is NOT a break or outing.
+        // Break and outing records should not cause removal of the parent Shift.
+        if (!$wasBreakOrOuting && $detailDate) {
             // use whereRaw to match date-only to avoid DB driver differences
             Shift::where('user_id', $userId)->whereRaw("date(date) = ?", [$detailDate])->delete();
         }
