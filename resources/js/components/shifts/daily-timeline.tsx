@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { router, usePage } from '@inertiajs/react';
 import axios from 'axios';
-import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Moon, Plus, Sun, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 type BreakPayload = { shift_detail_id: number; start_time: string; end_time: string; type?: string };
@@ -144,12 +144,20 @@ export default function DailyTimeline(props: {
                 return { ...(sd as ShiftDetail), sMin, eMin, startRaw: sd.start_time ?? null, endRaw: sd.end_time ?? null } as Item;
             })
             .sort((a: Item, b: Item) => {
-                // Primary sort: prefer user.position, then user_id, then user.id (ascending)
+                // Primary sort: shift_type (day first, night second)
+                const aType = String(a.shift_type ?? '');
+                const bType = String(b.shift_type ?? '');
+                if (aType === 'day' && bType !== 'day') return -1;
+                if (aType !== 'day' && bType === 'day') return 1;
+                if (aType === 'night' && bType !== 'night') return -1;
+                if (aType !== 'night' && bType === 'night') return 1;
+
+                // Secondary sort: prefer user.position, then user_id, then user.id (ascending)
                 const aKey = Number(a.user?.position ?? a.user_id ?? (a.user && (a.user as { id?: number }).id) ?? 0);
                 const bKey = Number(b.user?.position ?? b.user_id ?? (b.user && (b.user as { id?: number }).id) ?? 0);
                 if (aKey !== bKey) return aKey - bKey;
 
-                // Secondary: start time asc
+                // Tertiary: start time asc
                 const aStart = String(a.startRaw ?? '');
                 const bStart = String(b.startRaw ?? '');
                 if (aStart < bStart) return -1;
@@ -853,6 +861,17 @@ export default function DailyTimeline(props: {
                                             >
                                                 {it.user ? it.user.name : '—'}
                                             </span>
+                                            {/* モバイルで昼/夜のアイコンを表示 */}
+                                            {isMobile && it.shift_type === 'day' && (
+                                                <div className="flex items-center justify-center rounded border border-yellow-300 bg-yellow-100 px-1">
+                                                    <Sun className="h-3 w-3 text-yellow-800" />
+                                                </div>
+                                            )}
+                                            {isMobile && it.shift_type === 'night' && (
+                                                <div className="flex items-center justify-center rounded border border-violet-300 bg-violet-100 px-1">
+                                                    <Moon className="h-3 w-3 text-violet-800" />
+                                                </div>
+                                            )}
                                             {/* show a small badge when this shift is marked step_out (中抜け) */}
                                             {(() => {
                                                 const sVal = (it as any).step_out ?? ((it as any).shift && (it as any).shift.step_out);
