@@ -218,6 +218,8 @@ export default function RolePermissionsPage() {
         'activitylog.view': '活動ログ閲覧',
         // accounting
         'accounting.view': '経理向け閲覧',
+        // leader assignment
+        assign_leader: 'リーダー付与',
     };
 
     const allSelected = permissions.length > 0 && permissions.every((p) => !!checked[p.id]);

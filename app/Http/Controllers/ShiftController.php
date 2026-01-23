@@ -434,24 +434,46 @@ class ShiftController extends Controller
     }
 
     /**
-     * Set a per-shift position marker (e.g. 'snowboard'|'ski') for a user/date.
+     * Set a per-shift position marker (e.g. 'snowboard'|'ski'|'leader') for a user/date.
+     * Supports multiple positions as comma-separated string (e.g. 'leader,gatekeeper').
+     * Leader requires 'assign_leader' permission, other positions require 'shift.daily.manage'.
      * Expects POST: user_id, date, position (string|null). Returns JSON on AJAX.
      */
     public function markPosition(Request $request)
     {
-        if (Auth::user()->hasRole('システム管理者')) {
-            // bypass
-        } elseif (Auth::user()->hasPermissionTo('shift_application.create')) {
-            // allow with permission
-        } else {
-            $this->authorize('update', Shift::class);
-        }
-
         $data = $request->validate([
             'user_id' => 'required|exists:users,id',
             'date' => 'required|date',
             'position' => 'nullable|string',
         ]);
+
+        // カンマ区切りのポジションを配列に分割してバリデーション
+        $allowedPositions = ['leader', 'gatekeeper', 'register', 'boots', 'snowboard', 'ski', 'free'];
+        if (!empty($data['position'])) {
+            $positions = array_map('trim', explode(',', $data['position']));
+            foreach ($positions as $pos) {
+                if (!in_array($pos, $allowedPositions)) {
+                    return response()->json(['message' => '無効なポジションが含まれています: ' . $pos], 422);
+                }
+            }
+
+            $hasLeader = in_array('leader', $positions);
+            $hasOtherPositions = count(array_diff($positions, ['leader'])) > 0;
+
+            // リーダー権限のチェック
+            if ($hasLeader && !Auth::user()->hasRole('システム管理者')) {
+                if (!Auth::user()->hasPermissionTo('assign_leader')) {
+                    return response()->json(['message' => 'リーダーを付与する権限がありません。'], 403);
+                }
+            }
+
+            // その他のポジション（門番、レジなど）の権限チェック
+            if ($hasOtherPositions && !Auth::user()->hasRole('システム管理者')) {
+                if (!Auth::user()->hasPermissionTo('shift.daily.manage')) {
+                    return response()->json(['message' => 'ポジションを設定する権限がありません。'], 403);
+                }
+            }
+        }
 
         $shift = Shift::where('user_id', $data['user_id'])->whereRaw('date(date) = ?', [$data['date']])->first();
         if ($shift) {

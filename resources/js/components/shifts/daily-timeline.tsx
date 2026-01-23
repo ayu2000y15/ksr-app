@@ -44,6 +44,12 @@ export default function DailyTimeline(props: {
     const page = usePage();
     const pageProps = (page && (page.props as any)) || {};
     const allUsers = pageProps.users || [];
+    // check if current user has permission to assign leader
+    const auth = pageProps.auth || {};
+    const currentUser = auth.user || {};
+    const permissions = auth.permissions || [];
+    const canAssignLeader = permissions.includes('assign_leader') || permissions.includes('*');
+    const canManagePositions = permissions.includes('shift.daily.manage') || permissions.includes('*');
     // users are read from Inertia page props; availableUsers is computed later after we
     // destructure props (we need `date` and `shiftDetails` to determine who is already present)
     const [showAddUser, setShowAddUser] = useState(false);
@@ -185,20 +191,26 @@ export default function DailyTimeline(props: {
 
     // track absent (logical delete) flags locally so UI updates immediately
     const [absentMap, setAbsentMap] = useState<Record<number, boolean>>({});
-    // track position assignments locally for optimistic updates
-    const [positionMap, setPositionMap] = useState<Record<number, string | null>>({});
+    // track position assignments locally for optimistic updates (array of positions)
+    const [positionMap, setPositionMap] = useState<Record<number, string[]>>({});
 
     // initialize absentMap from items' status when items change
     useEffect(() => {
         const m: Record<number, boolean> = {};
-        const p: Record<number, string | null> = {};
+        const p: Record<number, string[]> = {};
         for (const itRaw of items) {
             const it = itRaw as ShiftDetailLight;
             const st = it.status ?? '';
             if (it.id !== undefined) {
                 m[Number(it.id)] = String(st) === 'absent';
-                // initialize position from item's position field
-                p[Number(it.id)] = (it as any).position ?? null;
+                // initialize position from item's position field (parse comma-separated values)
+                const posStr = (it as any).position ?? '';
+                p[Number(it.id)] = posStr
+                    ? String(posStr)
+                          .split(',')
+                          .map((s: string) => s.trim())
+                          .filter(Boolean)
+                    : [];
             }
         }
         setAbsentMap(m);
@@ -212,6 +224,7 @@ export default function DailyTimeline(props: {
         const mealNight = new Set<number>();
         // position counts: track unique users per position (exclude absent)
         const positionCounts: Record<string, Set<number>> = {
+            leader: new Set(),
             gatekeeper: new Set(),
             register: new Set(),
             boots: new Set(),
@@ -241,10 +254,22 @@ export default function DailyTimeline(props: {
             // count position assignments (exclude absent shifts)
             // use positionMap for optimistic local state, fallback to it.position
             if (!isAbsent && it.id !== undefined) {
-                const pos = positionMap[Number(it.id)] ?? (it as any).position;
-                if (pos && positionCounts[pos]) {
-                    positionCounts[pos].add(uid);
-                }
+                const positions =
+                    positionMap[Number(it.id)] ??
+                    (() => {
+                        const posStr = (it as any).position ?? '';
+                        return posStr
+                            ? String(posStr)
+                                  .split(',')
+                                  .map((s: string) => s.trim())
+                                  .filter(Boolean)
+                            : [];
+                    })();
+                positions.forEach((pos: string) => {
+                    if (positionCounts[pos]) {
+                        positionCounts[pos].add(uid);
+                    }
+                });
             }
         });
 
@@ -253,6 +278,7 @@ export default function DailyTimeline(props: {
             nightCount: night.size,
             mealTicketDayCount: mealDay.size,
             mealTicketNightCount: mealNight.size,
+            leaderCount: positionCounts.leader.size,
             gatekeeperCount: positionCounts.gatekeeper.size,
             registerCount: positionCounts.register.size,
             bootsCount: positionCounts.boots.size,
@@ -334,8 +360,11 @@ export default function DailyTimeline(props: {
     const wrapperRef = useRef<HTMLDivElement | null>(null);
     const leftColRef = useRef<HTMLDivElement | null>(null);
     const attendanceRef = useRef<HTMLDivElement | null>(null);
+    const headerRef = useRef<HTMLDivElement | null>(null);
+    const dataRef = useRef<HTMLDivElement | null>(null);
     const isSyncingRef = useRef(false);
     const [scrollAreaHeight, setScrollAreaHeight] = useState<number>(400);
+    const [isMobile, setIsMobile] = useState<boolean>(false);
     useEffect(() => {
         const compute = () => {
             try {
@@ -345,6 +374,8 @@ export default function DailyTimeline(props: {
                 const reserved = 200;
                 const avail = Math.max(160, window.innerHeight - top - reserved);
                 setScrollAreaHeight(avail);
+                // モバイル判定: 画面幅768px未満をモバイルとする
+                setIsMobile(window.innerWidth < 768);
             } catch {
                 // ignore and keep previous height
             }
@@ -364,6 +395,9 @@ export default function DailyTimeline(props: {
             if (ro) ro.disconnect();
         };
     }, []);
+
+    // shift mode: single scroll container handles both header and data horizontally
+    // no need for scroll synchronization when using unified scroll container
 
     // synchronize horizontal scroll between main timeline wrapper (wrapperRef) and attendance counts (attendanceRef) in break mode
     useEffect(() => {
@@ -568,14 +602,21 @@ export default function DailyTimeline(props: {
         }
     };
 
-    const setPosition = async (shiftId: number, userId: number, position: string) => {
+    const togglePosition = async (shiftId: number, userId: number, position: string) => {
+        // get current positions
+        const currentPositions = positionMap[shiftId] ?? [];
+        const newPositions = currentPositions.includes(position) ? currentPositions.filter((p) => p !== position) : [...currentPositions, position];
+
         // optimistic update
-        setPositionMap((prev) => ({ ...prev, [shiftId]: position }));
+        setPositionMap((prev) => ({ ...prev, [shiftId]: newPositions }));
+
         try {
+            // send as comma-separated string
+            const positionStr = newPositions.join(',');
             await axios.post(route('shifts.mark_position'), {
                 user_id: userId,
                 date: date,
-                position: position,
+                position: positionStr || null,
             });
             // success - no need to revert
         } catch (err) {
@@ -585,7 +626,65 @@ export default function DailyTimeline(props: {
                 const updated = { ...prev };
                 // revert to original value from items
                 const original = (items || []).find((it: Item) => Number(it.id) === shiftId);
-                updated[shiftId] = (original as any)?.position ?? null;
+                const posStr = (original as any)?.position ?? '';
+                updated[shiftId] = posStr
+                    ? String(posStr)
+                          .split(',')
+                          .map((s: string) => s.trim())
+                          .filter(Boolean)
+                    : [];
+                return updated;
+            });
+            try {
+                if (typeof window !== 'undefined' && window.dispatchEvent) {
+                    window.dispatchEvent(
+                        new CustomEvent('ksr.shiftDetail.toast', {
+                            detail: { message: 'ポジションの設定に失敗しました', type: 'error' },
+                        }),
+                    );
+                }
+            } catch {
+                // ignore
+            }
+        }
+    };
+
+    const setPosition = async (shiftId: number, userId: number, position: string) => {
+        // 排他的選択：リーダー以外のポジションを置き換える
+        const currentPositions = positionMap[shiftId] ?? [];
+        const otherPositions = ['gatekeeper', 'register', 'boots', 'snowboard', 'ski', 'free'];
+        // リーダーは保持、他のポジションは削除して新しいポジションを追加
+        const leaderPos = currentPositions.includes('leader') ? ['leader'] : [];
+        const newPositions = currentPositions.includes(position)
+            ? leaderPos // 同じポジションをクリックした場合は解除（リーダーのみ保持）
+            : [...leaderPos, position]; // 別のポジションを選択（リーダー+新しいポジション）
+
+        // optimistic update
+        setPositionMap((prev) => ({ ...prev, [shiftId]: newPositions }));
+
+        try {
+            // send as comma-separated string
+            const positionStr = newPositions.join(',');
+            await axios.post(route('shifts.mark_position'), {
+                user_id: userId,
+                date: date,
+                position: positionStr || null,
+            });
+            // success - no need to revert
+        } catch (err) {
+            console.error('failed to set position', err);
+            // revert on error
+            setPositionMap((prev) => {
+                const updated = { ...prev };
+                // revert to original value from items
+                const original = (items || []).find((it: Item) => Number(it.id) === shiftId);
+                const posStr = (original as any)?.position ?? '';
+                updated[shiftId] = posStr
+                    ? String(posStr)
+                          .split(',')
+                          .map((s: string) => s.trim())
+                          .filter(Boolean)
+                    : [];
                 return updated;
             });
             try {
@@ -633,7 +732,7 @@ export default function DailyTimeline(props: {
                 )}
             </div>
 
-            <div ref={wrapperRef} className="overflow-x-auto">
+            <div ref={wrapperRef} className={mode === 'shift' ? 'overflow-x-auto' : 'overflow-x-auto'}>
                 {/* Header/time ruler: use fixed wide columns only in break mode; keep original flexible grid for shift mode */}
                 {mode === 'break' ? (
                     <div className="min-w-full">
@@ -657,40 +756,47 @@ export default function DailyTimeline(props: {
                         </div>
                     </div>
                 ) : (
-                    // shift mode: simplify header (no top time ruler) to avoid visual clutter
-                    <div className="min-w-full">
+                    // shift mode: header with position counts (scrolls with parent container)
+                    <div ref={headerRef} className="min-w-fit">
                         <div className="flex items-stretch border-b">
+                            {/* 左側の固定幅部分 */}
                             <div className="flex items-center border-b">
                                 {/* spacing to match checkbox + position number + user name */}
-                                <div className="mr-7 flex flex-col items-center"></div>
+                                <div className="mr-2 flex flex-col items-center">
+                                    <span className="text-xs">欠席</span>
+                                </div>
                                 <span className="mr-2 w-6 flex-shrink-0"></span>
-                                <span className="w-26 flex-shrink-0"></span>
-                                {/* Position count labels aligned with buttons */}
-                                <div className="ml-8 flex items-center gap-1">
-                                    <div className="flex flex-col items-center text-xs text-muted-foreground" style={{ width: '38px' }}>
-                                        <span>門番</span>
-                                        <span>({counts.gatekeeperCount})</span>
-                                    </div>
-                                    <div className="flex flex-col items-center text-xs text-muted-foreground" style={{ width: '38px' }}>
-                                        <span>レジ</span>
-                                        <span>({counts.registerCount})</span>
-                                    </div>
-                                    <div className="flex flex-col items-center text-xs text-muted-foreground" style={{ width: '38px' }}>
-                                        <span>ブーツ</span>
-                                        <span>({counts.bootsCount})</span>
-                                    </div>
-                                    <div className="flex flex-col items-center text-xs text-muted-foreground" style={{ width: '38px' }}>
-                                        <span>スノボ</span>
-                                        <span>({counts.snowboardCount})</span>
-                                    </div>
-                                    <div className="flex flex-col items-center text-xs text-muted-foreground" style={{ width: '38px' }}>
-                                        <span>スキー</span>
-                                        <span>({counts.skiCount})</span>
-                                    </div>
-                                    <div className="flex flex-col items-center text-xs text-muted-foreground" style={{ width: '38px' }}>
-                                        <span>フリー</span>
-                                        <span>({counts.freeCount})</span>
-                                    </div>
+                                <span className="mr-2 w-32 flex-shrink-0"></span>
+                            </div>
+                            {/* Position count labels aligned with buttons - 横スクロール対象 */}
+                            <div className="flex items-center gap-1 border-b">
+                                <div className="flex min-w-[44px] flex-col items-center text-xs text-muted-foreground">
+                                    <span>リーダー</span>
+                                    <span>({counts.leaderCount})</span>
+                                </div>
+                                <div className="flex min-w-[44px] flex-col items-center text-xs text-muted-foreground">
+                                    <span>門番</span>
+                                    <span>({counts.gatekeeperCount})</span>
+                                </div>
+                                <div className="flex min-w-[44px] flex-col items-center text-xs text-muted-foreground">
+                                    <span>レジ</span>
+                                    <span>({counts.registerCount})</span>
+                                </div>
+                                <div className="flex min-w-[44px] flex-col items-center text-xs text-muted-foreground">
+                                    <span>ブーツ</span>
+                                    <span>({counts.bootsCount})</span>
+                                </div>
+                                <div className="flex min-w-[44px] flex-col items-center text-xs text-muted-foreground">
+                                    <span>スノボ</span>
+                                    <span>({counts.snowboardCount})</span>
+                                </div>
+                                <div className="flex min-w-[44px] flex-col items-center text-xs text-muted-foreground">
+                                    <span>スキー</span>
+                                    <span>({counts.skiCount})</span>
+                                </div>
+                                <div className="flex min-w-[44px] flex-col items-center text-xs text-muted-foreground">
+                                    <span>フリー</span>
+                                    <span>({counts.freeCount})</span>
                                 </div>
                             </div>
                             <div className="flex-1">
@@ -700,7 +806,7 @@ export default function DailyTimeline(props: {
                     </div>
                 )}
 
-                <div style={{ maxHeight: `${scrollAreaHeight}px`, overflowY: 'auto' }} className="mt-2 space-y-2">
+                <div ref={dataRef} style={isMobile ? {} : { maxHeight: `${scrollAreaHeight}px`, overflowY: 'auto' }} className="mt-2 space-y-2">
                     {items
                         .filter((it: Item) => {
                             // In break mode, skip shifts that are absent (database status) or locally marked absent
@@ -773,89 +879,128 @@ export default function DailyTimeline(props: {
                                                 );
                                             })()}
                                         </div>
-                                        {/* Position buttons: gatekeeper / register / boots / snowboard / ski / free (moved to the right of name) */}
+                                        {/* Position buttons: leader / gatekeeper / register / boots / snowboard / ski / free (moved to the right of name) */}
                                         <div className="ml-2 flex items-center gap-1">
+                                            {/* リーダー */}
+                                            <button
+                                                type="button"
+                                                title={canAssignLeader ? 'リーダー' : 'リーダー（権限なし）'}
+                                                disabled={!canAssignLeader}
+                                                className={`flex min-h-[44px] min-w-[44px] items-center justify-center rounded px-2 py-1 text-xs ${
+                                                    (positionMap[Number(it.id)] ?? []).includes('leader') ? 'bg-blue-500 text-white' : 'bg-gray-50'
+                                                } ${!canAssignLeader ? 'cursor-not-allowed opacity-50' : ''}`}
+                                                onClick={() => canAssignLeader && togglePosition(Number(it.id), Number(it.user_id), 'leader')}
+                                            >
+                                                <img
+                                                    width="24"
+                                                    height="24"
+                                                    src={
+                                                        (positionMap[Number(it.id)] ?? []).includes('leader')
+                                                            ? 'https://img.icons8.com/ios/50/ffffff/manager.png'
+                                                            : 'https://img.icons8.com/ios/50/manager.png'
+                                                    }
+                                                    alt="leader"
+                                                    className="pointer-events-none"
+                                                />
+                                            </button>
                                             {/* 門番 */}
                                             <button
                                                 type="button"
-                                                title="門番"
-                                                className={`rounded px-2 py-0.5 text-xs ${(positionMap[Number(it.id)] ?? it.position) === 'gatekeeper' ? 'bg-red-300 text-white' : 'bg-gray-50'}`}
-                                                onClick={() => setPosition(Number(it.id), Number(it.user_id), 'gatekeeper')}
+                                                title={canManagePositions ? '門番' : '門番（権限なし）'}
+                                                disabled={!canManagePositions}
+                                                className={`flex min-h-[44px] min-w-[44px] items-center justify-center rounded px-2 py-1 text-xs ${(positionMap[Number(it.id)] ?? []).includes('gatekeeper') ? 'bg-red-300 text-white' : 'bg-gray-50'} ${!canManagePositions ? 'cursor-not-allowed opacity-50' : ''}`}
+                                                onClick={() => canManagePositions && setPosition(Number(it.id), Number(it.user_id), 'gatekeeper')}
                                             >
                                                 <img
                                                     width="24"
                                                     height="24"
                                                     src="https://img.icons8.com/pastel-glyph/64/receptionist--v2.png"
                                                     alt="receptionist--v2"
+                                                    className="pointer-events-none"
                                                 />
                                             </button>
                                             {/* レジ */}
                                             <button
                                                 type="button"
-                                                title="レジ"
-                                                className={`rounded px-2 py-0.5 text-xs ${(positionMap[Number(it.id)] ?? it.position) === 'register' ? 'bg-red-300 text-white' : 'bg-gray-50'}`}
-                                                onClick={() => setPosition(Number(it.id), Number(it.user_id), 'register')}
+                                                title={canManagePositions ? 'レジ' : 'レジ（権限なし）'}
+                                                disabled={!canManagePositions}
+                                                className={`flex min-h-[44px] min-w-[44px] items-center justify-center rounded px-2 py-1 text-xs ${(positionMap[Number(it.id)] ?? []).includes('register') ? 'bg-red-300 text-white' : 'bg-gray-50'} ${!canManagePositions ? 'cursor-not-allowed opacity-50' : ''}`}
+                                                onClick={() => canManagePositions && setPosition(Number(it.id), Number(it.user_id), 'register')}
                                             >
                                                 <img
                                                     width="24"
                                                     height="24"
                                                     src="https://img.icons8.com/ios/50/cash-register.png"
                                                     alt="cash-register"
+                                                    className="pointer-events-none"
                                                 />
                                             </button>
 
                                             {/* ブーツ */}
                                             <button
                                                 type="button"
-                                                title="ブーツ"
-                                                className={`rounded px-2 py-0.5 text-xs ${(positionMap[Number(it.id)] ?? it.position) === 'boots' ? 'bg-red-300 text-white' : 'bg-gray-50'}`}
-                                                onClick={() => setPosition(Number(it.id), Number(it.user_id), 'boots')}
+                                                title={canManagePositions ? 'ブーツ' : 'ブーツ（権限なし）'}
+                                                disabled={!canManagePositions}
+                                                className={`flex min-h-[44px] min-w-[44px] items-center justify-center rounded px-2 py-1 text-xs ${(positionMap[Number(it.id)] ?? []).includes('boots') ? 'bg-red-300 text-white' : 'bg-gray-50'} ${!canManagePositions ? 'cursor-not-allowed opacity-50' : ''}`}
+                                                onClick={() => canManagePositions && setPosition(Number(it.id), Number(it.user_id), 'boots')}
                                             >
                                                 <img
                                                     width="24"
                                                     height="24"
                                                     src="https://img.icons8.com/external-royyan-wijaya-detailed-outline-royyan-wijaya/48/external-boot-fashion-royyan-wijaya-detailed-outline-royyan-wijaya.png"
                                                     alt="external-boot-fashion-royyan-wijaya-detailed-outline-royyan-wijaya"
+                                                    className="pointer-events-none"
                                                 />
                                             </button>
 
                                             {/* スノーボード */}
                                             <button
                                                 type="button"
-                                                title="スノーボード"
-                                                className={`rounded px-1 py-0.5 text-xs ${(positionMap[Number(it.id)] ?? it.position) === 'snowboard' ? 'bg-red-300 text-white' : 'bg-gray-50'}`}
-                                                onClick={() => setPosition(Number(it.id), Number(it.user_id), 'snowboard')}
+                                                title={canManagePositions ? 'スノーボード' : 'スノーボード（権限なし）'}
+                                                disabled={!canManagePositions}
+                                                className={`flex min-h-[44px] min-w-[44px] items-center justify-center rounded px-1 py-1 text-xs ${(positionMap[Number(it.id)] ?? []).includes('snowboard') ? 'bg-red-300 text-white' : 'bg-gray-50'} ${!canManagePositions ? 'cursor-not-allowed opacity-50' : ''}`}
+                                                onClick={() => canManagePositions && setPosition(Number(it.id), Number(it.user_id), 'snowboard')}
                                             >
                                                 <img
                                                     width="24"
                                                     height="24"
                                                     src="https://img.icons8.com/external-bearicons-detailed-outline-bearicons/64/external-Snowboard-winter-holiday-bearicons-detailed-outline-bearicons.png"
                                                     alt="external-Snowboard-winter-holiday-bearicons-detailed-outline-bearicons"
+                                                    className="pointer-events-none"
                                                 />
                                             </button>
 
                                             {/* スキー */}
                                             <button
                                                 type="button"
-                                                title="スキー"
-                                                className={`rounded px-1 py-0.5 text-xs ${(positionMap[Number(it.id)] ?? it.position) === 'ski' ? 'bg-red-300 text-white' : 'bg-gray-50'}`}
-                                                onClick={() => setPosition(Number(it.id), Number(it.user_id), 'ski')}
+                                                title={canManagePositions ? 'スキー' : 'スキー（権限なし）'}
+                                                disabled={!canManagePositions}
+                                                className={`flex min-h-[44px] min-w-[44px] items-center justify-center rounded px-1 py-1 text-xs ${(positionMap[Number(it.id)] ?? []).includes('ski') ? 'bg-red-300 text-white' : 'bg-gray-50'} ${!canManagePositions ? 'cursor-not-allowed opacity-50' : ''}`}
+                                                onClick={() => canManagePositions && setPosition(Number(it.id), Number(it.user_id), 'ski')}
                                             >
-                                                <img width="24" height="24" src="https://img.icons8.com/ios/50/ski.png" alt="ski" />
+                                                <img
+                                                    width="24"
+                                                    height="24"
+                                                    src="https://img.icons8.com/ios/50/ski.png"
+                                                    alt="ski"
+                                                    className="pointer-events-none"
+                                                />
                                             </button>
 
                                             {/* フリー */}
                                             <button
                                                 type="button"
-                                                title="フリー"
-                                                className={`rounded px-2 py-0.5 text-xs ${(positionMap[Number(it.id)] ?? it.position) === 'free' ? 'bg-red-300 text-white' : 'bg-gray-50'}`}
-                                                onClick={() => setPosition(Number(it.id), Number(it.user_id), 'free')}
+                                                title={canManagePositions ? 'フリー' : 'フリー（権限なし）'}
+                                                disabled={!canManagePositions}
+                                                className={`flex min-h-[44px] min-w-[44px] items-center justify-center rounded px-2 py-1 text-xs ${(positionMap[Number(it.id)] ?? []).includes('free') ? 'bg-red-300 text-white' : 'bg-gray-50'} ${!canManagePositions ? 'cursor-not-allowed opacity-50' : ''}`}
+                                                onClick={() => canManagePositions && setPosition(Number(it.id), Number(it.user_id), 'free')}
                                             >
                                                 <img
                                                     width="24"
                                                     height="24"
                                                     src="https://img.icons8.com/external-those-icons-lineal-those-icons/48/external-Free-shopping-those-icons-lineal-those-icons.png"
                                                     alt="external-Free-shopping-those-icons-lineal-those-icons"
+                                                    className="pointer-events-none"
                                                 />
                                             </button>
                                         </div>
@@ -1073,14 +1218,14 @@ export default function DailyTimeline(props: {
                 </div>
 
                 <div className="mt-4 border-t pt-3">
-                    <div className="flex justify-start gap-6 text-sm text-muted-foreground">
+                    <div className="flex flex-wrap justify-start gap-3 text-sm text-muted-foreground sm:gap-6">
                         <div className="flex items-center font-medium">
                             <span>出勤人数</span>
                             <Button size="sm" variant="ghost" className="ml-3" title="ユーザーを追加" onClick={() => setShowAddUser((s) => !s)}>
                                 <Plus className="h-4 w-4" />
                             </Button>
                         </div>
-                        <div>
+                        <div className="whitespace-nowrap">
                             <span className="text-xs text-muted-foreground">昼 </span>
                             <span className="ml-1 font-medium text-yellow-800">
                                 {counts.dayCount}人
@@ -1089,7 +1234,7 @@ export default function DailyTimeline(props: {
                                 )}
                             </span>
                         </div>
-                        <div>
+                        <div className="whitespace-nowrap">
                             <span className="text-xs text-muted-foreground">夜 </span>
                             <span className="ml-1 font-medium text-indigo-700">
                                 {counts.nightCount}人

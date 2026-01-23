@@ -107,6 +107,9 @@ class PermissionsSeeder extends Seeder
             'properties.reorder',
             // accounting (経理)
             'accounting.view',
+
+            // leader assignment (リーダー付与)
+            'assign_leader',
         ];
 
         // 既存の権限はそのままに、新しい権限のみを作成
