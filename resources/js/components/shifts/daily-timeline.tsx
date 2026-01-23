@@ -778,7 +778,7 @@ export default function DailyTimeline(props: {
                             </div>
                             {/* Position count labels aligned with buttons - 横スクロール対象 */}
                             <div className="flex items-center gap-1 border-b">
-                                <div className="flex min-w-[44px] flex-col items-center text-xs text-muted-foreground">
+                                <div className="flex min-w-[44px] flex-col items-center text-[10px] text-muted-foreground">
                                     <span>リーダー</span>
                                     <span>({counts.leaderCount})</span>
                                 </div>
