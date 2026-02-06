@@ -315,13 +315,175 @@ export default function Daily() {
     // selected type for break-like entries (either 'break' or 'outing')
     const selectedBreakType = breakType === 'outing' ? 'outing' : 'break';
 
+    // CSV download handler
+    const handleDownloadCSV = () => {
+        try {
+            // Format datetime as yyyy/mm/dd hh:mi:ss for CSV
+            const formatDateTimeForCSV = (datetime?: string | null): string => {
+                if (!datetime) return '';
+                try {
+                    const str = String(datetime);
+                    // Extract date and time parts (handles both "YYYY-MM-DD HH:MM:SS" and ISO formats)
+                    const match = str.match(/(\d{4})-(\d{2})-(\d{2})[\sT](\d{2}):(\d{2}):(\d{2})/);
+                    if (match) {
+                        const [, year, month, day, hour, min, sec] = match;
+                        return `${year}/${month}/${day} ${hour}:${min}:${sec}`;
+                    }
+                    return '';
+                } catch {
+                    return '';
+                }
+            };
+
+            // Filter work shifts for the current date
+            const workShifts = (shiftDetails || [])
+                .filter((sd: any) => (sd.type ?? '') === 'work')
+                .filter((sd: any) => {
+                    try {
+                        const startDate = sd.start_time ? String(sd.start_time).slice(0, 10) : sd.date ? String(sd.date).slice(0, 10) : null;
+                        return startDate === date;
+                    } catch {
+                        return false;
+                    }
+                });
+
+            // Get all breaks for the current date (actual status only)
+            const allBreaks = (shiftDetails || [])
+                .filter((sd: any) => (sd.type ?? '') === 'break')
+                .filter((sd: any) => (sd.status ?? 'scheduled') === 'actual')
+                .filter((sd: any) => {
+                    try {
+                        const breakDate = sd.date ? String(sd.date).slice(0, 10) : sd.start_time ? String(sd.start_time).slice(0, 10) : null;
+                        return breakDate === date;
+                    } catch {
+                        return false;
+                    }
+                });
+
+            // Create CSV header
+            const header =
+                '勤務日,ユーザーID,ユーザー名,空欄,出勤時刻,退勤時刻,,,休憩1開始時刻,休憩1終了時刻,,,休憩2開始時刻,休憩2復帰時刻,,,勤務時間(h),,,休憩時間(h),';
+            const rows: string[] = [header];
+
+            // Process each work shift
+            workShifts.forEach((shift: any) => {
+                const userId = shift.user_id ?? (shift.user && shift.user.id) ?? '';
+                const userName = shift.user?.name ?? '';
+                const workDate = date ? String(date).slice(0, 10).replace(/-/g, '/') : '';
+                const startTime = formatDateTimeForCSV(shift.start_time);
+                const endTime = formatDateTimeForCSV(shift.end_time);
+
+                // Get breaks for this user
+                const userBreaks = allBreaks
+                    .filter((b: any) => (b.user_id ?? (b.user && b.user.id)) === userId)
+                    .sort((a: any, b: any) => {
+                        const aTime = a.start_time || '';
+                        const bTime = b.start_time || '';
+                        return aTime < bTime ? -1 : aTime > bTime ? 1 : 0;
+                    });
+
+                const break1Start = userBreaks[0] ? formatDateTimeForCSV(userBreaks[0].start_time) : '';
+                const break1End = userBreaks[0] ? formatDateTimeForCSV(userBreaks[0].end_time) : '';
+                const break2Start = userBreaks[1] ? formatDateTimeForCSV(userBreaks[1].start_time) : '';
+                const break2End = userBreaks[1] ? formatDateTimeForCSV(userBreaks[1].end_time) : '';
+
+                // Calculate work hours
+                let workHours = '';
+                if (startTime && endTime) {
+                    try {
+                        // Extract time part from "yyyy/mm/dd hh:mi:ss" format
+                        const startTimePart = startTime.split(' ')[1]; // "hh:mi:ss"
+                        const endTimePart = endTime.split(' ')[1]; // "hh:mi:ss"
+
+                        const [sh, sm] = startTimePart.split(':').map((v) => Number(v));
+                        const [eh, em] = endTimePart.split(':').map((v) => Number(v));
+                        let startMinutes = sh * 60 + sm;
+                        let endMinutes = eh * 60 + em;
+                        if (endMinutes <= startMinutes) endMinutes += 24 * 60; // next day
+                        const diffMinutes = endMinutes - startMinutes;
+                        workHours = (diffMinutes / 60).toFixed(2);
+                    } catch {
+                        workHours = '';
+                    }
+                }
+
+                // Calculate total break hours
+                let breakHours = '';
+                if (userBreaks.length > 0) {
+                    try {
+                        let totalBreakMinutes = 0;
+                        userBreaks.forEach((b: any) => {
+                            const bStart = timeValueFromRaw(b.start_time) || '';
+                            const bEnd = timeValueFromRaw(b.end_time) || '';
+                            if (bStart && bEnd) {
+                                const [bsh, bsm] = bStart.split(':').map((v) => Number(v));
+                                const [beh, bem] = bEnd.split(':').map((v) => Number(v));
+                                let bStartMinutes = bsh * 60 + bsm;
+                                let bEndMinutes = beh * 60 + bem;
+                                if (bEndMinutes <= bStartMinutes) bEndMinutes += 24 * 60;
+                                totalBreakMinutes += bEndMinutes - bStartMinutes;
+                            }
+                        });
+                        breakHours = (totalBreakMinutes / 60).toFixed(2);
+                    } catch {
+                        breakHours = '';
+                    }
+                }
+
+                // Build CSV row
+                const row = [
+                    workDate,
+                    userId,
+                    userName,
+                    '', // 空欄
+                    startTime,
+                    endTime,
+                    '',
+                    '', // 空欄2つ
+                    break1Start,
+                    break1End,
+                    '',
+                    '', // 空欄2つ
+                    break2Start,
+                    break2End,
+                    '',
+                    '', // 空欄2つ
+                    workHours,
+                    '',
+                    '', // 空欄2つ
+                    breakHours,
+                    '',
+                ];
+                rows.push(row.join(','));
+            });
+
+            // Create CSV content
+            const csvContent = rows.join('\n');
+            const bom = '\uFEFF'; // UTF-8 BOM for Excel compatibility
+            const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `シフト_${displayDate.replace(/\//g, '')}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            setToast({ message: 'CSVをダウンロードしました', type: 'success' });
+        } catch (e) {
+            console.error('CSV download error:', e);
+            setToast({ message: 'CSVダウンロードに失敗しました', type: 'error' });
+        }
+    };
+
     return (
         <AppSidebarLayout breadcrumbs={breadcrumbs}>
             <Head title={`日間タイムライン ${displayDate || ''}`} />
             <div className="p-4 sm:p-6 lg:p-8">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                     {/* 上段：右端に戻るボタンを配置（出勤編集ボタン行の上） */}
-                    <div className="mb-2 flex w-full justify-start">
+                    <div className="mb-2 flex w-full justify-between">
                         <Button
                             variant="outline"
                             size="sm"
@@ -334,6 +496,9 @@ export default function Daily() {
                             }}
                         >
                             戻る
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={handleDownloadCSV}>
+                            CSVダウンロード
                         </Button>
                     </div>
                     <div className="flex flex-shrink-0 items-center gap-2">
