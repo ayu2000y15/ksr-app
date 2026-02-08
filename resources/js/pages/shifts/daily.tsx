@@ -367,7 +367,7 @@ export default function Daily() {
 
             // Process each work shift
             workShifts.forEach((shift: any) => {
-                const userId = shift.user_id ?? (shift.user && shift.user.id) ?? '';
+                const userId = shift.user?.position ?? shift.user_id ?? (shift.user && shift.user.id) ?? '';
                 const userName = shift.user?.name ?? '';
                 const workDate = date ? String(date).slice(0, 10).replace(/-/g, '/') : '';
                 const startTime = formatDateTimeForCSV(shift.start_time);
