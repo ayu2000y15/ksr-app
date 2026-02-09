@@ -367,7 +367,8 @@ export default function Daily() {
 
             // Process each work shift
             workShifts.forEach((shift: any) => {
-                const userId = shift.user?.position ?? shift.user_id ?? (shift.user && shift.user.id) ?? '';
+                const userPosition = shift.user?.position ?? shift.user_id ?? (shift.user && shift.user.id) ?? '';
+                const actualUserId = shift.user_id ?? (shift.user && shift.user.id) ?? '';
                 const userName = shift.user?.name ?? '';
                 const workDate = date ? String(date).slice(0, 10).replace(/-/g, '/') : '';
                 const startTime = formatDateTimeForCSV(shift.start_time);
@@ -375,7 +376,7 @@ export default function Daily() {
 
                 // Get breaks for this user
                 const userBreaks = allBreaks
-                    .filter((b: any) => (b.user_id ?? (b.user && b.user.id)) === userId)
+                    .filter((b: any) => (b.user_id ?? (b.user && b.user.id)) === actualUserId)
                     .sort((a: any, b: any) => {
                         const aTime = a.start_time || '';
                         const bTime = b.start_time || '';
@@ -433,7 +434,7 @@ export default function Daily() {
                 // Build CSV row
                 const row = [
                     workDate,
-                    userId,
+                    userPosition,
                     userName,
                     '', // 空欄
                     startTime,
