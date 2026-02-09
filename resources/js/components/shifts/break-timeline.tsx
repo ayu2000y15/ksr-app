@@ -878,7 +878,7 @@ export default function BreakTimeline(props: {
 
             {/* Attendance footer fixed below scroll area: left label + right horizontally-scrollable counts */}
             <div className="mt-1 flex items-center border-t bg-white">
-                <div className="w-28 flex-shrink-0 p-2 text-sm font-medium text-muted-foreground sm:w-48">出勤人数</div>
+                <div className="w-40 flex-shrink-0 p-2 text-sm font-medium text-muted-foreground sm:w-52">出勤人数</div>
                 <div ref={footerRightRef} className="footer-scroll flex-1 overflow-x-auto" style={{ overflowX: 'auto' }}>
                     <div
                         style={{
