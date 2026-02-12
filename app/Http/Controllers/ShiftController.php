@@ -38,7 +38,7 @@ class ShiftController extends Controller
             ->get();
 
         // only include active users in the month editor (prefer position ordering then id)
-        $users = User::select('id', 'name', 'position', 'preferred_week_days', 'has_car')->where('status', 'active')->orderBy('position')->orderBy('id')->get();
+        $users = User::select('id', 'name', 'position', 'preferred_week_days', 'has_car', 'employment_start_date', 'employment_end_date')->where('status', 'active')->orderBy('position')->orderBy('id')->get();
         $holidays = Holiday::whereBetween('date', [$startDate, $endDate])
             ->pluck('date')
             ->map(function ($d) {

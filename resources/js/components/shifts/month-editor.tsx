@@ -846,7 +846,7 @@ export default function MonthEditor({
                                 {users.map((u) => {
                                     const monthlyCounts = getMonthlyAttendanceCounts(u);
                                     return (
-                                        <div key={`user-${u.id}`} className="flex h-12 flex-col border-b bg-white p-2" style={{ maxWidth: '12rem' }}>
+                                        <div key={`user-${u.id}`} className="flex h-16 flex-col border-b bg-white p-2" style={{ maxWidth: '12rem' }}>
                                             {/* 1行目: ユーザー名 */}
                                             <div className="flex items-center">
                                                 <input
@@ -876,6 +876,28 @@ export default function MonthEditor({
                                                         <span className="hidden md:inline">{u.name}</span>
                                                     </Link>
                                                 </span>
+                                            </div>
+                                            {/* 勤務期間 */}
+                                            <div className="mt-0.5 text-[10px] text-muted-foreground">
+                                                {(() => {
+                                                    const formatDate = (dateStr: string | null | undefined) => {
+                                                        if (!dateStr) return '';
+                                                        try {
+                                                            const d = new Date(dateStr);
+                                                            return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+                                                        } catch {
+                                                            return '';
+                                                        }
+                                                    };
+                                                    const start = formatDate(u.employment_start_date);
+                                                    const end = formatDate(u.employment_end_date);
+                                                    if (!start && !end) return null;
+                                                    return (
+                                                        <span>
+                                                            {start || '?'}~{end || '?'}
+                                                        </span>
+                                                    );
+                                                })()}
                                             </div>
                                             {/* 2行目: 月別出勤日数 */}
                                             <div className="mt-1 flex gap-2 text-[9px] text-muted-foreground">
@@ -1015,7 +1037,7 @@ export default function MonthEditor({
                                     {/* データ行 */}
                                     <div style={{ minHeight: 'calc(100vh - 300px)' }}>
                                         {users.map((u) => (
-                                            <div key={`row-${u.id}`} className="flex border-b" style={{ minHeight: '3rem' }}>
+                                            <div key={`row-${u.id}`} className="flex h-16 border-b" style={{ minHeight: '3rem' }}>
                                                 {visibleDays.map((d) => {
                                                     const cellVal = grid[u.id]?.[d] ?? '';
                                                     const cellBgClass =
