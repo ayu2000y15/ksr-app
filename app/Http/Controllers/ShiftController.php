@@ -1513,9 +1513,13 @@ class ShiftController extends Controller
                 $startOfDay = $currentDate->copy()->startOfDay()->toDateTimeString();
                 $endOfDay = $currentDate->copy()->endOfDay()->toDateTimeString();
 
-                // Get work shifts for this date (type='work')
+                // Get work shifts for this date (type='work', exclude absent)
                 $workShifts = ShiftDetail::with('user')
                     ->where('type', 'work')
+                    ->where(function ($q) {
+                        $q->where('status', '!=', 'absent')
+                            ->orWhereNull('status');
+                    })
                     ->where(function ($q) use ($dateStr, $startOfDay, $endOfDay) {
                         $q->whereRaw('date(date) = ?', [$dateStr])
                             ->orWhere(function ($qq) use ($startOfDay, $endOfDay) {
@@ -1525,9 +1529,17 @@ class ShiftController extends Controller
                     })
                     ->get();
 
-                // Get all breaks for this date (type='break', status='actual')
+                // Get user IDs who are absent on this date
+                $absentUserIds = ShiftDetail::where('type', 'work')
+                    ->where('status', 'absent')
+                    ->whereRaw('date(date) = ?', [$dateStr])
+                    ->pluck('user_id')
+                    ->toArray();
+
+                // Get all breaks for this date (type='break', status='actual', exclude absent users)
                 $allBreaks = ShiftDetail::where('type', 'break')
                     ->where('status', 'actual')
+                    ->whereNotIn('user_id', $absentUserIds)
                     ->where(function ($q) use ($dateStr, $startOfDay, $endOfDay) {
                         $q->whereRaw('date(date) = ?', [$dateStr])
                             ->orWhere(function ($qq) use ($startOfDay, $endOfDay) {
