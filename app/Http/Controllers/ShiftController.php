@@ -1514,25 +1514,20 @@ class ShiftController extends Controller
                 $endOfDay = $currentDate->copy()->endOfDay()->toDateTimeString();
 
                 // Get work shifts for this date (type='work', exclude absent)
+                // Use start_time date as the work date (same logic as daily timeline)
                 $workShifts = ShiftDetail::with('user')
                     ->where('type', 'work')
                     ->where(function ($q) {
                         $q->where('status', '!=', 'absent')
                             ->orWhereNull('status');
                     })
-                    ->where(function ($q) use ($dateStr, $startOfDay, $endOfDay) {
-                        $q->whereRaw('date(date) = ?', [$dateStr])
-                            ->orWhere(function ($qq) use ($startOfDay, $endOfDay) {
-                                $qq->where('start_time', '<=', $endOfDay)
-                                    ->where('end_time', '>=', $startOfDay);
-                            });
-                    })
+                    ->whereRaw('DATE(start_time) = ?', [$dateStr])
                     ->get();
 
                 // Get user IDs who are absent on this date
                 $absentUserIds = ShiftDetail::where('type', 'work')
                     ->where('status', 'absent')
-                    ->whereRaw('date(date) = ?', [$dateStr])
+                    ->whereRaw('DATE(start_time) = ?', [$dateStr])
                     ->pluck('user_id')
                     ->toArray();
 
@@ -1540,13 +1535,7 @@ class ShiftController extends Controller
                 $allBreaks = ShiftDetail::where('type', 'break')
                     ->where('status', 'actual')
                     ->whereNotIn('user_id', $absentUserIds)
-                    ->where(function ($q) use ($dateStr, $startOfDay, $endOfDay) {
-                        $q->whereRaw('date(date) = ?', [$dateStr])
-                            ->orWhere(function ($qq) use ($startOfDay, $endOfDay) {
-                                $qq->where('start_time', '<=', $endOfDay)
-                                    ->where('end_time', '>=', $startOfDay);
-                            });
-                    })
+                    ->whereRaw('DATE(COALESCE(start_time, date)) = ?', [$dateStr])
                     ->orderBy('start_time')
                     ->get();
 
