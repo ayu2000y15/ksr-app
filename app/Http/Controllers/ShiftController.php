@@ -1485,4 +1485,145 @@ class ShiftController extends Controller
             'is_published' => $newStatus
         ], 200);
     }
+
+    /**
+     * Export shift details as CSV for a date range.
+     */
+    public function exportCsv(Request $request)
+    {
+        $startDate = $request->input('start_date');
+        $endDate = $request->input('end_date');
+
+        if (!$startDate || !$endDate) {
+            return response()->json(['error' => '開始日と終了日を指定してください。'], 400);
+        }
+
+        try {
+            $start = Carbon::parse($startDate);
+            $end = Carbon::parse($endDate);
+
+            // Build CSV header (same as daily timeline)
+            $csv = "\xEF\xBB\xBF"; // UTF-8 BOM
+            $csv .= "勤務日,ユーザーID,ユーザー名,空欄,出勤時刻,退勤時刻,,,休憩1開始時刻,休憩1終了時刻,,,休憩2開始時刻,休憩2復帰時刻,,,勤務時間(h),,,休憩時間(h),\n";
+
+            // Loop through each date in the range
+            $currentDate = $start->copy();
+            while ($currentDate->lte($end)) {
+                $dateStr = $currentDate->toDateString();
+                $startOfDay = $currentDate->copy()->startOfDay()->toDateTimeString();
+                $endOfDay = $currentDate->copy()->endOfDay()->toDateTimeString();
+
+                // Get work shifts for this date (type='work')
+                $workShifts = ShiftDetail::with('user')
+                    ->where('type', 'work')
+                    ->where(function ($q) use ($dateStr, $startOfDay, $endOfDay) {
+                        $q->whereRaw('date(date) = ?', [$dateStr])
+                            ->orWhere(function ($qq) use ($startOfDay, $endOfDay) {
+                                $qq->where('start_time', '<=', $endOfDay)
+                                    ->where('end_time', '>=', $startOfDay);
+                            });
+                    })
+                    ->get();
+
+                // Get all breaks for this date (type='break', status='actual')
+                $allBreaks = ShiftDetail::where('type', 'break')
+                    ->where('status', 'actual')
+                    ->where(function ($q) use ($dateStr, $startOfDay, $endOfDay) {
+                        $q->whereRaw('date(date) = ?', [$dateStr])
+                            ->orWhere(function ($qq) use ($startOfDay, $endOfDay) {
+                                $qq->where('start_time', '<=', $endOfDay)
+                                    ->where('end_time', '>=', $startOfDay);
+                            });
+                    })
+                    ->orderBy('start_time')
+                    ->get();
+
+                // Process each work shift
+                foreach ($workShifts as $shift) {
+                    $userPosition = $shift->user ? $shift->user->position : $shift->user_id;
+                    $userName = $shift->user ? $shift->user->name : '';
+                    $workDate = $currentDate->format('Y/m/d');
+
+                    // Format times as yyyy/mm/dd hh:mi:ss
+                    $startTime = $shift->start_time ? Carbon::parse($shift->start_time)->format('Y/m/d H:i:s') : '';
+                    $endTime = $shift->end_time ? Carbon::parse($shift->end_time)->format('Y/m/d H:i:s') : '';
+
+                    // Get breaks for this user
+                    $userBreaks = $allBreaks->where('user_id', $shift->user_id)->values();
+
+                    $break1Start = $userBreaks->get(0) && $userBreaks->get(0)->start_time
+                        ? Carbon::parse($userBreaks->get(0)->start_time)->format('Y/m/d H:i:s') : '';
+                    $break1End = $userBreaks->get(0) && $userBreaks->get(0)->end_time
+                        ? Carbon::parse($userBreaks->get(0)->end_time)->format('Y/m/d H:i:s') : '';
+                    $break2Start = $userBreaks->get(1) && $userBreaks->get(1)->start_time
+                        ? Carbon::parse($userBreaks->get(1)->start_time)->format('Y/m/d H:i:s') : '';
+                    $break2End = $userBreaks->get(1) && $userBreaks->get(1)->end_time
+                        ? Carbon::parse($userBreaks->get(1)->end_time)->format('Y/m/d H:i:s') : '';
+
+                    // Calculate work hours
+                    $workHours = '';
+                    if ($shift->start_time && $shift->end_time) {
+                        $startCarbon = Carbon::parse($shift->start_time);
+                        $endCarbon = Carbon::parse($shift->end_time);
+                        $diffMinutes = $startCarbon->diffInMinutes($endCarbon);
+                        $workHours = number_format($diffMinutes / 60, 2);
+                    }
+
+                    // Calculate total break hours
+                    $breakHours = '';
+                    if ($userBreaks->count() > 0) {
+                        $totalBreakMinutes = 0;
+                        foreach ($userBreaks as $break) {
+                            if ($break->start_time && $break->end_time) {
+                                $breakStart = Carbon::parse($break->start_time);
+                                $breakEnd = Carbon::parse($break->end_time);
+                                $totalBreakMinutes += $breakStart->diffInMinutes($breakEnd);
+                            }
+                        }
+                        $breakHours = number_format($totalBreakMinutes / 60, 2);
+                    }
+
+                    // Build CSV row
+                    $row = [
+                        $workDate,
+                        $userPosition,
+                        $userName,
+                        '', // 空欄
+                        $startTime,
+                        $endTime,
+                        '',
+                        '', // 空欄2つ
+                        $break1Start,
+                        $break1End,
+                        '',
+                        '', // 空欄2つ
+                        $break2Start,
+                        $break2End,
+                        '',
+                        '', // 空欄2つ
+                        $workHours,
+                        '',
+                        '', // 空欄2つ
+                        $breakHours,
+                        '',
+                    ];
+                    $csv .= implode(',', $row) . "\n";
+                }
+
+                $currentDate->addDay();
+            }
+
+            // Format filename as シフト_yyyymmdd_yyyymmdd.csv
+            $startDateFormatted = str_replace('-', '', $startDate);
+            $endDateFormatted = str_replace('-', '', $endDate);
+            $filename = "シフト_{$startDateFormatted}_{$endDateFormatted}.csv";
+
+            return response($csv, 200)
+                ->header('Content-Type', 'text/csv; charset=UTF-8')
+                ->header('Content-Disposition', "attachment; filename=\"{$filename}\"");
+        } catch (\Exception $e) {
+            \Log::error('CSV export error: ' . $e->getMessage());
+            return response()->json(['error' => 'CSVのエクスポートに失敗しました。: ' . $e->getMessage()], 500);
+        }
+    }
 }

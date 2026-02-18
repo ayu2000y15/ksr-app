@@ -12,7 +12,7 @@ import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { BreadcrumbItem, PageProps, PaginatedResponse } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import axios from 'axios';
-import { LoaderCircle, Trash } from 'lucide-react';
+import { Download, LoaderCircle, Trash } from 'lucide-react';
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 
 type DefaultShiftType = {
@@ -176,6 +176,16 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
     const [editEnd, setEditEnd] = useState('');
     const [localShiftDetails, setLocalShiftDetails] = useState<any[]>(() => (page.props as any).shiftDetails || []);
     const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' | 'info' } | null>(null);
+    // CSV期間指定用の状態（デフォルトは今日）
+    const todayStr = useMemo(() => {
+        const d = new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${dd}`;
+    }, []);
+    const [csvStartDate, setCsvStartDate] = useState(todayStr);
+    const [csvEndDate, setCsvEndDate] = useState(todayStr);
 
     const toServerDateTime = (dtLocal: string) => {
         // convert 'yyyy-MM-ddTHH:mm' -> 'yyyy-MM-dd HH:mm:00'
@@ -220,6 +230,37 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
     useEffect(() => {
         setLocalShiftDetails(queryDate ? timelineShiftDetails : (page.props as any).shiftDetails || []);
     }, [page.props, timelineShiftDetails, queryDate]);
+
+    // CSV ダウンロード処理
+    const downloadCsv = async () => {
+        if (!csvStartDate || !csvEndDate) {
+            setToast({ message: '開始日と終了日を指定してください。', type: 'error' });
+            return;
+        }
+        try {
+            // Build URL manually to avoid Ziggy route issues
+            const url = `/shifts/export-csv?start_date=${csvStartDate}&end_date=${csvEndDate}`;
+            const response = await axios.get(url, {
+                responseType: 'blob',
+            });
+            const blob = new Blob([response.data], { type: 'text/csv; charset=utf-8' });
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            // Format filename as シフト_yyyymmdd_yyyymmdd.csv
+            const startFormatted = csvStartDate.replace(/-/g, '');
+            const endFormatted = csvEndDate.replace(/-/g, '');
+            link.setAttribute('download', `シフト_${startFormatted}_${endFormatted}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(downloadUrl);
+            setToast({ message: 'CSVをダウンロードしました。', type: 'success' });
+        } catch (err) {
+            console.error('CSV download error:', err);
+            setToast({ message: 'CSVのダウンロードに失敗しました。', type: 'error' });
+        }
+    };
 
     return (
         <AppSidebarLayout breadcrumbs={breadcrumbs}>
@@ -278,7 +319,30 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                         </Button>
                     </div>
 
-                    <div>
+                    <div className="flex items-center gap-3">
+                        {/* CSV期間指定とダウンロードボタン */}
+                        <div className="flex items-center gap-2">
+                            <Input
+                                type="date"
+                                value={csvStartDate}
+                                onChange={(e) => setCsvStartDate(e.target.value)}
+                                className="w-auto"
+                                placeholder="開始日"
+                            />
+                            <span className="text-sm text-muted-foreground">〜</span>
+                            <Input
+                                type="date"
+                                value={csvEndDate}
+                                onChange={(e) => setCsvEndDate(e.target.value)}
+                                className="w-auto"
+                                placeholder="終了日"
+                            />
+                            <Button aria-label="CSVダウンロード" variant="outline" onClick={downloadCsv}>
+                                <Download className="mr-2 h-4 w-4" />
+                                CSV
+                            </Button>
+                        </div>
+
                         <Button
                             aria-label="ユーザー別統計"
                             variant="outline"

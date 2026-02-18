@@ -140,6 +140,9 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
     // 専用の日間タイムラインページ（クエリ or param で日付指定）
     Route::get('/shifts/daily', [App\Http\Controllers\ShiftController::class, 'daily'])->name('shifts.daily');
 
+    // CSV エクスポート（期間指定）
+    Route::get('/shifts/export-csv', [App\Http\Controllers\ShiftController::class, 'exportCsv'])->name('shifts.export-csv');
+
     Route::resource('shifts', App\Http\Controllers\ShiftController::class)->only([
         'index',
         'create',
