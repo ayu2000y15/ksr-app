@@ -572,7 +572,7 @@ export default function BreakTimeline(props: {
                                             <button
                                                 type="button"
                                                 title="10分休憩を記録"
-                                                className="rounded bg-gray-100 px-2 py-0.5 text-xs whitespace-nowrap text-gray-700 hover:bg-gray-200"
+                                                className="hidden rounded bg-gray-100 px-2 py-0.5 text-xs whitespace-nowrap text-gray-700 hover:bg-gray-200 md:block"
                                                 onClick={() => recordShortBreak(Number(it.user_id))}
                                             >
                                                 10分

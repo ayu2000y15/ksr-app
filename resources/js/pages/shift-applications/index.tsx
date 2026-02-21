@@ -452,7 +452,7 @@ export default function Index({
                                     </div>
                                     <div className="mt-1">・その他やむを得ない事情がある場合、社員に直接連絡してください。</div>
                                     <div className="mt-1">
-                                        ・<strong className="font-semibold">中抜け申請</strong>は当日の取り消しはできませんのでご注意ください。
+                                        ・<strong className="font-semibold">中抜け申請</strong>は前日までに行ってください。当日の申請はできません。
                                     </div>
                                     <div className="mt-1">
                                         ・<strong className="font-semibold">食券不要申請</strong>
@@ -593,6 +593,8 @@ export default function Index({
                                                                 // create meal ticket button element (optimistic handlers)
                                                                 // showMealTicketControl: hide meal-ticket control for today and tomorrow (daysUntil <= 1)
                                                                 const showMealTicketControl = typeof daysUntil === 'number' ? daysUntil >= 2 : true;
+                                                                // showStepOutControl: hide step-out control for today (daysUntil < 1)
+                                                                const showStepOutControl = typeof daysUntil === 'number' ? daysUntil >= 1 : true;
                                                                 // only show shift actions (meal-ticket / step-out) when within the application deadline (or no limit)
                                                                 const showShiftActionsByDeadline = withinDeadlineOrNoLimit;
 
@@ -662,8 +664,8 @@ export default function Index({
                                                                     <>
                                                                         {mealTicketButton}
                                                                         {mealTicketButton ? <div className="w-1" /> : null}
-                                                                        {/* 中抜け controls: also gated by deadline */}
-                                                                        {showShiftActionsByDeadline ? (
+                                                                        {/* 中抜け controls: also gated by deadline and must be at least 1 day before */}
+                                                                        {showShiftActionsByDeadline && showStepOutControl ? (
                                                                             isStepOut ? (
                                                                                 <Button
                                                                                     variant="destructive"
@@ -798,41 +800,7 @@ export default function Index({
                                                             return null;
                                                         }
 
-                                                        // pastOrToday: show 中抜け on 当日 only when a shift exists
-                                                        if (isToday && isShiftExists) {
-                                                            if (isStepOut) {
-                                                                return (
-                                                                    <Button variant="outline" size="sm" disabled>
-                                                                        中抜け申請済
-                                                                    </Button>
-                                                                );
-                                                            }
-
-                                                            return (
-                                                                <Button
-                                                                    variant="outline"
-                                                                    size="sm"
-                                                                    onClick={async () => {
-                                                                        try {
-                                                                            await axios.post(route('shifts.mark_step_out'), {
-                                                                                user_id: authUser.id,
-                                                                                date: iso,
-                                                                            });
-                                                                            setLocalStepOutDates((prev) =>
-                                                                                prev.includes(iso) ? prev : [...prev, iso],
-                                                                            );
-                                                                            setToast({ message: '中抜けに変更しました。', type: 'success' });
-                                                                        } catch (e) {
-                                                                            console.error(e);
-                                                                            setToast({ message: '中抜けにできませんでした。', type: 'error' });
-                                                                        }
-                                                                    }}
-                                                                >
-                                                                    中抜け
-                                                                </Button>
-                                                            );
-                                                        }
-
+                                                        // pastOrToday: 中抜けは前日までに申請が必要なため、当日は表示しない
                                                         return null;
                                                     })()}
                                                 </div>
@@ -911,6 +879,7 @@ export default function Index({
                                                                 })();
                                                                 const isMealTicket = (localMealTicketDates || []).includes(iso) || hasMealTicketFalse;
                                                                 const showMealTicketControl = typeof daysUntil === 'number' ? daysUntil >= 2 : true;
+                                                                const showStepOutControl = typeof daysUntil === 'number' ? daysUntil >= 1 : true;
                                                                 const showShiftActionsByDeadline = withinDeadlineOrNoLimit;
 
                                                                 const mealTicketButton =
@@ -978,7 +947,7 @@ export default function Index({
                                                                     <>
                                                                         {mealTicketButton}
                                                                         {mealTicketButton ? <div className="w-1" /> : null}
-                                                                        {showShiftActionsByDeadline ? (
+                                                                        {showShiftActionsByDeadline && showStepOutControl ? (
                                                                             isStepOut ? (
                                                                                 <Button
                                                                                     variant="destructive"
@@ -1091,56 +1060,7 @@ export default function Index({
                                                             return null;
                                                         }
 
-                                                        if (isToday && isShiftExists) {
-                                                            if (isStepOut) {
-                                                                return (
-                                                                    <Button
-                                                                        variant="destructive"
-                                                                        size="sm"
-                                                                        onClick={async () => {
-                                                                            try {
-                                                                                await axios.post(route('shifts.unmark_step_out'), {
-                                                                                    user_id: authUser.id,
-                                                                                    date: iso,
-                                                                                });
-                                                                                setLocalStepOutDates((prev) => prev.filter((d) => d !== iso));
-                                                                                setToast({ message: '中抜けを取消しました。', type: 'success' });
-                                                                            } catch (err) {
-                                                                                console.error(err);
-                                                                                setToast({ message: '中抜けの取消に失敗しました。', type: 'error' });
-                                                                            }
-                                                                        }}
-                                                                    >
-                                                                        中抜け取消
-                                                                    </Button>
-                                                                );
-                                                            }
-
-                                                            return (
-                                                                <Button
-                                                                    variant="outline"
-                                                                    size="sm"
-                                                                    onClick={async () => {
-                                                                        try {
-                                                                            await axios.post(route('shifts.mark_step_out'), {
-                                                                                user_id: authUser.id,
-                                                                                date: iso,
-                                                                            });
-                                                                            setLocalStepOutDates((prev) =>
-                                                                                prev.includes(iso) ? prev : [...prev, iso],
-                                                                            );
-                                                                            setToast({ message: '中抜けに変更しました。', type: 'success' });
-                                                                        } catch (e) {
-                                                                            console.error(e);
-                                                                            setToast({ message: '中抜けにできませんでした。', type: 'error' });
-                                                                        }
-                                                                    }}
-                                                                >
-                                                                    中抜け
-                                                                </Button>
-                                                            );
-                                                        }
-
+                                                        // pastOrToday: 中抜けは前日までに申請が必要なため、当日は表示しない
                                                         return null;
                                                     })()}
                                                 </div>
