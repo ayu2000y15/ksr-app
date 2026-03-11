@@ -191,8 +191,8 @@ export default function MonthEditor({
 
     // Calculate monthly attendance counts (16th to 15th) for each of the 4 months
     const getMonthlyAttendanceCounts = (u: { id: number; [k: string]: unknown }) => {
-        const es = existingShifts as Record<string, Record<string, Cell>> | undefined;
-        const source = es?.[String(u.id)] ?? es?.[u.id];
+        // Prefer current grid so counts reflect the visible 16th-15th periods and in-page edits.
+        const source = grid[u.id] ?? {};
         if (!source) return [];
 
         const counts: Array<{ label: string; count: number }> = [];
