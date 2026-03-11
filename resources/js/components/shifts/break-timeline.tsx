@@ -563,7 +563,7 @@ export default function BreakTimeline(props: {
                                             <button
                                                 type="button"
                                                 title="クリックで削除"
-                                                className="rounded bg-green-100 px-2 py-0.5 text-xs whitespace-nowrap text-green-800 hover:bg-green-200"
+                                                className="hidden rounded bg-green-100 px-2 py-0.5 text-xs whitespace-nowrap text-green-800 hover:bg-green-200 md:block"
                                                 onClick={() => deleteShortBreak(Number(it.user_id))}
                                             >
                                                 {shortBreaks[Number(it.user_id)].start_time.substring(0, 5)}～
@@ -878,7 +878,7 @@ export default function BreakTimeline(props: {
 
             {/* Attendance footer fixed below scroll area: left label + right horizontally-scrollable counts */}
             <div className="mt-1 flex items-center border-t bg-white">
-                <div className="w-40 flex-shrink-0 p-2 text-sm font-medium text-muted-foreground sm:w-52">出勤人数</div>
+                <div className="w-30 flex-shrink-0 p-2 text-sm font-medium text-muted-foreground sm:w-52">出勤人数</div>
                 <div ref={footerRightRef} className="footer-scroll flex-1 overflow-x-auto" style={{ overflowX: 'auto' }}>
                     <div
                         style={{

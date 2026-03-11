@@ -478,6 +478,30 @@ export default function MonthEditor({
         }
     };
 
+    // determine whether a date is inside user's employment period (inclusive)
+    const isWithinEmploymentPeriod = (u: { [k: string]: unknown }, date: string) => {
+        try {
+            const target = parseLocal(date);
+            target.setHours(0, 0, 0, 0);
+
+            const startRaw = u.employment_start_date as string | undefined;
+            const endRaw = u.employment_end_date as string | undefined;
+
+            const start = startRaw ? parseLocal(startRaw) : null;
+            const end = endRaw ? parseLocal(endRaw) : null;
+
+            if (start) start.setHours(0, 0, 0, 0);
+            if (end) end.setHours(0, 0, 0, 0);
+
+            if (start && target < start) return false;
+            if (end && target > end) return false;
+            // if either bound exists and checks passed, treat as in-period
+            return !!(start || end);
+        } catch {
+            return false;
+        }
+    };
+
     const toggleDateSelection = (date: string) => {
         try {
             const dt = parseLocal(date);
@@ -1054,6 +1078,8 @@ export default function MonthEditor({
                                                     const isSun = dt.getDay() === 0;
                                                     const isHoliday = (holidays || []).includes(d);
                                                     const dayBgClass = isHoliday || isSun ? 'bg-red-50' : isSat ? 'bg-blue-50' : '';
+                                                    const inEmploymentPeriod = isWithinEmploymentPeriod(u, d);
+                                                    const employmentBgClass = inEmploymentPeriod ? 'bg-orange-100' : '';
                                                     const dayStart = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime();
                                                     const today = new Date();
                                                     today.setHours(0, 0, 0, 0);
@@ -1061,7 +1087,7 @@ export default function MonthEditor({
                                                     return (
                                                         <div
                                                             key={d}
-                                                            className={`flex w-12 flex-shrink-0 items-center justify-center border-r p-1 text-center ${dayBgClass}`}
+                                                            className={`flex w-12 flex-shrink-0 items-center justify-center border-r p-1 text-center ${employmentBgClass || dayBgClass}`}
                                                         >
                                                             <select
                                                                 value={cellVal}
