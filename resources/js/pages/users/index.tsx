@@ -10,7 +10,7 @@ import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { Car, Download, Edit, Eye, GripVertical, LoaderCircle, Plus, Trash } from 'lucide-react';
-import { Fragment, ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 // dialog modal removed: details now open on a separate page
 
 // パンくずリストの定義
@@ -49,6 +49,7 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
     const [nextPageUrl, setNextPageUrl] = useState(initialUsers.next_page_url);
     const [loading, setLoading] = useState(false);
     const [expandedIds, setExpandedIds] = useState<number[]>([]);
+    const [statusFilter, setStatusFilter] = useState<'active' | 'retired' | 'all'>('active');
     const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' | 'info' } | null>(null);
 
     const page = usePage();
@@ -120,6 +121,25 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
         setExpandedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
     };
 
+    const hasUnreturnedRental = (user: any) => {
+        if (!Array.isArray(user?.rentals)) return false;
+        return user.rentals.some((r: any) => !r?.return_date);
+    };
+
+    const filteredUsers = useMemo(() => {
+        return users.filter((user) => {
+            const status = String(user?.status ?? '');
+            const unreturned = hasUnreturnedRental(user);
+
+            if (statusFilter === 'all') return true;
+            if (statusFilter === 'retired') return status === 'retired';
+
+            // default(active): hide retired users, but keep those with unreturned rentals visible.
+            if (status === 'retired') return unreturned;
+            return status === 'active' || status === 'shared' || unreturned;
+        });
+    }, [users, statusFilter]);
+
     const confirmAndDelete = (user: any) => {
         if (!confirm(`ユーザー「${user.name}」を削除してもよろしいですか？この操作は取り消せません。`)) {
             return;
@@ -131,13 +151,59 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
         });
     };
 
+    const toggleUserStatus = async (user: any) => {
+        const currentStatus = String(user?.status ?? '');
+        if (currentStatus !== 'active' && currentStatus !== 'retired') {
+            setToast({ message: 'このステータスは一覧から切り替えできません', type: 'info' });
+            return;
+        }
+
+        const nextStatus = currentStatus === 'active' ? 'retired' : 'active';
+        const nextLabel = nextStatus === 'active' ? 'アクティブ' : '退職';
+        const ok = window.confirm(`ユーザー「${user.name}」のステータスを「${nextLabel}」に変更します。よろしいですか？`);
+        if (!ok) return;
+
+        try {
+            const res = await axios.post(route('users.update_status', user.id), { status: nextStatus });
+            setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, status: nextStatus } : u)));
+            setToast({ message: res?.data?.message ?? 'ステータスを更新しました', type: 'success' });
+        } catch (err) {
+            console.error('failed to update user status', err);
+            setToast({ message: 'ステータスの更新に失敗しました', type: 'error' });
+        }
+    };
+
     // ステータスに応じてBadgeコンポーネントを返す関数
-    const renderStatusBadge = (status: string) => {
+    const renderStatusBadge = (user: any) => {
+        const status = String(user?.status ?? '');
+        const clickable = canUpdateUsers && (status === 'active' || status === 'retired');
         switch (status) {
             case 'active':
-                return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">アクティブ</Badge>;
+                return (
+                    <Badge
+                        className={`bg-green-100 text-green-800 hover:bg-green-100 ${clickable ? 'cursor-pointer' : ''}`}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (clickable) void toggleUserStatus(user);
+                        }}
+                        title={clickable ? 'クリックで退職に変更' : undefined}
+                    >
+                        アクティブ
+                    </Badge>
+                );
             case 'retired':
-                return <Badge className="bg-red-100 text-red-800">退職</Badge>;
+                return (
+                    <Badge
+                        className={`bg-red-100 text-red-800 ${clickable ? 'cursor-pointer' : ''}`}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (clickable) void toggleUserStatus(user);
+                        }}
+                        title={clickable ? 'クリックでアクティブに変更' : undefined}
+                    >
+                        退職
+                    </Badge>
+                );
             case 'shared':
                 return <Badge variant="default">共有アカウント</Badge>;
             default:
@@ -319,6 +385,21 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                     <CardHeader className="flex-row items-center justify-between">
                         <CardTitle>ユーザー一覧</CardTitle>
                         <div className="flex gap-2">
+                            <div className="mr-2 flex items-center gap-2">
+                                <label htmlFor="user-status-filter" className="hidden text-sm text-muted-foreground sm:inline">
+                                    ステータス
+                                </label>
+                                <select
+                                    id="user-status-filter"
+                                    value={statusFilter}
+                                    onChange={(e) => setStatusFilter(e.target.value as 'active' | 'retired' | 'all')}
+                                    className="h-9 rounded border bg-white px-2 text-sm"
+                                >
+                                    <option value="active">アクティブのみ</option>
+                                    <option value="retired">退職のみ</option>
+                                    <option value="all">すべて</option>
+                                </select>
+                            </div>
                             <Link href={route('rental-items.index')}>
                                 <Button variant="outline">
                                     <span className="hidden sm:inline">貸出物マスタ</span>
@@ -384,7 +465,7 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                     <CardContent>
                         {/* Mobile: stacked card list (no horizontal scroll) */}
                         <div className="space-y-3 md:hidden">
-                            {users.map((user: any) => (
+                            {filteredUsers.map((user: any) => (
                                 <div key={user.id} className={`relative cursor-pointer rounded-md border p-4 hover:bg-gray-50`}>
                                     <div onClick={() => toggleExpand(user.id)}>
                                         <div className="flex items-start justify-between gap-4">
@@ -405,6 +486,11 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                                         >
                                                             {user.name}
                                                         </div>
+                                                        {hasUnreturnedRental(user) && (
+                                                            <div className="mt-1 inline-flex">
+                                                                <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">未返却あり</Badge>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                     <div className="truncate text-xs text-muted-foreground">
                                                         {user.roles && user.roles.length > 0 ? (
@@ -419,7 +505,7 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
 
                                             <div className="flex flex-col items-end space-y-2">
                                                 <div className="text-xs text-muted-foreground">ID: {user.position ?? user.id}</div>
-                                                <div>{renderStatusBadge(user.status)}</div>
+                                                <div>{renderStatusBadge(user)}</div>
                                                 <div className="text-xs text-muted-foreground">{new Date(user.created_at).toLocaleDateString()}</div>
                                             </div>
                                         </div>
@@ -651,7 +737,7 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {users.map((user: any) => (
+                                    {filteredUsers.map((user: any) => (
                                         <Fragment key={`user-${user.id}`}>
                                             <TableRow
                                                 key={user.id}
@@ -733,6 +819,11 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                                                 >
                                                                     {user.name}
                                                                 </span>
+                                                                {hasUnreturnedRental(user) && (
+                                                                    <Badge className="ml-1 bg-amber-100 text-amber-800 hover:bg-amber-100">
+                                                                        未返却
+                                                                    </Badge>
+                                                                )}
                                                             </div>
                                                             <span className="text-sm text-muted-foreground">
                                                                 {user.roles && user.roles.length > 0 ? (
@@ -756,7 +847,7 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>{user.line_name}</TableCell>
-                                                <TableCell>{renderStatusBadge(user.status)}</TableCell>
+                                                <TableCell>{renderStatusBadge(user)}</TableCell>
                                                 <TableCell>{new Date(user.created_at).toLocaleDateString()}</TableCell>
                                                 <TableCell className="text-right">
                                                     {canViewUsers && (

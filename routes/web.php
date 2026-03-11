@@ -95,6 +95,8 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
     Route::patch('/users/{user}', [UserController::class, 'update'])->name('users.update');
     // Accept POST for update to support clients that send POST instead of PATCH (e.g. Inertia.post with _method)
     Route::post('/users/{user}', [UserController::class, 'update'])->name('users.update.post');
+    // quick status update from users list badge
+    Route::post('/users/{user}/status', [UserController::class, 'updateStatus'])->name('users.update_status');
     Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
     // ユーザー統計ページ（shifts 配下のパスに移動）
     Route::get('/shifts/user-stats', [UserController::class, 'stats'])->name('shifts.user-stats');

@@ -620,8 +620,11 @@ class UserController extends Controller
 
         // 仮パスワードを生成
         $temporaryPassword = Str::random(12);
+        // 新規ユーザーは並び順の末尾に配置
+        $maxPosition = User::max('position') ?? 0;
 
         $user = User::create([
+            'position' => $maxPosition + 1,
             'name' => $request->name,
             'furigana' => $request->furigana,
             'email' => $request->email,
@@ -819,6 +822,33 @@ class UserController extends Controller
         }
 
         return Redirect::route('users.index')->with('success', 'ユーザー情報を更新しました。');
+    }
+
+    /**
+     * ユーザー一覧のバッジ操作用: ステータス（active/retired）を更新します。
+     */
+    public function updateStatus(Request $request, User $user)
+    {
+        if (Auth::user()->hasRole('システム管理者')) {
+            // システム管理者の場合は権限チェックをバイパス
+        } else {
+            $this->authorize('update', $user);
+        }
+
+        $validated = $request->validate([
+            'status' => 'required|in:active,retired',
+        ], [
+            'status.required' => 'ステータスは必須です。',
+            'status.in' => '無効なステータスが選択されました。',
+        ]);
+
+        $user->status = $validated['status'];
+        $user->save();
+
+        return response()->json([
+            'message' => $validated['status'] === 'active' ? 'アクティブに変更しました。' : '退職に変更しました。',
+            'status' => $user->status,
+        ]);
     }
 
     /**
