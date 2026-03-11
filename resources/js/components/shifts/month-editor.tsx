@@ -82,25 +82,32 @@ export default function MonthEditor({
         }
     }, [days]);
 
-    // compute days for 4 months starting from the currently displayed month
+    // compute visible days as continuous 4 payroll periods:
+    // from previous month's 16th to current+3 month's 15th
     const visibleDays = useMemo(() => {
         const pad = (n: number) => String(n).padStart(2, '0');
         const out: string[] = [];
-        // generate days for 4 consecutive months
-        for (let monthOffset = 0; monthOffset < 4; monthOffset++) {
-            let y = currentYear;
-            let m = currentMonth + monthOffset;
-            // handle year overflow
-            while (m > 11) {
-                y += 1;
-                m -= 12;
-            }
-            const daysInMonth = new Date(y, m + 1, 0).getDate();
-            for (let d = 1; d <= daysInMonth; d++) {
-                const dt = new Date(y, m, d);
-                out.push(`${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`);
-            }
+
+        let startY = currentYear;
+        let startM = currentMonth - 1;
+        if (startM < 0) {
+            startY -= 1;
+            startM = 11;
         }
+        const start = new Date(startY, startM, 16);
+
+        let endY = currentYear;
+        let endM = currentMonth + 3;
+        while (endM > 11) {
+            endY += 1;
+            endM -= 12;
+        }
+        const end = new Date(endY, endM, 15);
+
+        for (let dt = new Date(start); dt <= end; dt.setDate(dt.getDate() + 1)) {
+            out.push(`${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`);
+        }
+
         return out;
     }, [currentYear, currentMonth]);
 
