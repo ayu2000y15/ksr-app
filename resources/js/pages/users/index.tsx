@@ -126,6 +126,8 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
         return user.rentals.some((r: any) => !r?.return_date);
     };
 
+    const shouldShowUnreturnedBadge = (user: any) => String(user?.status ?? '') === 'retired' && hasUnreturnedRental(user);
+
     const filteredUsers = useMemo(() => {
         return users.filter((user) => {
             const status = String(user?.status ?? '');
@@ -382,9 +384,9 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                 )}
 
                 <Card>
-                    <CardHeader className="flex-row items-center justify-between">
-                        <CardTitle>ユーザー一覧</CardTitle>
-                        <div className="flex gap-2">
+                    <CardHeader className="flex flex-col items-stretch gap-3 md:flex-row md:items-center md:justify-between">
+                        <CardTitle className="whitespace-nowrap">ユーザー一覧</CardTitle>
+                        <div className="flex flex-wrap gap-2">
                             <div className="mr-2 flex items-center gap-2">
                                 <label htmlFor="user-status-filter" className="hidden text-sm text-muted-foreground sm:inline">
                                     ステータス
@@ -409,7 +411,7 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                             {canCreateUsers && (
                                 <>
                                     <Button
-                                        className="bg-green-600 text-white hover:bg-green-700"
+                                        className="hidden bg-green-600 text-white hover:bg-green-700 md:inline-flex"
                                         onClick={() => {
                                             window.location.href = route('users.download_sample_csv');
                                         }}
@@ -486,7 +488,7 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                                         >
                                                             {user.name}
                                                         </div>
-                                                        {hasUnreturnedRental(user) && (
+                                                        {shouldShowUnreturnedBadge(user) && (
                                                             <div className="mt-1 inline-flex">
                                                                 <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">未返却あり</Badge>
                                                             </div>
@@ -819,7 +821,7 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                                                 >
                                                                     {user.name}
                                                                 </span>
-                                                                {hasUnreturnedRental(user) && (
+                                                                {shouldShowUnreturnedBadge(user) && (
                                                                     <Badge className="ml-1 bg-amber-100 text-amber-800 hover:bg-amber-100">
                                                                         未返却
                                                                     </Badge>
