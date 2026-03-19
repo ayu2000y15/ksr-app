@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { Head, Link, usePage } from '@inertiajs/react';
-import { AlertCircle, CheckCircle, ChevronDown, ChevronRight, Plus, Upload } from 'lucide-react';
+import { AlertCircle, CheckCircle, ChevronDown, ChevronRight, Download, Plus, Upload } from 'lucide-react';
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 
 export default function Index({ items: initial }: any) {
@@ -486,6 +486,15 @@ export default function Index({ items: initial }: any) {
                                     <span className="hidden sm:inline">{uploading ? 'アップロード中...' : 'CSV一括登録'}</span>
                                 </Button>
                             </>
+                        )}
+                        {/* CSVダウンロード */}
+                        {inventoryPerms.view && (
+                            <a href={route('inventory.export_csv')} download>
+                                <Button size="sm" variant="outline" className="whitespace-nowrap">
+                                    <Download className="mr-0 h-4 w-4 sm:mr-2" />
+                                    <span className="hidden sm:inline">CSVダウンロード</span>
+                                </Button>
+                            </a>
                         )}
                         {/* 在庫ログ: show if user can view logs */}
                         {inventoryPerms.logs && (

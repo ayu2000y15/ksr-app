@@ -237,6 +237,7 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
     Route::get('/inventory', [\App\Http\Controllers\InventoryPageController::class, 'index'])->name('inventory.index');
     Route::get('/inventory/create', [\App\Http\Controllers\InventoryPageController::class, 'create'])->name('inventory.create');
     Route::post('/inventory/import-csv', [\App\Http\Controllers\InventoryPageController::class, 'importCsv'])->name('inventory.import_csv');
+    Route::get('/inventory/export-csv', [\App\Http\Controllers\InventoryPageController::class, 'exportCsv'])->name('inventory.export_csv');
     // 物件管理（入退寮ガント表示）
     Route::get('/properties', [\App\Http\Controllers\PropertyPageController::class, 'index'])->name('properties.index');
     // 物件マスタ管理トップ

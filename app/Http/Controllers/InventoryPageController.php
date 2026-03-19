@@ -91,21 +91,17 @@ class InventoryPageController extends Controller
                 ], 422);
             }
 
-            // ヘッダー行をスキップ（存在する場合）
-            $hasHeader = false;
-            if (count($csv) > 0 && isset($csv[0][0])) {
-                // 最初の行が「商品名」などのヘッダーかチェック
-                if (in_array($csv[0][0], ['商品名', 'name', 'Name', '名前'])) {
-                    $hasHeader = true;
-                    array_shift($csv);
-                }
-            }
+            // 1行目はヘッダーとして常にスキップ
+            $hasHeader = true;
+            array_shift($csv);
 
             $imported = 0;
             $updated = 0;
             $errors = [];
             $warnings = [];
             $categoryCache = []; // カテゴリ名→IDのキャッシュ
+            $itemOrderMap = []; // 商品名→CSV行順序（sort_order用）
+            $itemOrderCounter = 0; // CSVに現れた商品のカウンター
 
             DB::beginTransaction();
 
@@ -133,6 +129,12 @@ class InventoryPageController extends Controller
                     $errors[] = "[{$lineNumber}行目] 商品名が入力されていません（必須項目です）";
                     continue;
                 }
+
+                // CSV上で初めて登場した順番を記録（保管場所違いの複数行は同じ順番）
+                if (!isset($itemOrderMap[$name])) {
+                    $itemOrderMap[$name] = ++$itemOrderCounter;
+                }
+                $csvSortOrder = $itemOrderMap[$name];
 
                 // 商品名の長さチェック
                 if (mb_strlen($name) > 255) {
@@ -170,9 +172,8 @@ class InventoryPageController extends Controller
                 $item = InventoryItem::where('name', $name)->first();
 
                 if (!$item) {
-                    // 新規作成
+                    // 新規作成（sort_orderはCSV行順序）
                     try {
-                        $maxOrder = InventoryItem::max('sort_order') ?? 0;
                         $item = InventoryItem::create([
                             'name' => $name,
                             'category_id' => $categoryId,
@@ -181,7 +182,7 @@ class InventoryPageController extends Controller
                             'size' => $size,
                             'unit' => $unit,
                             'memo' => $memo,
-                            'sort_order' => $maxOrder + 1,
+                            'sort_order' => $csvSortOrder,
                         ]);
                         $imported++;
                     } catch (\Exception $e) {
@@ -189,8 +190,8 @@ class InventoryPageController extends Controller
                         continue;
                     }
                 } else {
-                    // 既存アイテムを更新（空でない値のみ）
-                    $updateData = [];
+                    // 既存アイテムを更新（sort_orderは常にCSV行順序で上書き）
+                    $updateData = ['sort_order' => $csvSortOrder];
                     if ($categoryId !== null) $updateData['category_id'] = $categoryId;
                     if (!empty($supplier)) $updateData['supplier_text'] = $supplier;
                     if (!empty($catalogName)) $updateData['catalog_name'] = $catalogName;
@@ -198,14 +199,12 @@ class InventoryPageController extends Controller
                     if (!empty($unit)) $updateData['unit'] = $unit;
                     if (!empty($memo)) $updateData['memo'] = $memo;
 
-                    if (!empty($updateData)) {
-                        try {
-                            $item->update($updateData);
-                            $updated++;
-                        } catch (\Exception $e) {
-                            $errors[] = "[{$lineNumber}行目] 商品「{$name}」の更新に失敗しました: {$e->getMessage()}";
-                            continue;
-                        }
+                    try {
+                        $item->update($updateData);
+                        $updated++;
+                    } catch (\Exception $e) {
+                        $errors[] = "[{$lineNumber}行目] 商品「{$name}」の更新に失敗しました: {$e->getMessage()}";
+                        continue;
                     }
                 }
 
@@ -313,5 +312,82 @@ class InventoryPageController extends Controller
                 ],
             ], 500);
         }
+    }
+
+    /**
+     * CSV一括エクスポート（アップロード形式と同じフォーマット）
+     * CSVフォーマット: 商品名,カテゴリ名,仕入先,カタログ名,サイズ,単位,保管場所,数量,メモ
+     */
+    public function exportCsv(Request $request)
+    {
+        $this->authorize('viewAny', \App\Models\InventoryItem::class);
+
+        $items = InventoryItem::with(['category', 'stocks'])
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get();
+
+        $rows = [];
+        // BOM for Excel UTF-8 compatibility
+        $bom = "\xEF\xBB\xBF";
+
+        $header = ['商品名', 'カテゴリ名', '仕入先', 'カタログ名', 'サイズ', '単位', '保管場所', '数量', 'メモ'];
+
+        foreach ($items as $item) {
+            $stocks = $item->stocks;
+            if ($stocks->isEmpty()) {
+                $rows[] = [
+                    $item->name,
+                    $item->category?->name ?? '',
+                    $item->supplier_text ?? '',
+                    $item->catalog_name ?? '',
+                    $item->size ?? '',
+                    $item->unit ?? '',
+                    '',
+                    0,
+                    $item->memo ?? '',
+                ];
+            } else {
+                // 保管場所名でソートして出力（「未指定」を末尾に）
+                $sortedStocks = $stocks->sortBy(function ($stock) {
+                    $loc = $stock->storage_location ?? '';
+                    return $loc === '未指定' ? "\xFF" . $loc : $loc;
+                });
+                foreach ($sortedStocks as $stock) {
+                    $rows[] = [
+                        $item->name,
+                        $item->category?->name ?? '',
+                        $item->supplier_text ?? '',
+                        $item->catalog_name ?? '',
+                        $item->size ?? '',
+                        $item->unit ?? '',
+                        $stock->storage_location ?? '',
+                        $stock->quantity ?? 0,
+                        $item->memo ?? '',
+                    ];
+                }
+            }
+        }
+
+        $callback = function () use ($bom, $header, $rows) {
+            $handle = fopen('php://output', 'w');
+            // BOM書き込み
+            fwrite($handle, $bom);
+            fputcsv($handle, $header);
+            foreach ($rows as $row) {
+                fputcsv($handle, $row);
+            }
+            fclose($handle);
+        };
+
+        $filename = '在庫データ_' . now()->format('Ymd_His') . '.csv';
+
+        return response()->stream($callback, 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="' . rawurlencode($filename) . '"',
+            'Cache-Control' => 'no-cache, no-store, must-revalidate',
+            'Pragma' => 'no-cache',
+            'Expires' => '0',
+        ]);
     }
 }
