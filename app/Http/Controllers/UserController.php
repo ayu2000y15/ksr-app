@@ -804,11 +804,11 @@ class UserController extends Controller
 
         // 返却処理
         if ($request->has('return_rental_items')) {
-            $returnRentalItemIds = $request->input('return_rental_items', []);
+            $returnRentalIds = $request->input('return_rental_items', []);
 
-            foreach ($returnRentalItemIds as $rentalItemId) {
+            foreach ($returnRentalIds as $rentalId) {
                 $rental = $user->rentals()
-                    ->where('rental_item_id', $rentalItemId)
+                    ->where('id', $rentalId)
                     ->whereNull('return_date')
                     ->first();
 

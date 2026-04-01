@@ -54,7 +54,7 @@ export default function EditUserPage() {
         profile_image: null as File | null,
         remove_profile_image: false,
         new_rental_items: [] as Array<{ rental_item_id: number; item_number: string; temp_id: string }>, // 新規貸出するアイテム（複数可）
-        return_rental_items: [] as number[], // 返却するアイテムID
+        return_rental_items: [] as number[], // 返却する貸出レコードID（rental.id）
     });
 
     const submit = (e: FormEvent) => {
@@ -534,19 +534,19 @@ export default function EditUserPage() {
                                                                 size="sm"
                                                                 variant="outline"
                                                                 onClick={() => {
-                                                                    if (!data.return_rental_items.includes(rental.rental_item_id)) {
+                                                                    if (!data.return_rental_items.includes(rental.id)) {
                                                                         setData('return_rental_items', [
                                                                             ...data.return_rental_items,
-                                                                            rental.rental_item_id,
+                                                                            rental.id,
                                                                         ]);
                                                                     }
                                                                 }}
-                                                                disabled={data.return_rental_items.includes(rental.rental_item_id)}
+                                                                disabled={data.return_rental_items.includes(rental.id)}
                                                                 className={
-                                                                    data.return_rental_items.includes(rental.rental_item_id) ? 'bg-gray-200' : ''
+                                                                    data.return_rental_items.includes(rental.id) ? 'bg-gray-200' : ''
                                                                 }
                                                             >
-                                                                {data.return_rental_items.includes(rental.rental_item_id) ? '返却予定' : '返却'}
+                                                                {data.return_rental_items.includes(rental.id) ? '返却予定' : '返却'}
                                                             </Button>
                                                         </div>
                                                     ))}
