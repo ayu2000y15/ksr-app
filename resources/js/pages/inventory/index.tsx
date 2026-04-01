@@ -634,7 +634,8 @@ export default function Index({
                                         .filter((s: any) => s.id !== currentSeasonId)
                                         .map((s: any) => (
                                             <option key={s.id} value={s.id}>
-                                                {s.name}{s.is_active ? ' ★' : ''}
+                                                {s.name}
+                                                {s.is_active ? ' ★' : ''}
                                             </option>
                                         ))}
                                 </select>
