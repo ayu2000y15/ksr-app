@@ -3,11 +3,17 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
-import { Head, Link, usePage } from '@inertiajs/react';
-import { AlertCircle, CheckCircle, ChevronDown, ChevronRight, Download, Plus, Upload } from 'lucide-react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
+import { AlertCircle, CheckCircle, ChevronDown, ChevronRight, Download, Plus, Settings, Upload } from 'lucide-react';
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 
-export default function Index({ items: initial }: any) {
+export default function Index({
+    items: initial,
+    seasons: initialSeasons = [],
+    currentSeasonId: initialSeasonId = null,
+    compareSeasonId: initialCompareSeasonId = null,
+    compareItems: initialCompareItems = [],
+}: any) {
     const page = usePage();
     const inventoryPerms = ((page.props as any)?.permissions || {}).inventory || {
         view: false,
@@ -18,6 +24,124 @@ export default function Index({ items: initial }: any) {
     };
     const [items, setItems] = useState(initial || []);
     useEffect(() => setItems(initial || []), [initial]);
+
+    // シーズン管理
+    const [seasons, setSeasons] = useState<any[]>(initialSeasons || []);
+    const [currentSeasonId, setCurrentSeasonId] = useState<number | null>(initialSeasonId ?? null);
+    const [compareSeasonId, setCompareSeasonId] = useState<number | null>(initialCompareSeasonId ?? null);
+    const [compareItems, setCompareItems] = useState<any[]>(initialCompareItems || []);
+    const [showCompare, setShowCompare] = useState<boolean>(initialCompareSeasonId !== null);
+    const [showSeasonDialog, setShowSeasonDialog] = useState(false);
+    const [newSeasonName, setNewSeasonName] = useState('');
+    const [newSeasonNote, setNewSeasonNote] = useState('');
+    const [seasonSaving, setSeasonSaving] = useState(false);
+    const [seasonError, setSeasonError] = useState<string | null>(null);
+
+    useEffect(() => {
+        setSeasons(initialSeasons || []);
+        setCurrentSeasonId(initialSeasonId ?? null);
+        setCompareSeasonId(initialCompareSeasonId ?? null);
+        setCompareItems(initialCompareItems || []);
+        setShowCompare(initialCompareSeasonId !== null);
+    }, [initialSeasons, initialSeasonId, initialCompareSeasonId, initialCompareItems]);
+
+    // 前シーズン在庫マップ: item_id -> { location -> qty }
+    const prevStocksMap: Record<number, Record<string, number>> = {};
+    (compareItems || []).forEach((item: any) => {
+        prevStocksMap[item.id] = {};
+        (item.stocks || []).forEach((st: any) => {
+            const loc = (st.storage_location || '未指定').toString().trim() || '未指定';
+            prevStocksMap[item.id][loc] = Number(st.quantity) || 0;
+        });
+    });
+
+    const handleSeasonChange = (value: string) => {
+        const params: Record<string, string> = {};
+        if (value) params.season_id = value;
+        // 比較シーズンはリセット
+        router.get(route('inventory.index'), params, { preserveScroll: false });
+    };
+
+    const handleCompareToggle = () => {
+        const next = !showCompare;
+        setShowCompare(next);
+        if (!next) {
+            // 比較解除: compare_season_id なしで再ナビ
+            const params: Record<string, string> = {};
+            if (currentSeasonId) params.season_id = String(currentSeasonId);
+            router.get(route('inventory.index'), params, { preserveScroll: false });
+        }
+        // ON にしたときはドロップダウンが表示されるだけで即ナビしない
+    };
+
+    const handleCompareSeasonChange = (value: string) => {
+        const params: Record<string, string> = {};
+        if (currentSeasonId) params.season_id = String(currentSeasonId);
+        if (value) params.compare_season_id = value;
+        router.get(route('inventory.index'), params, { preserveScroll: false });
+    };
+
+    const handleAddSeason = async () => {
+        if (!newSeasonName.trim()) {
+            setSeasonError('シーズン名を入力してください');
+            return;
+        }
+        setSeasonSaving(true);
+        setSeasonError(null);
+        try {
+            const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+            const res = await fetch('/api/inventory-seasons', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'X-CSRF-TOKEN': token, 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify({ name: newSeasonName.trim(), note: newSeasonNote.trim() || null }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const msg = data?.errors?.name?.[0] || data?.message || '登録に失敗しました';
+                setSeasonError(msg);
+                return;
+            }
+            setSeasons((prev) => [data, ...prev].sort((a, b) => b.name.localeCompare(a.name)));
+            setNewSeasonName('');
+            setNewSeasonNote('');
+        } finally {
+            setSeasonSaving(false);
+        }
+    };
+
+    const handleDeleteSeason = async (id: number) => {
+        if (!confirm('このシーズンを削除しますか？')) return;
+        const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        const res = await fetch(`/api/inventory-seasons/${id}`, {
+            method: 'DELETE',
+            credentials: 'same-origin',
+            headers: { 'X-CSRF-TOKEN': token, Accept: 'application/json' },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            alert(data?.message || '削除に失敗しました');
+            return;
+        }
+        setSeasons((prev) => prev.filter((s) => s.id !== id));
+        if (currentSeasonId === id) {
+            router.get(route('inventory.index'));
+        }
+    };
+
+    const handleSetActive = async (id: number) => {
+        const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        const res = await fetch(`/api/inventory-seasons/${id}/set-active`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'X-CSRF-TOKEN': token, Accept: 'application/json' },
+        });
+        if (!res.ok) {
+            alert('アクティブ設定に失敗しました');
+            return;
+        }
+        setSeasons((prev) => prev.map((s) => ({ ...s, is_active: s.id === id })));
+    };
 
     // CSV アップロード関連
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -274,6 +398,10 @@ export default function Index({ items: initial }: any) {
         }
         try {
             const form = new FormData();
+            // シーズンIDをフォームに含める
+            if (currentSeasonId) {
+                form.append('season_id', String(currentSeasonId));
+            }
             // Only send item id and stocks to avoid touching other fields (like sort_order)
             rows.forEach((r, i) => {
                 if (!r.id) return; // skip unsaved items
@@ -449,7 +577,7 @@ export default function Index({ items: initial }: any) {
                                 </p>
                                 <div className="mb-2 overflow-x-auto">
                                     <code className="block rounded bg-white p-2 text-xs whitespace-nowrap">
-                                        商品名,カテゴリ名,仕入先,カタログ名,サイズ,単位,保管場所,数量,メモ
+                                        商品名,カテゴリ名,仕入先,カタログ名,サイズ,単位,保管場所,数量,メモ,シーズン
                                     </code>
                                 </div>
                                 <ul className="mb-2 list-inside list-disc space-y-1 text-sm text-blue-800">
@@ -457,6 +585,10 @@ export default function Index({ items: initial }: any) {
                                     <li>カテゴリ名は事前に登録されている名前と完全一致する必要があります</li>
                                     <li>同じ商品名が既に存在する場合は、情報が更新されます</li>
                                     <li>数量は指定された保管場所の在庫数として上書きされます</li>
+                                    <li>
+                                        シーズンは <strong>YYYY-YY</strong> 形式で入力します（例:
+                                        2025-26）。未登録の場合は自動作成されます。省略した場合はシーズンなしとして登録されます
+                                    </li>
                                 </ul>
                                 <a href="/inventory_sample.csv" download className="text-sm font-medium text-blue-600 hover:underline">
                                     サンプルCSVをダウンロード
@@ -469,6 +601,55 @@ export default function Index({ items: initial }: any) {
                 <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                         <HeadingSmall title="在庫管理" description="カテゴリごとに在庫を表示" />
+                        {/* シーズン選択 */}
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <label className="text-sm font-medium text-gray-700">シーズン</label>
+                            <select
+                                value={currentSeasonId ?? ''}
+                                onChange={(e) => handleSeasonChange(e.target.value)}
+                                className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm shadow-sm focus:border-blue-500 focus:outline-none"
+                            >
+                                <option value="">全シーズン（従来表示）</option>
+                                {seasons.map((s: any) => (
+                                    <option key={s.id} value={s.id}>
+                                        {s.name}
+                                        {s.is_active ? ' ★' : ''}
+                                    </option>
+                                ))}
+                            </select>
+                            {currentSeasonId && seasons.length >= 2 && (
+                                <label className="flex cursor-pointer items-center gap-1 text-sm text-gray-600">
+                                    <input type="checkbox" checked={showCompare} onChange={handleCompareToggle} className="rounded" />
+                                    前シーズンと比較
+                                </label>
+                            )}
+                            {showCompare && currentSeasonId && (
+                                <select
+                                    value={compareSeasonId ?? ''}
+                                    onChange={(e) => handleCompareSeasonChange(e.target.value)}
+                                    className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm shadow-sm focus:border-blue-500 focus:outline-none"
+                                >
+                                    <option value="">比較シーズンを選択</option>
+                                    {seasons
+                                        .filter((s: any) => s.id !== currentSeasonId)
+                                        .map((s: any) => (
+                                            <option key={s.id} value={s.id}>
+                                                {s.name}{s.is_active ? ' ★' : ''}
+                                            </option>
+                                        ))}
+                                </select>
+                            )}
+                            {inventoryPerms.update && (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowSeasonDialog(true)}
+                                    className="flex items-center gap-1 rounded-md px-2 py-1 text-sm text-gray-500 hover:bg-gray-100"
+                                >
+                                    <Settings className="h-3.5 w-3.5" />
+                                    シーズン管理
+                                </button>
+                            )}
+                        </div>
                     </div>
                     <div className="flex items-center justify-start gap-2 sm:justify-end">
                         {/* CSV一括登録 */}
@@ -700,6 +881,9 @@ export default function Index({ items: initial }: any) {
                                                                         <div className="w-full truncate" title={l}>
                                                                             {l}
                                                                         </div>
+                                                                        {showCompare && (
+                                                                            <div className="text-xs font-normal text-gray-400">今 / 前</div>
+                                                                        )}
                                                                     </th>
                                                                 ))}
                                                                 <th className="px-2 py-2">合計</th>
@@ -717,6 +901,10 @@ export default function Index({ items: initial }: any) {
                                                                         const editing = editingCategory === catKey;
                                                                         const editedBucket = editedData[catKey];
                                                                         const editedVal = editedBucket ? editedBucket.rows[ri].quantities[l] : qty;
+                                                                        const prevQty =
+                                                                            showCompare && r.id && prevStocksMap[r.id] !== undefined
+                                                                                ? (prevStocksMap[r.id][l] ?? 0)
+                                                                                : null;
                                                                         return (
                                                                             <td key={`${r.id}-${l}`} className="px-2 py-2 text-left">
                                                                                 {editing ? (
@@ -733,19 +921,47 @@ export default function Index({ items: initial }: any) {
                                                                                             if (e.key === '-' || e.key === '+') e.preventDefault();
                                                                                         }}
                                                                                     />
-                                                                                ) : qty === 0 ? (
-                                                                                    <span className="text-gray-400">-</span>
                                                                                 ) : (
-                                                                                    <span className="font-medium text-sky-600">{qty}</span>
+                                                                                    <span className="inline-flex items-baseline gap-1">
+                                                                                        {qty === 0 ? (
+                                                                                            <span className="text-gray-400">-</span>
+                                                                                        ) : (
+                                                                                            <span className="font-medium text-sky-600">{qty}</span>
+                                                                                        )}
+                                                                                        {prevQty !== null && (
+                                                                                            <span className="text-xs text-gray-400 tabular-nums">
+                                                                                                ({prevQty === 0 ? '-' : prevQty})
+                                                                                            </span>
+                                                                                        )}
+                                                                                    </span>
                                                                                 )}
                                                                             </td>
                                                                         );
                                                                     })}
                                                                     <td className="px-2 py-2 text-left font-medium text-indigo-700">
-                                                                        {Object.values(r.quantities).reduce(
-                                                                            (s: number, v: any) => s + (Number(v) || 0),
-                                                                            0,
-                                                                        )}
+                                                                        {(() => {
+                                                                            const total = Object.values(r.quantities).reduce(
+                                                                                (s: number, v: any) => s + (Number(v) || 0),
+                                                                                0,
+                                                                            );
+                                                                            const prevTotal =
+                                                                                showCompare && r.id && prevStocksMap[r.id]
+                                                                                    ? Object.values(prevStocksMap[r.id]).reduce(
+                                                                                          (s: number, v: any) => s + (Number(v) || 0),
+                                                                                          0,
+                                                                                      )
+                                                                                    : null;
+                                                                            return (
+                                                                                <span className="inline-flex items-baseline gap-1">
+                                                                                    <span>{total}</span>
+                                                                                    {prevTotal !== null && (
+                                                                                        <span className="text-xs font-normal text-gray-400 tabular-nums">
+                                                                                            ({prevTotal})
+                                                                                        </span>
+                                                                                    )}
+                                                                                </span>
+                                                                            );
+                                                                        })()}
                                                                     </td>
                                                                 </tr>
                                                             ))}
@@ -789,6 +1005,76 @@ export default function Index({ items: initial }: any) {
                         );
                     })}
                 </div>
+
+                {/* シーズン管理ダイアログ */}
+                <Dialog open={showSeasonDialog} onOpenChange={setShowSeasonDialog}>
+                    <DialogContent className="max-h-[80vh] max-w-lg overflow-auto">
+                        <DialogHeader>
+                            <DialogTitle>シーズン管理</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                            {/* 新規シーズン追加 */}
+                            <div className="rounded-md border p-3">
+                                <div className="mb-2 text-sm font-medium">新規シーズンを追加</div>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        placeholder="例: 2025-26"
+                                        value={newSeasonName}
+                                        onChange={(e) => {
+                                            setNewSeasonName(e.target.value);
+                                            setSeasonError(null);
+                                        }}
+                                        className="flex-1 rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none"
+                                        maxLength={10}
+                                        pattern="\d{4}-\d{2}"
+                                    />
+                                    <Button size="sm" onClick={handleAddSeason} disabled={seasonSaving}>
+                                        追加
+                                    </Button>
+                                </div>
+                                <div className="mt-1 text-xs text-gray-500">YYYY-YY 形式（例: 2024-25）</div>
+                                {seasonError && <div className="mt-1 text-xs text-red-600">{seasonError}</div>}
+                            </div>
+                            {/* シーズン一覧 */}
+                            <div className="space-y-2">
+                                {seasons.length === 0 && <div className="text-sm text-gray-500">シーズンがまだ登録されていません</div>}
+                                {seasons.map((s: any) => (
+                                    <div key={s.id} className="flex items-center justify-between rounded-md border bg-gray-50 px-3 py-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-sm font-medium">{s.name}</span>
+                                            {s.is_active && (
+                                                <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                                                    アクティブ
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="flex gap-2">
+                                            {!s.is_active && (
+                                                <Button size="sm" variant="ghost" onClick={() => handleSetActive(s.id)} className="text-xs">
+                                                    アクティブに設定
+                                                </Button>
+                                            )}
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                onClick={() => handleDeleteSeason(s.id)}
+                                                className="text-xs text-red-500 hover:text-red-700"
+                                            >
+                                                削除
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="flex justify-end">
+                                <Button variant="outline" onClick={() => setShowSeasonDialog(false)}>
+                                    閉じる
+                                </Button>
+                            </div>
+                        </div>
+                    </DialogContent>
+                </Dialog>
 
                 {/* CSVエラー詳細ダイアログ */}
                 <Dialog open={csvErrorDialog.open} onOpenChange={(open) => setCsvErrorDialog({ ...csvErrorDialog, open })}>

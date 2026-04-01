@@ -42,6 +42,15 @@ class InventoryController extends Controller
         $this->authorize('create', \App\Models\InventoryItem::class);
         $data = $request->validated();
 
+        // シーズンID（リクエスト上位レベルのパラメータ）
+        $seasonId = null;
+        if ($request->filled('season_id')) {
+            $sid = intval($request->input('season_id'));
+            if ($sid > 0 && \App\Models\InventorySeason::where('id', $sid)->exists()) {
+                $seasonId = $sid;
+            }
+        }
+
         // support bulk items[] creation: items[].* fields and optional items[].stock
         if ($request->filled('items') && is_array($data['items'])) {
             $created = [];
@@ -80,9 +89,13 @@ class InventoryController extends Controller
 
                             $item->update($updateData);
                             // load existing stocks keyed by storage_location for update-reuse
-                            $existingStocks = InventoryStock::where('inventory_item_id', $item->id)->get()->keyBy(function ($s) {
-                                return ($s->storage_location ?? '未設定');
-                            });
+                            // シーズンが指定されている場合はそのシーズンのみを対象にする
+                            $existingStocks = InventoryStock::where('inventory_item_id', $item->id)
+                                ->when($seasonId !== null, fn($q) => $q->where('season_id', $seasonId))
+                                ->when($seasonId === null, fn($q) => $q->whereNull('season_id'))
+                                ->get()->keyBy(function ($s) {
+                                    return ($s->storage_location ?? '未設定');
+                                });
                         } else {
                             // if id provided but not found, create new
                             $item = InventoryItem::create([
@@ -164,6 +177,7 @@ class InventoryController extends Controller
                                     'quantity' => $qty,
                                     'memo' => $s['memo'] ?? null,
                                     'last_stocked_at' => now(),
+                                    'season_id' => $seasonId,
                                 ]);
 
                                 if ($qty !== 0) {

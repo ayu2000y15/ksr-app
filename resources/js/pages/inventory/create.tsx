@@ -34,12 +34,28 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: '一括登録', href: route('inventory.create') },
 ];
 
-export default function InventoryCreate({ categories = [], items: initialItems = [] }: { categories?: Category[]; items?: Item[] }) {
+type Season = { id: number; name: string; is_active: boolean };
+
+export default function InventoryCreate({
+    categories = [],
+    items: initialItems = [],
+    seasons: initialSeasons = [],
+    currentSeasonId: initialSeasonId = null,
+}: {
+    categories?: Category[];
+    items?: Item[];
+    seasons?: Season[];
+    currentSeasonId?: number | null;
+}) {
     const page = usePage();
     const pageProps = page.props as unknown as {
         permissions?: { inventory?: { view?: boolean; create?: boolean; update?: boolean; delete?: boolean; logs?: boolean } };
     };
     const inventoryPerms = pageProps.permissions?.inventory ?? { view: false, create: false, update: false, delete: false, logs: false };
+    // シーズン
+    const [seasons] = useState<Season[]>(initialSeasons || []);
+    const [currentSeasonId, setCurrentSeasonId] = useState<number | null>(initialSeasonId ?? null);
+
     // items: bulk rows where each row corresponds to a new inventory item + optional initial stocks[]
     const [, setProcessing] = useState<boolean>(false);
 
@@ -117,6 +133,17 @@ export default function InventoryCreate({ categories = [], items: initialItems =
         setDragIndex(null);
     };
 
+    // シーズン変更時にページリロード（URLパラメータで渡す）
+    const handleSeasonChange = (value: string) => {
+        const url = new URL(window.location.href);
+        if (value) {
+            url.searchParams.set('season_id', value);
+        } else {
+            url.searchParams.delete('season_id');
+        }
+        window.location.href = url.toString();
+    };
+
     // persist the current items order (and full data) to server so sort_order is saved
     // opts.visibleOnly: when true, only save ordering for rows currently visible under active filters
     const saveOrder = async (itemsToSave: Item[], opts?: { visibleOnly?: boolean }) => {
@@ -137,6 +164,10 @@ export default function InventoryCreate({ categories = [], items: initialItems =
                     return true;
                 });
         };
+
+        if (currentSeasonId) {
+            form.append('season_id', String(currentSeasonId));
+        }
 
         if (opts?.visibleOnly) {
             const visible = computeVisibleIndexes(itemsToSave);
@@ -231,6 +262,9 @@ export default function InventoryCreate({ categories = [], items: initialItems =
         setRowStatuses((prev) => ({ ...prev, [realIdx]: 'saving' }));
         // prepare FormData using items[0] pattern for bulk store API
         const form = new FormData();
+        if (currentSeasonId) {
+            form.append('season_id', String(currentSeasonId));
+        }
         const i = 0;
         // ensure sort_order is sent for autosave to avoid empty sort_order on server
         form.append(`items[${i}][sort_order]`, String(realIdx));
@@ -389,6 +423,9 @@ export default function InventoryCreate({ categories = [], items: initialItems =
         setProcessing(true);
 
         const form = new FormData();
+        if (currentSeasonId) {
+            form.append('season_id', String(currentSeasonId));
+        }
         // append items[] each with fields and optional stock
         // if filters are active, preserve ordering as shown on screen (displayIndexes)
         const indexesToSend = displayIndexes && displayIndexes.length > 0 ? displayIndexes : items.map((_, i) => i);
@@ -482,6 +519,24 @@ export default function InventoryCreate({ categories = [], items: initialItems =
                             <CardHeader className="flex items-start">
                                 <div>
                                     <CardTitle>在庫一括編集</CardTitle>
+                                    {/* シーズン選択 */}
+                                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                                        <label className="text-sm font-medium text-gray-700">シーズン</label>
+                                        <select
+                                            value={currentSeasonId ?? ''}
+                                            onChange={(e) => handleSeasonChange(e.target.value)}
+                                            className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm shadow-sm focus:border-blue-500 focus:outline-none"
+                                        >
+                                            <option value="">シーズンなし</option>
+                                            {seasons.map((s) => (
+                                                <option key={s.id} value={s.id}>
+                                                    {s.name}
+                                                    {s.is_active ? ' ★' : ''}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        {currentSeasonId && <span className="text-xs text-gray-500">在庫数はこのシーズンに保存されます</span>}
+                                    </div>
                                 </div>
                                 <div className="ml-auto">
                                     <Link href={route('inventory.index')}>

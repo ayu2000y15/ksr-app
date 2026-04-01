@@ -6,7 +6,7 @@ use App\Models\InventoryItem;
 use App\Models\InventoryCategory;
 use App\Models\InventoryStock;
 use App\Models\InventoryStockLog;
-// Supplier master removed; using free-text supplier field on inventory_items
+use App\Models\InventorySeason;
 use Inertia\Inertia;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,25 +18,82 @@ class InventoryPageController extends Controller
     {
         $this->authorize('viewAny', \App\Models\InventoryItem::class);
 
-        // include stocks so the Inertia index page receives per-item stock rows
-        $items = InventoryItem::with(['category', 'stocks'])->orderBy('sort_order')->orderBy('name')->get();
+        // シーズンフィルタリング
+        $seasonId        = $request->filled('season_id') ? intval($request->input('season_id')) : null;
+        $compareSeasonId = $request->filled('compare_season_id') ? intval($request->input('compare_season_id')) : null;
+
+        $seasons = InventorySeason::orderBy('name', 'desc')->get();
+
+        // シーズン未指定の場合はアクティブシーズンをデフォルトに
+        if ($seasonId === null) {
+            $active = $seasons->firstWhere('is_active', true);
+            if ($active) {
+                $seasonId = $active->id;
+            }
+        }
+
+        // items を読み込む（シーズン指定があればそのシーズンの stocks のみ）
+        $items = InventoryItem::with([
+            'category',
+            'stocks' => function ($q) use ($seasonId) {
+                if ($seasonId !== null) {
+                    $q->where('season_id', $seasonId);
+                }
+                // シーズン未指定時は全 stocks を返す（従来動作）
+            },
+        ])->orderBy('sort_order')->orderBy('name')->get();
+
+        // 比較モード用に指定シーズンの在庫を取得
+        $compareItems = [];
+        if ($compareSeasonId !== null) {
+            $compareItems = InventoryItem::with([
+                'stocks' => fn($q) => $q->where('season_id', $compareSeasonId),
+            ])->orderBy('sort_order')->orderBy('name')->get();
+        }
+
         $categories = InventoryCategory::orderBy('order_column')->get();
         return Inertia::render('inventory/index', [
-            'items' => $items,
-            'categories' => $categories,
+            'items'            => $items,
+            'categories'       => $categories,
+            'seasons'          => $seasons,
+            'currentSeasonId'  => $seasonId,
+            'compareSeasonId'  => $compareSeasonId,
+            'compareItems'     => $compareItems,
         ]);
     }
 
-    public function create()
+    public function create(Request $request)
     {
         $this->authorize('create', \App\Models\InventoryItem::class);
 
+        $seasons = InventorySeason::orderBy('name', 'desc')->get();
+
+        // シーズンフィルタリング（一覧と同様）
+        $seasonId = $request->filled('season_id') ? intval($request->input('season_id')) : null;
+        if ($seasonId === null) {
+            $active = $seasons->firstWhere('is_active', true);
+            if ($active) {
+                $seasonId = $active->id;
+            }
+        }
+
         $categories = InventoryCategory::orderBy('order_column')->get();
         // load existing items so the page can be used as an edit grid
-        $items = InventoryItem::with(['stocks', 'category'])->orderBy('sort_order')->orderBy('name')->get();
+        // シーズン指定がある場合はそのシーズンの stocks のみを返す
+        $items = InventoryItem::with([
+            'stocks' => function ($q) use ($seasonId) {
+                if ($seasonId !== null) {
+                    $q->where('season_id', $seasonId);
+                }
+            },
+            'category',
+        ])->orderBy('sort_order')->orderBy('name')->get();
+
         return Inertia::render('inventory/create', [
-            'categories' => $categories,
-            'items' => $items,
+            'categories'      => $categories,
+            'items'           => $items,
+            'seasons'         => $seasons,
+            'currentSeasonId' => $seasonId,
         ]);
     }
 
@@ -100,6 +157,7 @@ class InventoryPageController extends Controller
             $errors = [];
             $warnings = [];
             $categoryCache = []; // カテゴリ名→IDのキャッシュ
+            $seasonCache  = []; // シーズン名→IDのキャッシュ
             $itemOrderMap = []; // 商品名→CSV行順序（sort_order用）
             $itemOrderCounter = 0; // CSVに現れた商品のカウンター
 
@@ -123,6 +181,7 @@ class InventoryPageController extends Controller
                 $storageLocation = isset($row[6]) ? trim($row[6]) : '';
                 $quantity = isset($row[7]) ? trim($row[7]) : '0';
                 $memo = isset($row[8]) ? trim($row[8]) : '';
+                $seasonName = isset($row[9]) ? trim($row[9]) : '';
 
                 // 商品名は必須
                 if (empty($name)) {
@@ -165,6 +224,26 @@ class InventoryPageController extends Controller
                             $errors[] = "[{$lineNumber}行目] 商品「{$name}」のカテゴリ「{$categoryName}」が見つかりません（利用可能なカテゴリ: {$categoryList}）";
                             continue;
                         }
+                    }
+                }
+
+                // シーズンIDを取得（キャッシュ利用・存在しない場合は自動作成）
+                $seasonId = null;
+                if (!empty($seasonName)) {
+                    if (isset($seasonCache[$seasonName])) {
+                        $seasonId = $seasonCache[$seasonName];
+                    } else {
+                        // シーズン名の形式チェック（YYYY-YY）
+                        if (!preg_match('/^\d{4}-\d{2}$/', $seasonName)) {
+                            $errors[] = "[{$lineNumber}行目] シーズン「{$seasonName}」の形式が正しくありません（例: 2025-26）";
+                            continue;
+                        }
+                        $season = \App\Models\InventorySeason::firstOrCreate(
+                            ['name' => $seasonName],
+                            ['is_active' => false]
+                        );
+                        $seasonId = $season->id;
+                        $seasonCache[$seasonName] = $seasonId;
                     }
                 }
 
@@ -211,9 +290,15 @@ class InventoryPageController extends Controller
                 // 在庫情報の登録・更新
                 if (!empty($storageLocation) || !empty($quantity)) {
                     try {
-                        $stock = InventoryStock::where('inventory_item_id', $item->id)
-                            ->where('storage_location', $storageLocation ?: '未指定')
-                            ->first();
+                        // シーズン指定がある場合はシーズンでもスコープを絞る
+                        $stockQuery = InventoryStock::where('inventory_item_id', $item->id)
+                            ->where('storage_location', $storageLocation ?: '未指定');
+                        if ($seasonId !== null) {
+                            $stockQuery->where('season_id', $seasonId);
+                        } else {
+                            $stockQuery->whereNull('season_id');
+                        }
+                        $stock = $stockQuery->first();
 
                         $qty = is_numeric($quantity) ? (int)$quantity : 0;
 
@@ -225,6 +310,7 @@ class InventoryPageController extends Controller
                                 'quantity' => $qty,
                                 'memo' => '',
                                 'last_stocked_at' => now(),
+                                'season_id' => $seasonId,
                             ]);
                         } else {
                             // 既存在庫を更新（数量を加算ではなく上書き）
@@ -322,7 +408,7 @@ class InventoryPageController extends Controller
     {
         $this->authorize('viewAny', \App\Models\InventoryItem::class);
 
-        $items = InventoryItem::with(['category', 'stocks'])
+        $items = InventoryItem::with(['category', 'stocks.season'])
             ->orderBy('sort_order')
             ->orderBy('name')
             ->get();
@@ -331,7 +417,7 @@ class InventoryPageController extends Controller
         // BOM for Excel UTF-8 compatibility
         $bom = "\xEF\xBB\xBF";
 
-        $header = ['商品名', 'カテゴリ名', '仕入先', 'カタログ名', 'サイズ', '単位', '保管場所', '数量', 'メモ'];
+        $header = ['商品名', 'カテゴリ名', '仕入先', 'カタログ名', 'サイズ', '単位', '保管場所', '数量', 'メモ', 'シーズン'];
 
         foreach ($items as $item) {
             $stocks = $item->stocks;
@@ -346,6 +432,7 @@ class InventoryPageController extends Controller
                     '',
                     0,
                     $item->memo ?? '',
+                    '',
                 ];
             } else {
                 // 保管場所名でソートして出力（「未指定」を末尾に）
@@ -364,6 +451,7 @@ class InventoryPageController extends Controller
                         $stock->storage_location ?? '',
                         $stock->quantity ?? 0,
                         $item->memo ?? '',
+                        $stock->season?->name ?? '',
                     ];
                 }
             }
