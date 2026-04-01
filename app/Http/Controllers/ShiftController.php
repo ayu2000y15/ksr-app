@@ -29,9 +29,10 @@ class ShiftController extends Controller
         // determine the month to display (from query param or current month)
         $month = $request->get('month') ? Carbon::parse($request->get('month')) : Carbon::now();
 
-        // load shifts for 4 months starting from the selected month
-        $startDate = $month->copy()->startOfMonth();
-        $endDate = $month->copy()->addMonths(3)->endOfMonth();
+        // load shifts for 4 payroll periods: previous month's 16th to current+3 month's 15th
+        // (mirrors the frontend visibleDays range in month-editor.tsx)
+        $startDate = $month->copy()->subMonthNoOverflow()->startOfMonth()->addDays(15); // previous month 16th
+        $endDate = $month->copy()->addMonths(3)->startOfMonth()->addDays(14); // current+3 month 15th
 
         $shifts = Shift::query()
             ->whereBetween('date', [$startDate, $endDate])
