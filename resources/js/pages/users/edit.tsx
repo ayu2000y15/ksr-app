@@ -535,16 +535,11 @@ export default function EditUserPage() {
                                                                 variant="outline"
                                                                 onClick={() => {
                                                                     if (!data.return_rental_items.includes(rental.id)) {
-                                                                        setData('return_rental_items', [
-                                                                            ...data.return_rental_items,
-                                                                            rental.id,
-                                                                        ]);
+                                                                        setData('return_rental_items', [...data.return_rental_items, rental.id]);
                                                                     }
                                                                 }}
                                                                 disabled={data.return_rental_items.includes(rental.id)}
-                                                                className={
-                                                                    data.return_rental_items.includes(rental.id) ? 'bg-gray-200' : ''
-                                                                }
+                                                                className={data.return_rental_items.includes(rental.id) ? 'bg-gray-200' : ''}
                                                             >
                                                                 {data.return_rental_items.includes(rental.id) ? '返却予定' : '返却'}
                                                             </Button>
