@@ -1,7 +1,7 @@
 import { BreadcrumbItem } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
 import axios from 'axios';
-import { Edit, Plus } from 'lucide-react';
+import { Download, Edit, FileArchive, Plus } from 'lucide-react';
 import { Fragment, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
 import Heading from '@/components/heading';
@@ -595,6 +595,14 @@ export default function DamagedIndexPage() {
         return <div className="text-sm text-red-600">{arr.join(' ')}</div>;
     };
 
+    const handleCsvDownload = () => {
+        window.location.href = '/api/damaged-inventories/export/csv';
+    };
+
+    const handlePhotosZipDownload = () => {
+        window.location.href = '/api/damaged-inventories/export/photos-zip';
+    };
+
     return (
         <AppSidebarLayout breadcrumbs={breadcrumbs}>
             <Head title="破損在庫管理" />
@@ -609,6 +617,14 @@ export default function DamagedIndexPage() {
                                 破損状態編集
                             </Button>
                         </Link>
+                        <Button size="sm" variant="outline" className="flex items-center gap-1 whitespace-nowrap" onClick={handleCsvDownload}>
+                            <Download className="h-4 w-4" />
+                            <span className="hidden sm:inline">CSVダウンロード</span>
+                        </Button>
+                        <Button size="sm" variant="outline" className="flex items-center gap-1 whitespace-nowrap" onClick={handlePhotosZipDownload}>
+                            <FileArchive className="h-4 w-4" />
+                            <span className="hidden sm:inline">写真ZIP</span>
+                        </Button>
                         <Button
                             className="flex items-center gap-2"
                             onClick={() => {

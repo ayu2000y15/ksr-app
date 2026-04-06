@@ -354,4 +354,122 @@ class DamagedInventoryController extends Controller
 
         return response()->json(['stats' => $out]);
     }
+
+    /**
+     * CSV エクスポート
+     * 列: 破損日, 在庫名, 管理番号, 破損状態, 破損個所, 破損個所（写真）ファイル名
+     */
+    public function exportCsv()
+    {
+        $rows = DamagedInventory::with(['inventoryItem', 'damageCondition', 'attachments'])
+            ->select('damaged_inventories.*')
+            ->leftJoin('users', 'damaged_inventories.handler_user_id', '=', 'users.id')
+            ->orderBy('users.position', 'asc')
+            ->orderBy('damaged_inventories.damaged_at', 'desc')
+            ->orderBy('damaged_inventories.id', 'desc')
+            ->get();
+
+        $headers = [
+            '破損日',
+            '在庫名',
+            '管理番号',
+            '破損状態',
+            '破損個所',
+            '破損個所（写真）ファイル名',
+        ];
+
+        $callback = function () use ($rows, $headers) {
+            $handle = fopen('php://output', 'w');
+            // BOM for Excel UTF-8
+            fputs($handle, "\xEF\xBB\xBF");
+            fputcsv($handle, $headers);
+
+            foreach ($rows as $row) {
+                $photoNames = collect($row->attachments)->map(function ($att) use ($row) {
+                    $original = $att->original_name ?? basename($att->file_path ?? '');
+                    return $this->buildZipFileName($row, $att, $original);
+                })->filter()->join(' | ');
+
+                fputcsv($handle, [
+                    $row->getRawOriginal('damaged_at') ?? '',
+                    $row->inventoryItem?->name ?? '',
+                    $row->management_number ?? '',
+                    $row->damageCondition?->condition ?? '',
+                    $row->damaged_area ?? '',
+                    $photoNames,
+                ]);
+            }
+
+            fclose($handle);
+        };
+
+        $filename = '破損在庫_' . now()->format('Ymd_His') . '.csv';
+
+        return response()->stream($callback, 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="' . rawurlencode($filename) . '"',
+            'Cache-Control' => 'no-cache, no-store, must-revalidate',
+        ]);
+    }
+
+    /**
+     * 破損個所写真を ZIP でまとめてダウンロード
+     */
+    public function downloadPhotos()
+    {
+        $rows = DamagedInventory::with(['inventoryItem', 'attachments'])
+            ->get();
+
+        $zipPath = tempnam(sys_get_temp_dir(), 'damaged_photos_') . '.zip';
+        $zip = new \ZipArchive();
+
+        if ($zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+            return response()->json(['message' => 'ZIPファイルの作成に失敗しました'], 500);
+        }
+
+        foreach ($rows as $row) {
+            foreach ($row->attachments as $att) {
+                $filePath = Storage::disk('public')->path($att->file_path ?? '');
+                if (!$att->file_path || !file_exists($filePath)) {
+                    continue;
+                }
+                $original = $att->original_name ?? basename($att->file_path);
+                $zipName = $this->buildZipFileName($row, $att, $original);
+                $zip->addFile($filePath, $zipName);
+            }
+        }
+
+        $zip->close();
+
+        if (!file_exists($zipPath) || filesize($zipPath) === 0) {
+            @unlink($zipPath);
+            return response()->json(['message' => 'ダウンロードできる写真がありません'], 404);
+        }
+
+        $filename = '破損個所写真_' . now()->format('Ymd_His') . '.zip';
+
+        return response()->download($zipPath, $filename, [
+            'Content-Type' => 'application/zip',
+        ])->deleteFileAfterSend(true);
+    }
+
+    /**
+     * ZIP 内のファイル名を構築する（CSV のファイル名列と一致させる）
+     * 例: 2024-01-15_スキーブーツ_SNB-001_photo.jpg
+     */
+    private function buildZipFileName(DamagedInventory $row, $att, string $original): string
+    {
+        $date = $row->getRawOriginal('damaged_at') ?? 'unknown';
+        $itemName = $row->inventoryItem?->name ?? 'unknown';
+        $mgmt = $row->management_number ?? '';
+
+        $prefix = implode('_', array_filter([$date, $itemName, $mgmt]));
+        // サニタイズ：ファイル名に使えない文字を置換
+        $prefix = preg_replace('/[\/\\\:\*\?"<>|]/', '_', $prefix);
+        $prefix = preg_replace('/\s+/', '_', $prefix);
+
+        // ID を付与して重複を防ぐ
+        $attId = $att->id ?? 0;
+        return "{$prefix}_{$attId}_{$original}";
+    }
 }

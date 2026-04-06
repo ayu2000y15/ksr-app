@@ -204,6 +204,10 @@ Route::middleware(['web', 'auth'])->group(function () {
     Route::post('inventory-seasons/{id}/set-active', [\App\Http\Controllers\Api\InventorySeasonController::class, 'setActive']);
     // サーバー側集計 API（月別カテゴリ・名称ごとの破損集計）
     Route::get('damaged-inventories/stats', [\App\Http\Controllers\Api\DamagedInventoryController::class, 'stats']);
+    // 破損在庫 CSV エクスポート
+    Route::get('damaged-inventories/export/csv', [\App\Http\Controllers\Api\DamagedInventoryController::class, 'exportCsv']);
+    // 破損個所写真 ZIP ダウンロード
+    Route::get('damaged-inventories/export/photos-zip', [\App\Http\Controllers\Api\DamagedInventoryController::class, 'downloadPhotos']);
 
     // Tasks API
     Route::get('/tasks', [\App\Http\Controllers\TaskController::class, 'index']);
