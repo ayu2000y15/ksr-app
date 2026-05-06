@@ -28,6 +28,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // 本番環境で強制的にURLをhttpsにする
+        if (config('app.env') === 'production') {
+            \Illuminate\Support\Facades\URL::forceScheme('https');
+        }
         // Note: auth.permissions is now shared from the SharePermissions middleware
 
         // Also share whether the current user is a system administrator so the frontend
