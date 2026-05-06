@@ -238,6 +238,30 @@ class InventoryController extends Controller
         return response()->json(['message' => 'deleted']);
     }
 
+    // 並び順専用: POST /api/inventory/reorder  { items: [{id, sort_order}] }
+    public function reorder(Request $request)
+    {
+        $this->authorize('update', \App\Models\InventoryItem::class);
+        $request->validate([
+            'items'             => 'required|array',
+            'items.*.id'        => 'required|integer|exists:inventory_items,id',
+            'items.*.sort_order' => 'required|integer',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            foreach ($request->input('items') as $it) {
+                InventoryItem::where('id', $it['id'])->update(['sort_order' => $it['sort_order']]);
+            }
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['message' => 'failed', 'error' => $e->getMessage()], 500);
+        }
+
+        return response()->json(['message' => 'ok']);
+    }
+
     // inventory stock adjustment endpoint
     public function adjustStock(Request $request, InventoryItem $inventory)
     {

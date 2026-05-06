@@ -144,16 +144,14 @@ export default function InventoryCreate({
         window.location.href = url.toString();
     };
 
-    // persist the current items order (and full data) to server so sort_order is saved
-    // opts.visibleOnly: when true, only save ordering for rows currently visible under active filters
+    // 並び順のみをサーバーに保存（軽量JSONエンドポイント使用）
     const saveOrder = async (itemsToSave: Item[], opts?: { visibleOnly?: boolean }) => {
         if (!itemsToSave || itemsToSave.length === 0) return;
-        const form = new FormData();
 
         // compute which indexes are visible according to current filters
-        const computeVisibleIndexes = (arr: Item[]) => {
-            return arr
-                .map((it, i) => i)
+        const computeVisibleIndexes = (arr: Item[]) =>
+            arr
+                .map((_, i) => i)
                 .filter((i) => {
                     const itv = arr[i];
                     if (!itv) return false;
@@ -163,74 +161,39 @@ export default function InventoryCreate({
                     if (filterSupplier && !itv.supplier_text.toLowerCase().includes(filterSupplier.toLowerCase())) return false;
                     return true;
                 });
-        };
 
-        if (currentSeasonId) {
-            form.append('season_id', String(currentSeasonId));
-        }
+        const indexes = opts?.visibleOnly ? computeVisibleIndexes(itemsToSave) : itemsToSave.map((_, i) => i);
 
-        if (opts?.visibleOnly) {
-            const visible = computeVisibleIndexes(itemsToSave);
-            // only append visible items and assign sort_order sequentially based on visible order
-            visible.forEach((origIdx, pos) => {
+        // id のないアイテムは並び順保存不要
+        const payload = indexes
+            .map((origIdx, pos) => {
                 const it = itemsToSave[origIdx];
-                if (!it) return;
-                if ((it as Item).id) form.append(`items[${pos}][id]`, String((it as Item).id));
-                form.append(`items[${pos}][sort_order]`, String(pos));
-                form.append(`items[${pos}][name]`, it.name || '');
-                form.append(`items[${pos}][category_id]`, it.category_id || '');
-                form.append(`items[${pos}][catalog_name]`, it.catalog_name || '');
-                form.append(`items[${pos}][size]`, it.size || '');
-                form.append(`items[${pos}][unit]`, it.unit || '');
-                form.append(`items[${pos}][supplier_text]`, it.supplier_text || '');
-                form.append(`items[${pos}][memo]`, it.memo || '');
-                if (it.stocks && Array.isArray(it.stocks)) {
-                    it.stocks.forEach((s, j) => {
-                        form.append(`items[${pos}][stocks][${j}][storage_location]`, s.storage_location || '');
-                        form.append(`items[${pos}][stocks][${j}][quantity]`, s.quantity || '');
-                        form.append(`items[${pos}][stocks][${j}][memo]`, s.memo || '');
-                    });
-                }
-            });
-        } else {
-            itemsToSave.forEach((it, i) => {
-                if ((it as Item).id) form.append(`items[${i}][id]`, String((it as Item).id));
-                // include full fields to satisfy validation on server
-                form.append(`items[${i}][sort_order]`, String(i));
-                form.append(`items[${i}][name]`, it.name || '');
-                form.append(`items[${i}][category_id]`, it.category_id || '');
-                form.append(`items[${i}][catalog_name]`, it.catalog_name || '');
-                form.append(`items[${i}][size]`, it.size || '');
-                form.append(`items[${i}][unit]`, it.unit || '');
-                form.append(`items[${i}][supplier_text]`, it.supplier_text || '');
-                form.append(`items[${i}][memo]`, it.memo || '');
-                if (it.stocks && Array.isArray(it.stocks)) {
-                    it.stocks.forEach((s, j) => {
-                        form.append(`items[${i}][stocks][${j}][storage_location]`, s.storage_location || '');
-                        form.append(`items[${i}][stocks][${j}][quantity]`, s.quantity || '');
-                        form.append(`items[${i}][stocks][${j}][memo]`, s.memo || '');
-                    });
-                }
-            });
-        }
+                if (!it || !it.id) return null;
+                return { id: it.id, sort_order: pos };
+            })
+            .filter(Boolean);
+
+        if (payload.length === 0) return;
 
         try {
             const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-            const res = await fetch('/api/inventory', {
+            const res = await fetch('/api/inventory/reorder', {
                 method: 'POST',
                 credentials: 'same-origin',
-                body: form,
-                headers: { 'X-CSRF-TOKEN': token, 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json' },
+                body: JSON.stringify({ items: payload }),
+                headers: {
+                    'X-CSRF-TOKEN': token,
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                },
             });
 
             if (!res.ok) {
-                const msg = res.status === 422 ? '並び順の保存に失敗しました（入力エラー）' : '並び順の保存に失敗しました';
-                setToast({ message: msg, type: 'error' });
-                return;
+                setToast({ message: '並び順の保存に失敗しました', type: 'error' });
+            } else {
+                setToast({ message: '並び順を保存しました', type: 'success' });
             }
-
-            setToast({ message: '並び順を保存しました', type: 'success' });
-            return;
         } catch (e) {
             console.error('saveOrder error', e);
             setToast({ message: '並び順の保存中にエラーが発生しました', type: 'error' });

@@ -212,6 +212,8 @@ Route::middleware(['web', 'auth'])->group(function () {
     // allow POST /api/daily-reports/{id} to update an existing report (frontend posts for save)
     Route::post('/daily-reports/{id}', [\App\Http\Controllers\DailyReportController::class, 'update']);
     // 在庫管理 API
+    // 並び順専用エンドポイントは apiResource より先に定義（inventory/{inventory} に先にマッチするのを防ぐ）
+    Route::post('inventory/reorder', [\App\Http\Controllers\Api\InventoryController::class, 'reorder']);
     Route::apiResource('inventory', \App\Http\Controllers\Api\InventoryController::class)->names([
         'index'   => 'api.inventory.index',
         'store'   => 'inventory.store',
