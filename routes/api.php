@@ -187,7 +187,13 @@ Route::middleware(['web', 'auth'])->group(function () {
     Route::post('users/{user}/roles', [UserRoleController::class, 'syncRoles']);
 
     // 掲示板・投稿 API
-    Route::apiResource('posts', \App\Http\Controllers\PostController::class);
+    Route::apiResource('posts', \App\Http\Controllers\PostController::class)->names([
+        'index'   => 'api.posts.index',
+        'store'   => 'posts.store',
+        'show'    => 'api.posts.show',
+        'update'  => 'posts.update',
+        'destroy' => 'posts.destroy',
+    ]);
     Route::post('posts/reorder', [\App\Http\Controllers\PostController::class, 'reorder'])->name('posts.reorder');
     // 投票API
     Route::post('polls/{poll}/vote', [\App\Http\Controllers\PollController::class, 'vote'])->name('polls.vote');
@@ -206,7 +212,13 @@ Route::middleware(['web', 'auth'])->group(function () {
     // allow POST /api/daily-reports/{id} to update an existing report (frontend posts for save)
     Route::post('/daily-reports/{id}', [\App\Http\Controllers\DailyReportController::class, 'update']);
     // 在庫管理 API
-    Route::apiResource('inventory', \App\Http\Controllers\Api\InventoryController::class);
+    Route::apiResource('inventory', \App\Http\Controllers\Api\InventoryController::class)->names([
+        'index'   => 'api.inventory.index',
+        'store'   => 'inventory.store',
+        'show'    => 'inventory.show',
+        'update'  => 'inventory.update',
+        'destroy' => 'inventory.destroy',
+    ]);
     Route::post('inventory/{inventory}/adjust', [\App\Http\Controllers\Api\InventoryController::class, 'adjustStock']);
     // 在庫シーズン管理 API
     Route::apiResource('inventory-seasons', \App\Http\Controllers\Api\InventorySeasonController::class)->only(['index', 'store', 'update', 'destroy']);
