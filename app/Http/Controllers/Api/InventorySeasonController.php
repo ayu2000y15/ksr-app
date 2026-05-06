@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\InventorySeason;
+use App\Models\Season;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -13,7 +13,7 @@ class InventorySeasonController extends Controller
     {
         $this->authorize('viewAny', \App\Models\InventoryItem::class);
 
-        $seasons = InventorySeason::orderBy('name', 'desc')->get();
+        $seasons = Season::orderBy('name', 'desc')->get();
         return response()->json($seasons);
     }
 
@@ -22,87 +22,83 @@ class InventorySeasonController extends Controller
         $this->authorize('create', \App\Models\InventoryItem::class);
 
         $validated = $request->validate([
-            'name'      => ['required', 'string', 'max:20', 'unique:inventory_seasons,name', 'regex:/^\d{4}-\d{2}$/'],
+            'name'      => ['required', 'string', 'max:20', 'unique:seasons,name', 'regex:/^\d{4}-\d{2}$/'],
             'is_active' => ['boolean'],
             'note'      => ['nullable', 'string', 'max:255'],
         ], [
-            'name.required' => 'シーズン名は必須です',
-            'name.unique'   => 'そのシーズン名は既に登録されています',
-            'name.regex'    => 'シーズン名は YYYY-YY 形式で入力してください（例: 2025-26）',
+            'name.required' => '�V�[�Y�����͕K�{�ł�',
+            'name.unique'   => '���̃V�[�Y�����͊��ɓo�^����Ă��܂�',
+            'name.regex'    => '�V�[�Y������ YYYY-YY �`���œ��͂��Ă��������i��: 2025-26�j',
         ]);
 
         DB::beginTransaction();
         try {
             if (!empty($validated['is_active'])) {
-                // 他のシーズンのアクティブフラグを解除
-                InventorySeason::where('is_active', true)->update(['is_active' => false]);
+                Season::where('is_active', true)->update(['is_active' => false]);
             }
 
-            $season = InventorySeason::create($validated);
+            $season = Season::create($validated);
             DB::commit();
             return response()->json($season, 201);
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['message' => '作成に失敗しました', 'error' => $e->getMessage()], 500);
+            return response()->json(['message' => '�쐬�Ɏ��s���܂���', 'error' => $e->getMessage()], 500);
         }
     }
 
-    public function update(Request $request, InventorySeason $inventorySeason)
+    public function update(Request $request, Season $season)
     {
         $this->authorize('update', \App\Models\InventoryItem::class);
 
         $validated = $request->validate([
-            'name'      => ['sometimes', 'string', 'max:20', 'unique:inventory_seasons,name,' . $inventorySeason->id, 'regex:/^\d{4}-\d{2}$/'],
+            'name'      => ['sometimes', 'string', 'max:20', 'unique:seasons,name,' . $season->id, 'regex:/^\d{4}-\d{2}$/'],
             'is_active' => ['boolean'],
             'note'      => ['nullable', 'string', 'max:255'],
         ], [
-            'name.unique' => 'そのシーズン名は既に登録されています',
-            'name.regex'  => 'シーズン名は YYYY-YY 形式で入力してください（例: 2025-26）',
+            'name.unique' => '���̃V�[�Y�����͊��ɓo�^����Ă��܂�',
+            'name.regex'  => '�V�[�Y������ YYYY-YY �`���œ��͂��Ă��������i��: 2025-26�j',
         ]);
 
         DB::beginTransaction();
         try {
             if (isset($validated['is_active']) && $validated['is_active']) {
-                InventorySeason::where('id', '!=', $inventorySeason->id)
+                Season::where('id', '!=', $season->id)
                     ->where('is_active', true)
                     ->update(['is_active' => false]);
             }
 
-            $inventorySeason->update($validated);
+            $season->update($validated);
             DB::commit();
-            return response()->json($inventorySeason->fresh());
+            return response()->json($season->fresh());
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['message' => '更新に失敗しました', 'error' => $e->getMessage()], 500);
+            return response()->json(['message' => '�X�V�Ɏ��s���܂���', 'error' => $e->getMessage()], 500);
         }
     }
 
-    public function destroy(InventorySeason $inventorySeason)
+    public function destroy(Season $season)
     {
         $this->authorize('delete', \App\Models\InventoryItem::class);
 
-        $stockCount = $inventorySeason->stocks()->count();
+        $stockCount = $season->inventoryStocks()->count();
         if ($stockCount > 0) {
             return response()->json([
-                'message' => "このシーズンには在庫データ（{$stockCount}件）が登録されています。削除できません。",
+                'message' => "���̃V�[�Y���ɂ͍݌Ƀf�[�^�i{$stockCount}���j���o�^����Ă��܂��B�폜�ł��܂���B",
             ], 422);
         }
 
-        $inventorySeason->delete();
+        $season->delete();
         return response()->json(['message' => 'deleted']);
     }
 
-    /**
-     * 指定シーズンをアクティブに設定し、他のシーズンを非アクティブにする
-     */
     public function setActive(int $id)
     {
         $this->authorize('update', \App\Models\InventoryItem::class);
 
-        $season = InventorySeason::findOrFail($id);
+        $season = Season::findOrFail($id);
 
         DB::transaction(function () use ($season) {
-            InventorySeason::where('is_active', true)->update(['is_active' => false]);
+            Season::where('is_active', true)->update(['is_active' => false]);
             $season->update(['is_active' => true]);
         });
 

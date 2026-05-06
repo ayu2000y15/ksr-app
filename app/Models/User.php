@@ -18,6 +18,7 @@ class User extends BaseAuthenticatable
      * @var array<int, string>
      */
     protected $fillable = [
+        'season_id',
         'position',
         'name',
         'furigana',
@@ -99,5 +100,13 @@ class User extends BaseAuthenticatable
     public function rentals()
     {
         return $this->hasMany(\App\Models\Rental::class, 'user_id');
+    }
+
+    /**
+     * 所属シーズン
+     */
+    public function season()
+    {
+        return $this->belongsTo(\App\Models\Season::class, 'season_id');
     }
 }

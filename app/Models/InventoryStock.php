@@ -18,6 +18,6 @@ class InventoryStock extends BaseModel
 
     public function season()
     {
-        return $this->belongsTo(\App\Models\InventorySeason::class, 'season_id');
+        return $this->belongsTo(\App\Models\Season::class, 'season_id');
     }
 }

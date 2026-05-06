@@ -7,6 +7,7 @@ use App\Models\Holiday;
 use App\Models\User;
 use App\Models\DefaultShift;
 use App\Models\ShiftDetail;
+use App\Models\Season;
 use Carbon\Carbon;
 use Inertia\Inertia;
 use Illuminate\Http\Request;
@@ -39,7 +40,13 @@ class ShiftController extends Controller
             ->get();
 
         // only include active users in the month editor (prefer position ordering then id)
-        $users = User::select('id', 'name', 'position', 'preferred_week_days', 'has_car', 'employment_start_date', 'employment_end_date')->where('status', 'active')->orderBy('position')->orderBy('id')->get();
+        $viewingSeason = Season::viewing();
+        $usersQuery = User::select('id', 'name', 'position', 'preferred_week_days', 'has_car', 'employment_start_date', 'employment_end_date')
+            ->where('status', 'active')->orderBy('position')->orderBy('id');
+        if ($viewingSeason) {
+            $usersQuery->where('season_id', $viewingSeason->id);
+        }
+        $users = $usersQuery->get();
         $holidays = Holiday::whereBetween('date', [$startDate, $endDate])
             ->pluck('date')
             ->map(function ($d) {
@@ -190,11 +197,17 @@ class ShiftController extends Controller
         // 10分休憩のデータも取得
         $shortBreaks = \App\Models\ShortBreak::where('date', $d)->get()->keyBy('user_id');
 
+        $viewingSeason = Season::viewing();
+        $dailyUsersQuery = User::select('id', 'name', 'status', 'position')->where('status', 'active')->orderBy('position')->orderBy('id');
+        if ($viewingSeason) {
+            $dailyUsersQuery->where('season_id', $viewingSeason->id);
+        }
+
         return Inertia::render('shifts/daily', [
             'date' => $d,
             'shiftDetails' => $shiftDetails,
             // include active users so the daily page can show a user picker for quick-add
-            'users' => User::select('id', 'name', 'status', 'position')->where('status', 'active')->orderBy('position')->orderBy('id')->get(),
+            'users' => $dailyUsersQuery->get(),
             'shortBreaks' => $shortBreaks,
             'queryParams' => $request->query() ?: null,
         ]);
@@ -925,7 +938,12 @@ class ShiftController extends Controller
         $start = $month->copy()->startOfMonth();
         $end = $month->copy()->endOfMonth();
 
-        $users = User::where('status', 'active')->orderBy('position')->orderBy('id')->get();
+        $viewingSeason = Season::viewing();
+        $usersQuery = User::where('status', 'active')->orderBy('position')->orderBy('id');
+        if ($viewingSeason) {
+            $usersQuery->where('season_id', $viewingSeason->id);
+        }
+        $users = $usersQuery->get();
 
         $created = 0;
         $updated = 0;
@@ -1052,11 +1070,15 @@ class ShiftController extends Controller
         $monthStart = $month->copy()->startOfMonth();
         $monthEnd = $month->copy()->addMonths(3)->endOfMonth();
 
-        $users = User::where('status', 'active')
+        $viewingSeason = Season::viewing();
+        $usersQuery = User::where('status', 'active')
             ->whereNotNull('employment_start_date')
             ->orderBy('position')
-            ->orderBy('id')
-            ->get();
+            ->orderBy('id');
+        if ($viewingSeason) {
+            $usersQuery->where('season_id', $viewingSeason->id);
+        }
+        $users = $usersQuery->get();
 
         // 祝日一覧を取得
         $holidays = Holiday::whereBetween('date', [$monthStart, $monthEnd])

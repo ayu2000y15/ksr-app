@@ -455,7 +455,24 @@ export interface BreadcrumbItem {
     href?: string;
 }
 
+// シーズン関連
+export interface Season {
+    id: number;
+    name: string;
+    is_active: boolean;
+    ended_at: string | null;
+    note: string | null;
+    users_count?: number;
+    created_at: string;
+    updated_at: string;
+}
+
 // ページ共有データ（usePage の generic に使用する想定）
 export interface SharedData extends PageProps<Record<string, unknown>> {
     sidebarOpen?: boolean;
+    currentSeason?: Season | null;
+    seasonViewer?: {
+        viewingId: number | null;
+        available: { id: number; name: string; is_active: boolean; ended_at: string | null }[];
+    } | null;
 }

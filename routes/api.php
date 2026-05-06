@@ -57,12 +57,18 @@ Route::middleware(['web', 'auth'])->group(function () {
 
     // ユーザー一覧（ロール割り当て用） — position を優先して返す
     Route::get('/users', function () {
-        // 一時的に権限チェックを無効化
-        // $this->authorize('viewAny', User::class);
+        $viewingSeason = \App\Models\Season::viewing();
         $q = User::with('roles')->where('status', 'active');
+        if ($viewingSeason) {
+            $q->where('season_id', $viewingSeason->id);
+        }
         $users = $q->orderBy('position')->orderBy('id')->get();
         if ($users->count() === 0) {
-            $users = User::with('roles')->orderBy('position')->orderBy('id')->get();
+            $fallback = User::with('roles')->orderBy('position')->orderBy('id');
+            if ($viewingSeason) {
+                $fallback->where('season_id', $viewingSeason->id);
+            }
+            $users = $fallback->get();
         }
         return $users;
     });
@@ -153,15 +159,18 @@ Route::middleware(['web', 'auth'])->group(function () {
 
     // アプリ内のアクティブユーザー一覧（入寮・退寮フォーム用）
     Route::get('/active-users', function () {
-        // try status == 'active' first, fallback to all users
-        $q = User::query();
-        if (in_array('status', (new \ReflectionClass(User::class))->getDefaultProperties() ?: [])) {
-            // If model has default properties, still attempt status filter — keep simple: try where status = 'active'
+        $viewingSeason = \App\Models\Season::viewing();
+        $q = User::where('status', 'active')->orderBy('position')->orderBy('id');
+        if ($viewingSeason) {
+            $q->where('season_id', $viewingSeason->id);
         }
-        // Prefer ordering by position then id so frontend displays stable position order
-        $users = User::where('status', 'active')->orderBy('position')->orderBy('id')->get();
+        $users = $q->get();
         if ($users->count() === 0) {
-            $users = User::orderBy('position')->orderBy('id')->get();
+            $fallback = User::orderBy('position')->orderBy('id');
+            if ($viewingSeason) {
+                $fallback->where('season_id', $viewingSeason->id);
+            }
+            $users = $fallback->get();
         }
         return ['users' => $users];
     });

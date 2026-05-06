@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Season;
 use Spatie\Permission\Models\Permission;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
@@ -85,6 +86,55 @@ class HandleInertiaRequests extends Middleware
                 'error' => fn() => $request->session()->get('error'),
                 'csv_errors' => fn() => $request->session()->get('csv_errors'),
             ],
+            // 現在のシーズン情報を全ページに共有
+            'currentSeason' => function () {
+                $season = Season::where('is_active', true)->first();
+                if (! $season) {
+                    return null;
+                }
+                return [
+                    'id' => $season->id,
+                    'name' => $season->name,
+                    'is_active' => $season->is_active,
+                    'ended_at' => $season->ended_at,
+                ];
+            },
+            // 閲覧中シーズン（セッション選択 or アクティブ）と選択可能シーズン一覧
+            'seasonViewer' => function () use ($request) {
+                $user = $request->user();
+                if (! $user) {
+                    return null;
+                }
+
+                $isSuperAdmin = $user->roles()->where('name', 'システム管理者')->exists();
+
+                // 選択可能シーズン: 管理者は全件、一般ユーザーは同じメールが登録されているシーズン
+                if ($isSuperAdmin) {
+                    $availableSeasons = Season::orderBy('name', 'desc')->get(['id', 'name', 'is_active', 'ended_at']);
+                } else {
+                    $availableSeasons = Season::whereHas('users', function ($q) use ($user) {
+                        $q->where('email', $user->email);
+                    })->orderBy('name', 'desc')->get(['id', 'name', 'is_active', 'ended_at']);
+                }
+
+                // セッションの閲覧シーズンが有効か確認
+                $viewingId = session('viewing_season_id');
+                if ($viewingId && ! $availableSeasons->contains('id', $viewingId)) {
+                    session()->forget('viewing_season_id');
+                    $viewingId = null;
+                }
+
+                // 未選択ならアクティブシーズンを使用
+                if (! $viewingId) {
+                    $active = Season::where('is_active', true)->first();
+                    $viewingId = $active?->id;
+                }
+
+                return [
+                    'viewingId' => $viewingId,
+                    'available' => $availableSeasons->toArray(),
+                ];
+            },
         ];
     }
 }

@@ -6,7 +6,7 @@ use App\Models\InventoryItem;
 use App\Models\InventoryCategory;
 use App\Models\InventoryStock;
 use App\Models\InventoryStockLog;
-use App\Models\InventorySeason;
+use App\Models\Season;
 use Inertia\Inertia;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -22,7 +22,7 @@ class InventoryPageController extends Controller
         $seasonId        = $request->filled('season_id') ? intval($request->input('season_id')) : null;
         $compareSeasonId = $request->filled('compare_season_id') ? intval($request->input('compare_season_id')) : null;
 
-        $seasons = InventorySeason::orderBy('name', 'desc')->get();
+        $seasons = Season::orderBy('name', 'desc')->get();
 
         // シーズン未指定の場合はアクティブシーズンをデフォルトに
         if ($seasonId === null) {
@@ -66,7 +66,7 @@ class InventoryPageController extends Controller
     {
         $this->authorize('create', \App\Models\InventoryItem::class);
 
-        $seasons = InventorySeason::orderBy('name', 'desc')->get();
+        $seasons = Season::orderBy('name', 'desc')->get();
 
         // シーズンフィルタリング（一覧と同様）
         $seasonId = $request->filled('season_id') ? intval($request->input('season_id')) : null;
@@ -238,7 +238,7 @@ class InventoryPageController extends Controller
                             $errors[] = "[{$lineNumber}行目] シーズン「{$seasonName}」の形式が正しくありません（例: 2025-26）";
                             continue;
                         }
-                        $season = \App\Models\InventorySeason::firstOrCreate(
+                        $season = \App\Models\Season::firstOrCreate(
                             ['name' => $seasonName],
                             ['is_active' => false]
                         );

@@ -122,6 +122,15 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
     Route::inertia('/admin/role-permissions', 'admin/role-permissions')->name('admin.role-permissions');
     Route::inertia('/admin/user-roles', 'admin/user-roles')->name('admin.user-roles');
 
+    // --- シーズン切り替え（全認証ユーザー向け） ---
+    Route::post('/season/switch', [App\Http\Controllers\SeasonSwitchController::class, 'store'])->name('season.switch');
+
+    // --- 管理: シーズン管理 ---
+    Route::get('/admin/seasons', [App\Http\Controllers\Admin\SeasonController::class, 'index'])->name('admin.seasons.index');
+    Route::post('/admin/seasons', [App\Http\Controllers\Admin\SeasonController::class, 'store'])->name('admin.seasons.store');
+    Route::post('/admin/seasons/{season}/end', [App\Http\Controllers\Admin\SeasonController::class, 'end'])->name('admin.seasons.end');
+    Route::post('/admin/seasons/{season}/activate', [App\Http\Controllers\Admin\SeasonController::class, 'activate'])->name('admin.seasons.activate');
+
     // --- 管理: デフォルトシフト設定 ---
     Route::get('/admin/default-shifts', [App\Http\Controllers\DefaultShiftController::class, 'index'])->name('admin.default-shifts.index');
     Route::get('/admin/default-shifts/create', [App\Http\Controllers\DefaultShiftController::class, 'create'])->name('admin.default-shifts.create');

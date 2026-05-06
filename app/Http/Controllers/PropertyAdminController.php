@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Property;
+use App\Models\Season;
 use Inertia\Inertia;
 use Illuminate\Http\Request;
 use Illuminate\Database\QueryException;
@@ -35,8 +36,16 @@ class PropertyAdminController extends Controller
         }
         $agents = $agentsQuery->get();
 
-        // Properties
+        // Properties (シーズンフィルタリング)
+        // 選択中シーズン（セッション or アクティブ）でフィルタリング
+        $viewingSeason = Season::viewing();
         $propertiesQuery = Property::query()->select('properties.*');
+        if ($viewingSeason) {
+            $propertiesQuery->where(function ($q) use ($viewingSeason) {
+                $q->where('properties.season_id', $viewingSeason->id)
+                    ->orWhereNull('properties.season_id');
+            });
+        }
         if ($list === 'properties' && $sort) {
             // support simple mappings and a related-agent name sort
             if ($sort === 'id' || $sort === 'name' || $sort === 'order_column' || $sort === 'contract_date') {

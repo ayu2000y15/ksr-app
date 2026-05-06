@@ -24,8 +24,11 @@ const SortableHeader = ({ children, sort_key, queryParams }: { children: ReactNo
     const isCurrentSort = currentSort === sort_key;
     const newDirection = isCurrentSort && currentDirection === 'asc' ? 'desc' : 'asc';
 
+    const params: Record<string, any> = { sort: sort_key, direction: newDirection };
+    if (queryParams?.season_id) params.season_id = queryParams.season_id;
+
     return (
-        <Link href={route('users.index', { sort: sort_key, direction: newDirection })} preserveState preserveScroll>
+        <Link href={route('users.index', params)} preserveState preserveScroll>
             <div className={`flex items-center gap-2 ${isCurrentSort ? 'text-indigo-600' : 'text-muted-foreground'}`}>
                 <span>{children}</span>
                 <svg className="h-3 w-3" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">

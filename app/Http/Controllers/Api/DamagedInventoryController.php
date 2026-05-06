@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Models\DamagedInventory;
 use App\Models\InventoryItem;
 use App\Models\DamageCondition;
+use App\Models\Season;
 use App\Models\User;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
@@ -38,6 +39,16 @@ class DamagedInventoryController extends Controller
         $query = DamagedInventory::query();
         // eager load relations for response
         $query->with(['inventoryItem.category', 'handlerUser', 'damageCondition', 'attachments']);
+
+        // シーズンフィルタリング: season_id が指定されている場合はそのシーズンのみ
+        // 選択中シーズン（セッション or アクティブ）でフィルタリング
+        $viewingSeason = Season::viewing();
+        if ($viewingSeason) {
+            $query->where(function ($q) use ($viewingSeason) {
+                $q->where('damaged_inventories.season_id', $viewingSeason->id)
+                    ->orWhereNull('damaged_inventories.season_id');
+            });
+        }
 
         if ($sort && isset($sortMap[$sort])) {
             $m = $sortMap[$sort];
@@ -85,7 +96,12 @@ class DamagedInventoryController extends Controller
             });
 
         // return only active users ordered by position (then id) for predictable ordering
-        $users = User::where('status', 'active')->orderBy('position')->orderBy('id')->get(['id', 'name', 'position']);
+        $usersQuery = User::where('status', 'active')->orderBy('position')->orderBy('id');
+        $viewingSeason = Season::viewing();
+        if ($viewingSeason) {
+            $usersQuery->where('season_id', $viewingSeason->id);
+        }
+        $users = $usersQuery->get(['id', 'name', 'position']);
         $damageConditions = DamageCondition::orderBy('order_column')->get(['id', 'condition']);
 
         // ensure damaged_at is passed as the raw DB value (Y-m-d) to avoid timezone shifts on the client
@@ -158,6 +174,14 @@ class DamagedInventoryController extends Controller
             }
 
             $damaged = DamagedInventory::create($data);
+
+            // season_id が未設定の場合はアクティブシーズンを適用
+            if (empty($data['season_id'])) {
+                $activeSeason = Season::active();
+                if ($activeSeason) {
+                    $damaged->update(['season_id' => $activeSeason->id]);
+                }
+            }
 
             // handle damaged area images and persist to attachments table (morphMany)
             if ($request->hasFile('damaged_area_images')) {

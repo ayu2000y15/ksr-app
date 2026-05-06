@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\UserShiftSetting;
 use App\Models\User;
+use App\Models\Season;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
 
@@ -12,8 +13,13 @@ class UserShiftSettingController extends Controller
     public function index()
     {
         $this->authorize('viewAny', UserShiftSetting::class);
-        // get all users and existing settings keyed by user_id
-        $users = User::where('status', 'active')->orderBy('position')->orderBy('id')->get();
+        // 閲覧中シーズンのユーザーのみ表示
+        $viewingSeason = Season::viewing();
+        $query = User::where('status', 'active')->orderBy('position')->orderBy('id');
+        if ($viewingSeason) {
+            $query->where('season_id', $viewingSeason->id);
+        }
+        $users = $query->get();
         $settings = UserShiftSetting::whereIn('user_id', $users->pluck('id'))->get()->keyBy('user_id');
         return inertia('admin/user-shift-settings', ['users' => $users, 'settings' => $settings]);
     }
@@ -48,7 +54,12 @@ class UserShiftSettingController extends Controller
     public function edit(UserShiftSetting $user_shift_setting)
     {
         $this->authorize('update', $user_shift_setting);
-        $users = User::where('status', 'active')->orderBy('position')->orderBy('id')->get();
+        $viewingSeason = Season::viewing();
+        $query = User::where('status', 'active')->orderBy('position')->orderBy('id');
+        if ($viewingSeason) {
+            $query->where('season_id', $viewingSeason->id);
+        }
+        $users = $query->get();
         return inertia('admin/user-shift-settings/edit', ['item' => $user_shift_setting, 'users' => $users]);
     }
 

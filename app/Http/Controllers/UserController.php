@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Models\Season;
 use App\Models\ShiftDetail;
 use App\Models\Shift;
 use Illuminate\Http\Request;
@@ -37,9 +38,14 @@ class UserController extends Controller
         $sort = in_array($request->query('sort', 'id'), $sortableColumns) ? $request->query('sort', 'id') : 'id';
         $direction = in_array($request->query('direction', 'asc'), ['asc', 'desc']) ? $request->query('direction', 'asc') : 'asc';
 
+        $viewingSeason = Season::viewing();
+
         $query = User::with(['roles', 'rentals' => function ($query) {
             $query->with(['rentalUser', 'returnUser', 'rentalItem'])->orderBy('rental_date', 'desc');
         }]);
+        if ($viewingSeason) {
+            $query->where('season_id', $viewingSeason->id);
+        }
         if ($sort === 'id') {
             // prefer explicit position ordering, fallback to id
             $query = $query->orderBy('position', $direction)->orderBy('id', $direction);
@@ -51,7 +57,7 @@ class UserController extends Controller
 
         return Inertia::render('users/index', [
             'users' => $users,
-            'queryParams' => $request->query() ?: null, // 現在のクエリパラメータを渡す
+            'queryParams' => $request->query() ?: null,
         ]);
     }
 
@@ -70,9 +76,14 @@ class UserController extends Controller
         $sort = in_array($request->query('sort', 'id'), $sortableColumns) ? $request->query('sort', 'id') : 'id';
         $direction = in_array($request->query('direction', 'asc'), ['asc', 'desc']) ? $request->query('direction', 'asc') : 'asc';
 
+        $viewingSeason = Season::viewing();
+
         $query = User::with(['roles', 'rentals' => function ($query) {
             $query->with(['rentalUser', 'returnUser', 'rentalItem'])->orderBy('rental_date', 'desc');
         }]);
+        if ($viewingSeason) {
+            $query->where('season_id', $viewingSeason->id);
+        }
         if ($sort === 'id') {
             $query = $query->orderBy('position', $direction)->orderBy('id', $direction);
         } else {
@@ -598,7 +609,21 @@ class UserController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'furigana' => 'nullable|string|max:255',
-            'email' => 'required|string|lowercase|email|max:255|unique:' . User::class,
+            'email' => [
+                'required',
+                'string',
+                'lowercase',
+                'email',
+                'max:255',
+                // シーズン内でメールアドレスの重複を防ぐ
+                \Illuminate\Validation\Rule::unique('users', 'email')->where(function ($query) {
+                    $activeSeason = Season::where('is_active', true)->first();
+                    if ($activeSeason) {
+                        return $query->where('season_id', $activeSeason->id);
+                    }
+                    return $query->whereNull('season_id');
+                }),
+            ],
             'status' => 'required|in:active,retired,shared',
             'phone_number' => 'nullable|string|max:20',
             'line_name' => 'nullable|string|max:255',
@@ -618,12 +643,16 @@ class UserController extends Controller
             'employment_notes' => 'nullable|string',
         ], $messages);
 
+        // アクティブシーズンを取得
+        $activeSeason = Season::where('is_active', true)->first();
+
         // 仮パスワードを生成
         $temporaryPassword = Str::random(12);
         // 新規ユーザーは並び順の末尾に配置
         $maxPosition = User::max('position') ?? 0;
 
         $user = User::create([
+            'season_id' => $activeSeason?->id,
             'position' => $maxPosition + 1,
             'name' => $request->name,
             'furigana' => $request->furigana,
@@ -701,7 +730,17 @@ class UserController extends Controller
 
         $request->validate([
             'name' => 'required|string|max:255',
-            'email' => 'required|string|lowercase|email|max:255|unique:' . User::class . ',email,' . $user->id,
+            'email' => [
+                'required',
+                'string',
+                'lowercase',
+                'email',
+                'max:255',
+                // 同じシーズン内でのメールアドレス重複チェック（自分自身は除外）
+                \Illuminate\Validation\Rule::unique('users', 'email')->where(function ($query) use ($user) {
+                    return $query->where('season_id', $user->season_id);
+                })->ignore($user->id),
+            ],
             'status' => 'required|in:active,retired,shared',
             'phone_number' => 'nullable|string|max:20',
             'line_name' => 'nullable|string|max:255',
@@ -887,7 +926,12 @@ class UserController extends Controller
             $months[] = $m->format('Y-m'); // e.g. 2025-05,2025-06,...,2025-10
         }
 
-        $users = User::orderBy('position', 'asc')->get();
+        $viewingSeason = Season::viewing();
+        $usersQuery = User::orderBy('position', 'asc');
+        if ($viewingSeason) {
+            $usersQuery->where('season_id', $viewingSeason->id);
+        }
+        $users = $usersQuery->get();
 
         // 15日区切りの期間範囲を計算
         // 最初の期間: months[0]の16日から開始
@@ -1173,8 +1217,13 @@ class UserController extends Controller
             abort(403, 'この操作を実行する権限がありません。');
         }
 
-        // 全ユーザーを取得
-        $users = User::orderBy('id')->get();
+        // 全ユーザーを取得（閲覧中シーズン）
+        $activeSeason = Season::viewing();
+        $exportQuery = User::orderBy('id');
+        if ($activeSeason) {
+            $exportQuery->where('season_id', $activeSeason->id);
+        }
+        $users = $exportQuery->get();
 
         // CSVデータを生成
         $csvData = [];

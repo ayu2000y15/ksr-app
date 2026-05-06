@@ -31,11 +31,6 @@ export default function Index({
     const [compareSeasonId, setCompareSeasonId] = useState<number | null>(initialCompareSeasonId ?? null);
     const [compareItems, setCompareItems] = useState<any[]>(initialCompareItems || []);
     const [showCompare, setShowCompare] = useState<boolean>(initialCompareSeasonId !== null);
-    const [showSeasonDialog, setShowSeasonDialog] = useState(false);
-    const [newSeasonName, setNewSeasonName] = useState('');
-    const [newSeasonNote, setNewSeasonNote] = useState('');
-    const [seasonSaving, setSeasonSaving] = useState(false);
-    const [seasonError, setSeasonError] = useState<string | null>(null);
 
     useEffect(() => {
         setSeasons(initialSeasons || []);
@@ -44,8 +39,6 @@ export default function Index({
         setCompareItems(initialCompareItems || []);
         setShowCompare(initialCompareSeasonId !== null);
     }, [initialSeasons, initialSeasonId, initialCompareSeasonId, initialCompareItems]);
-
-    // 前シーズン在庫マップ: item_id -> { location -> qty }
     const prevStocksMap: Record<number, Record<string, number>> = {};
     (compareItems || []).forEach((item: any) => {
         prevStocksMap[item.id] = {};
@@ -81,67 +74,9 @@ export default function Index({
         router.get(route('inventory.index'), params, { preserveScroll: false });
     };
 
-    const handleAddSeason = async () => {
-        if (!newSeasonName.trim()) {
-            setSeasonError('シーズン名を入力してください');
-            return;
-        }
-        setSeasonSaving(true);
-        setSeasonError(null);
-        try {
-            const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-            const res = await fetch('/api/inventory-seasons', {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: { 'X-CSRF-TOKEN': token, 'Content-Type': 'application/json', Accept: 'application/json' },
-                body: JSON.stringify({ name: newSeasonName.trim(), note: newSeasonNote.trim() || null }),
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-                const msg = data?.errors?.name?.[0] || data?.message || '登録に失敗しました';
-                setSeasonError(msg);
-                return;
-            }
-            setSeasons((prev) => [data, ...prev].sort((a, b) => b.name.localeCompare(a.name)));
-            setNewSeasonName('');
-            setNewSeasonNote('');
-        } finally {
-            setSeasonSaving(false);
-        }
-    };
-
-    const handleDeleteSeason = async (id: number) => {
-        if (!confirm('このシーズンを削除しますか？')) return;
-        const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-        const res = await fetch(`/api/inventory-seasons/${id}`, {
-            method: 'DELETE',
-            credentials: 'same-origin',
-            headers: { 'X-CSRF-TOKEN': token, Accept: 'application/json' },
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-            alert(data?.message || '削除に失敗しました');
-            return;
-        }
-        setSeasons((prev) => prev.filter((s) => s.id !== id));
-        if (currentSeasonId === id) {
-            router.get(route('inventory.index'));
-        }
-    };
-
-    const handleSetActive = async (id: number) => {
-        const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-        const res = await fetch(`/api/inventory-seasons/${id}/set-active`, {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: { 'X-CSRF-TOKEN': token, Accept: 'application/json' },
-        });
-        if (!res.ok) {
-            alert('アクティブ設定に失敗しました');
-            return;
-        }
-        setSeasons((prev) => prev.map((s) => ({ ...s, is_active: s.id === id })));
-    };
+    const handleAddSeason = async () => {};
+    const handleDeleteSeason = async (_id: number) => {};
+    const handleSetActive = async (_id: number) => {};
 
     // CSV アップロード関連
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -641,14 +576,13 @@ export default function Index({
                                 </select>
                             )}
                             {inventoryPerms.update && (
-                                <button
-                                    type="button"
-                                    onClick={() => setShowSeasonDialog(true)}
+                                <a
+                                    href="/admin/seasons"
                                     className="flex items-center gap-1 rounded-md px-2 py-1 text-sm text-gray-500 hover:bg-gray-100"
                                 >
                                     <Settings className="h-3.5 w-3.5" />
                                     シーズン管理
-                                </button>
+                                </a>
                             )}
                         </div>
                     </div>
@@ -1006,76 +940,6 @@ export default function Index({
                         );
                     })}
                 </div>
-
-                {/* シーズン管理ダイアログ */}
-                <Dialog open={showSeasonDialog} onOpenChange={setShowSeasonDialog}>
-                    <DialogContent className="max-h-[80vh] max-w-lg overflow-auto">
-                        <DialogHeader>
-                            <DialogTitle>シーズン管理</DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-4">
-                            {/* 新規シーズン追加 */}
-                            <div className="rounded-md border p-3">
-                                <div className="mb-2 text-sm font-medium">新規シーズンを追加</div>
-                                <div className="flex gap-2">
-                                    <input
-                                        type="text"
-                                        placeholder="例: 2025-26"
-                                        value={newSeasonName}
-                                        onChange={(e) => {
-                                            setNewSeasonName(e.target.value);
-                                            setSeasonError(null);
-                                        }}
-                                        className="flex-1 rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none"
-                                        maxLength={10}
-                                        pattern="\d{4}-\d{2}"
-                                    />
-                                    <Button size="sm" onClick={handleAddSeason} disabled={seasonSaving}>
-                                        追加
-                                    </Button>
-                                </div>
-                                <div className="mt-1 text-xs text-gray-500">YYYY-YY 形式（例: 2024-25）</div>
-                                {seasonError && <div className="mt-1 text-xs text-red-600">{seasonError}</div>}
-                            </div>
-                            {/* シーズン一覧 */}
-                            <div className="space-y-2">
-                                {seasons.length === 0 && <div className="text-sm text-gray-500">シーズンがまだ登録されていません</div>}
-                                {seasons.map((s: any) => (
-                                    <div key={s.id} className="flex items-center justify-between rounded-md border bg-gray-50 px-3 py-2">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-sm font-medium">{s.name}</span>
-                                            {s.is_active && (
-                                                <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
-                                                    アクティブ
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div className="flex gap-2">
-                                            {!s.is_active && (
-                                                <Button size="sm" variant="ghost" onClick={() => handleSetActive(s.id)} className="text-xs">
-                                                    アクティブに設定
-                                                </Button>
-                                            )}
-                                            <Button
-                                                size="sm"
-                                                variant="ghost"
-                                                onClick={() => handleDeleteSeason(s.id)}
-                                                className="text-xs text-red-500 hover:text-red-700"
-                                            >
-                                                削除
-                                            </Button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                            <div className="flex justify-end">
-                                <Button variant="outline" onClick={() => setShowSeasonDialog(false)}>
-                                    閉じる
-                                </Button>
-                            </div>
-                        </div>
-                    </DialogContent>
-                </Dialog>
 
                 {/* CSVエラー詳細ダイアログ */}
                 <Dialog open={csvErrorDialog.open} onOpenChange={(open) => setCsvErrorDialog({ ...csvErrorDialog, open })}>

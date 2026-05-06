@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Property;
 use App\Models\Holiday;
+use App\Models\Season;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -98,9 +99,18 @@ class PropertyPageController extends Controller
             ->toArray();
 
         // send minimal users list (id, name, gender, has_car) so frontend can render icons on initial SSR
-        $users = \App\Models\User::where('status', 'active')->orderBy('position')->orderBy('id')->get(['id', 'name', 'gender', 'has_car', 'position']);
+        $viewingSeason = Season::viewing();
+        $usersQuery = \App\Models\User::where('status', 'active')->orderBy('position')->orderBy('id');
+        if ($viewingSeason) {
+            $usersQuery->where('season_id', $viewingSeason->id);
+        }
+        $users = $usersQuery->get(['id', 'name', 'gender', 'has_car', 'position']);
         if ($users->count() === 0) {
-            $users = \App\Models\User::orderBy('position')->orderBy('id')->get(['id', 'name', 'gender', 'has_car', 'position']);
+            $fallback = \App\Models\User::orderBy('position')->orderBy('id');
+            if ($viewingSeason) {
+                $fallback->where('season_id', $viewingSeason->id);
+            }
+            $users = $fallback->get(['id', 'name', 'gender', 'has_car', 'position']);
         }
 
         return Inertia::render('properties/index', [

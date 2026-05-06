@@ -12,6 +12,7 @@ class DamagedInventory extends BaseModel
     protected $table = 'damaged_inventories';
 
     protected $fillable = [
+        'season_id',
         'inventory_item_id',
         'handler_user_id',
         'management_number',
@@ -46,6 +47,11 @@ class DamagedInventory extends BaseModel
     public function damageCondition()
     {
         return $this->belongsTo(DamageCondition::class, 'damage_condition_id');
+    }
+
+    public function season()
+    {
+        return $this->belongsTo(\App\Models\Season::class, 'season_id');
     }
 
     public function attachments()

@@ -10,6 +10,7 @@ class Property extends BaseModel
     use HasFactory;
 
     protected $fillable = [
+        'season_id',
         'name',
         'real_estate_agent_id',
         'postal_code',
@@ -32,5 +33,10 @@ class Property extends BaseModel
     public function realEstateAgent()
     {
         return $this->belongsTo(\App\Models\RealEstateAgent::class, 'real_estate_agent_id');
+    }
+
+    public function season()
+    {
+        return $this->belongsTo(\App\Models\Season::class, 'season_id');
     }
 }

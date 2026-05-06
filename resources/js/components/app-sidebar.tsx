@@ -10,7 +10,7 @@ import {
     useSidebar,
 } from '@/components/ui/sidebar';
 import type { NavItem, SharedData } from '@/types';
-import { Link, usePage } from '@inertiajs/react';
+import { Link, router, usePage } from '@inertiajs/react';
 import { AlertTriangle, Calendar, CalendarCheck, CheckSquare, CreditCard, FileText, Home, MessageSquare, Package, Users, Wrench } from 'lucide-react';
 import * as React from 'react';
 import { AppLogo } from './app-logo';
@@ -149,8 +149,93 @@ export function AppSidebar() {
             </SidebarContent>
 
             <SidebarFooter>
+                {/* シーズン表示 */}
+                <CurrentSeasonBadge isCollapsed={isCollapsed} isSuperAdmin={isSuperAdmin} />
                 <NavUser />
             </SidebarFooter>
         </Sidebar>
     );
+}
+
+/** サイドバー下部のシーズンバッジ／切り替えセレクト */
+function CurrentSeasonBadge({ isCollapsed, isSuperAdmin }: { isCollapsed: boolean; isSuperAdmin: boolean }) {
+    const page = usePage<SharedData>();
+    const currentSeason = (page.props as any).currentSeason as { id: number; name: string; is_active: boolean; ended_at: string | null } | null;
+    const seasonViewer = (page.props as any).seasonViewer as {
+        viewingId: number | null;
+        available: { id: number; name: string; is_active: boolean; ended_at: string | null }[];
+    } | null;
+
+    if (isCollapsed) return null;
+
+    const available = seasonViewer?.available ?? [];
+    const viewingId = seasonViewer?.viewingId ?? currentSeason?.id ?? null;
+
+    // シーズン未設定
+    if (!currentSeason && available.length === 0) {
+        if (!isSuperAdmin) return null;
+        return (
+            <Link href="/admin/seasons" className="mx-2 mb-1 block">
+                <div className="flex items-center gap-1.5 rounded-md border border-orange-300 bg-orange-50 px-2 py-1.5 text-xs text-orange-700 transition-colors hover:bg-orange-100">
+                    <AlertTriangle className="h-3 w-3 shrink-0" />
+                    <span>シーズン未設定</span>
+                </div>
+            </Link>
+        );
+    }
+
+    const viewingSeason = available.find((s) => s.id === viewingId) ?? currentSeason;
+    const isViewing = viewingSeason ? !viewingSeason.is_active : false;
+
+    // 選択可能シーズンが複数ある場合はドロップダウン表示
+    if (available.length > 1) {
+        return (
+            <div className="mx-2 mb-1">
+                <div
+                    className={`flex items-center gap-1.5 rounded-md border px-1.5 py-1 text-xs ${isViewing ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-green-300 bg-green-50 text-green-700'}`}
+                >
+                    <Calendar className="h-3 w-3 shrink-0" />
+                    <select
+                        value={viewingId ?? ''}
+                        onChange={(e) => {
+                            router.post('/season/switch', { season_id: parseInt(e.target.value) }, { preserveScroll: true });
+                        }}
+                        className="min-w-0 flex-1 cursor-pointer bg-transparent text-xs outline-none"
+                    >
+                        {available.map((s) => (
+                            <option key={s.id} value={s.id}>
+                                {s.name}
+                                {s.is_active ? ' ★' : ''}
+                            </option>
+                        ))}
+                    </select>
+                    {isViewing && <span className="shrink-0 text-[10px] font-medium text-blue-400">閲覧中</span>}
+                </div>
+            </div>
+        );
+    }
+
+    // 1件のみの場合は既存バッジ表示
+    const isEnded = viewingSeason?.ended_at !== null;
+    const content = (
+        <div
+            className={`flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs transition-colors ${
+                isEnded ? 'border-gray-300 bg-gray-50 text-gray-500' : 'border-green-300 bg-green-50 text-green-700'
+            } ${isSuperAdmin ? 'cursor-pointer hover:opacity-80' : ''}`}
+        >
+            <Calendar className="h-3 w-3 shrink-0" />
+            <span className="truncate">{viewingSeason?.name}</span>
+            {isEnded && <span className="ml-auto shrink-0 text-[10px] font-medium text-gray-400">終了</span>}
+        </div>
+    );
+
+    if (isSuperAdmin) {
+        return (
+            <Link href="/admin/seasons" className="mx-2 mb-1 block">
+                {content}
+            </Link>
+        );
+    }
+
+    return <div className="mx-2 mb-1">{content}</div>;
 }

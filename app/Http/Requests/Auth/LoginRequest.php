@@ -2,9 +2,12 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Models\Season;
+use App\Models\User;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -41,7 +44,31 @@ class LoginRequest extends FormRequest
     {
         $this->ensureIsNotRateLimited();
 
-        if (! Auth::attempt($this->only('email', 'password'), $this->boolean('remember'))) {
+        $email = $this->string('email')->lower()->toString();
+        $password = $this->string('password')->toString();
+
+        // シーズンが存在する場合はアクティブシーズンのユーザーを優先して検索
+        $activeSeason = Season::where('is_active', true)->first();
+
+        $user = null;
+
+        if ($activeSeason) {
+            // アクティブシーズンのユーザーを検索
+            $user = User::where('email', $email)
+                ->where('season_id', $activeSeason->id)
+                ->where('status', '!=', 'retired')
+                ->first();
+        }
+
+        // シーズン未割当（既存ユーザー）もフォールバックで検索
+        if (! $user) {
+            $user = User::where('email', $email)
+                ->whereNull('season_id')
+                ->where('status', '!=', 'retired')
+                ->first();
+        }
+
+        if (! $user || ! Hash::check($password, $user->password)) {
             RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([
@@ -49,16 +76,7 @@ class LoginRequest extends FormRequest
             ]);
         }
 
-        // 追加: ログイン成功後にユーザーのステータスをチェックし、退職ユーザーはログイン不可とする
-        $user = Auth::user();
-        if ($user && isset($user->status) && $user->status === 'retired') {
-            // ログアウトしてセッションをクリア
-            Auth::guard()->logout();
-
-            throw ValidationException::withMessages([
-                'email' => 'すでに退職しているためログインできません。',
-            ]);
-        }
+        Auth::login($user, $this->boolean('remember'));
 
         RateLimiter::clear($this->throttleKey());
     }
