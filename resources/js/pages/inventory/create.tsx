@@ -785,7 +785,7 @@ export default function InventoryCreate({
 
                                         {/* Desktop/table view (md+) - keep existing table for PC */}
                                         <div className="hidden md:block">
-                                            <table className="w-full table-auto border-collapse">
+                                            <table className="w-full min-w-[1400px] table-auto border-collapse">
                                                 <thead>
                                                     <tr className="bg-gray-50 text-left text-sm">
                                                         <th className="border px-2 py-2">#</th>
@@ -944,12 +944,13 @@ export default function InventoryCreate({
                                                                         onBlur={() => handleInputBlur(realIdx)}
                                                                     />
                                                                 </td>
-                                                                <td className="w-56 border px-2 py-2 align-top">
+                                                                <td className="w-72 border px-2 py-2 align-top">
                                                                     <div className="space-y-2">
                                                                         {row.stocks.map((s, si) => (
-                                                                            <div key={si} className="flex gap-2">
+                                                                            <div key={si} className="flex gap-1">
                                                                                 <Input
                                                                                     placeholder="場所"
+                                                                                    className="min-w-[72px]"
                                                                                     value={s.storage_location || ''}
                                                                                     onChange={(e) =>
                                                                                         setItems((prev) => {
@@ -969,6 +970,7 @@ export default function InventoryCreate({
                                                                                 <Input
                                                                                     type="number"
                                                                                     placeholder="数"
+                                                                                    className="w-16 min-w-[56px]"
                                                                                     value={s.quantity || ''}
                                                                                     onChange={(e) =>
                                                                                         setItems((prev) => {

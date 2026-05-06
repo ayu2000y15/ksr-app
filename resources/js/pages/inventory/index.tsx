@@ -2,9 +2,10 @@ import HeadingSmall from '@/components/heading-small';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import Toast from '@/components/ui/toast';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { AlertCircle, CheckCircle, ChevronDown, ChevronRight, Download, Plus, Settings, Upload } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronRight, Download, Plus, Settings, Upload } from 'lucide-react';
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 
 export default function Index({
@@ -181,9 +182,10 @@ export default function Index({
             });
             if (!res.ok) throw new Error('削除失敗');
             setItems((prev) => prev.filter((p: any) => p.id !== it.id));
+            setToast({ message: '削除しました', type: 'success' });
         } catch (err) {
             console.error(err);
-            alert('削除に失敗しました');
+            setToast({ message: '削除に失敗しました', type: 'error' });
         }
     };
 
@@ -454,46 +456,8 @@ export default function Index({
     return (
         <AppSidebarLayout breadcrumbs={[{ title: '在庫管理', href: route('inventory.index') }]}>
             <Head title="在庫管理" />
+            {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
             <div className="p-4 sm:p-6 lg:p-8">
-                {/* メッセージ表示エリア（CSV登録の成功・エラー） */}
-                {toast && (
-                    <div className="mb-4 duration-300 animate-in fade-in slide-in-from-top-2">
-                        <div
-                            className={`rounded-md p-4 ${
-                                toast.type === 'success'
-                                    ? 'border border-green-200 bg-green-50 text-green-800'
-                                    : toast.type === 'error'
-                                      ? 'border border-red-200 bg-red-50 text-red-800'
-                                      : 'border border-blue-200 bg-blue-50 text-blue-800'
-                            }`}
-                        >
-                            <div className="flex items-start gap-3">
-                                <div className="mt-0.5">
-                                    {toast.type === 'success' ? (
-                                        <CheckCircle className="h-5 w-5 text-green-500" />
-                                    ) : toast.type === 'error' ? (
-                                        <AlertCircle className="h-5 w-5 text-red-500" />
-                                    ) : (
-                                        <AlertCircle className="h-5 w-5 text-blue-500" />
-                                    )}
-                                </div>
-                                <div className="flex-1">
-                                    <div className="text-sm font-medium whitespace-pre-line">{toast.message}</div>
-                                </div>
-                                <button
-                                    onClick={() => setToast(null)}
-                                    className="flex-shrink-0 rounded-md p-1 transition-colors hover:bg-black/5"
-                                    aria-label="閉じる"
-                                >
-                                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
                 {/* CSV一括登録の説明 */}
                 {inventoryPerms.create && (
                     <div className="mb-4 rounded-md border border-blue-200 bg-blue-50">
@@ -802,9 +766,9 @@ export default function Index({
                                                             <col style={{ width: '100px' }} />
                                                             <col style={{ width: '80px' }} />
                                                             {locs.map((loc) => (
-                                                                <col key={`col-${loc}`} style={{ width: '60px', minWidth: '50px' }} />
+                                                                <col key={`col-${loc}`} style={{ width: '80px', minWidth: '70px' }} />
                                                             ))}
-                                                            <col style={{ width: '60px' }} />
+                                                            <col style={{ width: '70px' }} />
                                                         </colgroup>
                                                         <thead>
                                                             <tr className="text-left">
@@ -841,14 +805,14 @@ export default function Index({
                                                                                 ? (prevStocksMap[r.id][l] ?? 0)
                                                                                 : null;
                                                                         return (
-                                                                            <td key={`${r.id}-${l}`} className="px-2 py-2 text-left">
+                                                                            <td key={`${r.id}-${l}`} className="px-1 py-2 text-left">
                                                                                 {editing ? (
                                                                                     <input
                                                                                         type="number"
                                                                                         value={editedVal ?? ''}
                                                                                         onChange={(e) => updateQty(catKey, ri, l, e.target.value)}
                                                                                         onBlur={() => handleCategoryInputBlur(cat)}
-                                                                                        className="h-10 w-20 py-2 text-left text-sm"
+                                                                                        className="h-8 w-[70%] rounded border border-gray-300 px-1 py-1 text-left text-sm"
                                                                                         inputMode="numeric"
                                                                                         min={0}
                                                                                         step={1}

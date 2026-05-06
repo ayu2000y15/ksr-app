@@ -46,9 +46,14 @@ class InventoryController extends Controller
         $seasonId = null;
         if ($request->filled('season_id')) {
             $sid = intval($request->input('season_id'));
-            if ($sid > 0 && \App\Models\InventorySeason::where('id', $sid)->exists()) {
+            if ($sid > 0 && \App\Models\Season::where('id', $sid)->exists()) {
                 $seasonId = $sid;
             }
+        }
+        // season_id が指定されていない場合はセッションの閲覧シーズンを使用
+        if ($seasonId === null) {
+            $viewing = \App\Models\Season::viewing();
+            $seasonId = $viewing?->id;
         }
 
         // support bulk items[] creation: items[].* fields and optional items[].stock
@@ -263,6 +268,7 @@ class InventoryController extends Controller
                     'quantity' => intval($request->input('quantity_change')),
                     'memo' => null,
                     'last_stocked_at' => now(),
+                    'season_id' => \App\Models\Season::active()?->id,
                 ]);
                 $before = 0;
             }

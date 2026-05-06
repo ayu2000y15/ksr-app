@@ -18,17 +18,17 @@ class InventoryPageController extends Controller
     {
         $this->authorize('viewAny', \App\Models\InventoryItem::class);
 
-        // シーズンフィルタリング
+        // シーズンフィルタリング: クエリパラメータ優先、未指定はセッション閲覧シーズン
         $seasonId        = $request->filled('season_id') ? intval($request->input('season_id')) : null;
         $compareSeasonId = $request->filled('compare_season_id') ? intval($request->input('compare_season_id')) : null;
 
         $seasons = Season::orderBy('name', 'desc')->get();
 
-        // シーズン未指定の場合はアクティブシーズンをデフォルトに
+        // シーズン未指定の場合はセッション選択シーズン（なければアクティブ）を使用
         if ($seasonId === null) {
-            $active = $seasons->firstWhere('is_active', true);
-            if ($active) {
-                $seasonId = $active->id;
+            $viewingSeason = Season::viewing();
+            if ($viewingSeason) {
+                $seasonId = $viewingSeason->id;
             }
         }
 
@@ -68,12 +68,12 @@ class InventoryPageController extends Controller
 
         $seasons = Season::orderBy('name', 'desc')->get();
 
-        // シーズンフィルタリング（一覧と同様）
+        // シーズン未指定の場合はセッション選択シーズン（なければアクティブ）を使用
         $seasonId = $request->filled('season_id') ? intval($request->input('season_id')) : null;
         if ($seasonId === null) {
-            $active = $seasons->firstWhere('is_active', true);
-            if ($active) {
-                $seasonId = $active->id;
+            $viewingSeason = Season::viewing();
+            if ($viewingSeason) {
+                $seasonId = $viewingSeason->id;
             }
         }
 
