@@ -34,9 +34,7 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
     const { auth } = usePage<SharedData>().props;
     const isSystemAdmin =
         Array.isArray((auth?.user as any)?.roles) &&
-        (auth?.user as any).roles.some(
-            (r: any) => r && (r.name === 'システム管理者' || r.name === 'System Administrator' || r.name === 'admin'),
-        );
+        (auth?.user as any).roles.some((r: any) => r && (r.name === 'システム管理者' || r.name === 'System Administrator' || r.name === 'admin'));
 
     return (
         <div className="px-4 py-6">
