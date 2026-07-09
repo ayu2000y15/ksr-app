@@ -2,8 +2,8 @@ import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
-import { type NavItem } from '@/types';
-import { Link } from '@inertiajs/react';
+import { type NavItem, type SharedData } from '@/types';
+import { Link, usePage } from '@inertiajs/react';
 import { type PropsWithChildren } from 'react';
 
 const sidebarNavItems: NavItem[] = [
@@ -31,6 +31,12 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
     }
 
     const currentPath = window.location.pathname;
+    const { auth } = usePage<SharedData>().props;
+    const isSystemAdmin =
+        Array.isArray((auth?.user as any)?.roles) &&
+        (auth?.user as any).roles.some(
+            (r: any) => r && (r.name === 'システム管理者' || r.name === 'System Administrator' || r.name === 'admin'),
+        );
 
     return (
         <div className="px-4 py-6">
@@ -54,6 +60,21 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
                                 </Link>
                             </Button>
                         ))}
+                        {isSystemAdmin && (
+                            <>
+                                <Separator className="my-2" />
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    asChild
+                                    className={cn('w-full justify-start', {
+                                        'bg-muted': currentPath.startsWith('/admin/seasons'),
+                                    })}
+                                >
+                                    <Link href="/admin/seasons">シーズン管理</Link>
+                                </Button>
+                            </>
+                        )}
                     </nav>
                 </aside>
 
