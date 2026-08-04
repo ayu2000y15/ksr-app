@@ -1107,7 +1107,9 @@ export default function Dashboard() {
                                                                 return null;
                                                             })()}
                                                             {/* 投稿者またはシステム管理者は編集・削除アイコンを表示 */}
-                                                            {auth && auth.user && (Number(auth.user.id) === Number(a.user_id ?? a.user?.id) || isSuperAdmin) ? (
+                                                            {auth &&
+                                                            auth.user &&
+                                                            (Number(auth.user.id) === Number(a.user_id ?? a.user?.id) || isSuperAdmin) ? (
                                                                 <div className="ml-2 flex items-center gap-2">
                                                                     <button
                                                                         title="編集"
@@ -1128,7 +1130,9 @@ export default function Dashboard() {
                                                     <div className="px-2 pt-1 pb-4 text-sm text-gray-700">
                                                         <div>{renderContentWithLinks(a.content)}</div>
                                                         {/* 削除は展開内のみ表示（誤操作防止） */}
-                                                        {auth && auth.user && (Number(auth.user.id) === Number(a.user_id ?? a.user?.id) || isSuperAdmin) ? (
+                                                        {auth &&
+                                                        auth.user &&
+                                                        (Number(auth.user.id) === Number(a.user_id ?? a.user?.id) || isSuperAdmin) ? (
                                                             <div className="mt-3 flex justify-end">
                                                                 <Button
                                                                     variant="destructive"
