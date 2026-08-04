@@ -132,7 +132,9 @@ export function AppSidebar() {
                                 tooltip={isCollapsed ? '各種設定' : undefined}
                                 isActive={
                                     showSettings ||
-                                    ['/admin/roles', '/admin/role-permissions', '/admin/user-roles'].some((p) => currentPath.startsWith(p))
+                                    ['/admin/roles', '/admin/role-permissions', '/admin/user-roles', '/admin/seasons'].some((p) =>
+                                        currentPath.startsWith(p),
+                                    )
                                 }
                                 onClick={() => setShowSettings((v) => !v)}
                             >

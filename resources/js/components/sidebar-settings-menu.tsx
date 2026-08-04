@@ -1,6 +1,6 @@
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { Link, usePage } from '@inertiajs/react';
-import { Calendar, Clock, Key, Shield, Sliders, Users } from 'lucide-react';
+import { Calendar, CalendarRange, Clock, Key, Shield, Sliders, Users } from 'lucide-react';
 import * as React from 'react';
 
 // 各種設定メニューに表示可能な項目があるかチェックするカスタムフック
@@ -39,10 +39,14 @@ export function SidebarSettingsMenu({ isCollapsed, currentPath }: { isCollapsed:
         { title: 'ユーザー別休暇上限設定', href: '/admin/user-shift-settings', icon: Sliders, permission: 'user_shift_setting.view' },
         { title: '休日登録', href: '/admin/holidays', icon: Calendar, permission: 'holiday.view' },
         { title: '活動ログ', href: '/admin/activity-logs', icon: Calendar, permission: 'activitylog.view' },
+        // システム管理者専用
+        { title: 'シーズン管理', href: '/admin/seasons', icon: CalendarRange, permission: null, superAdminOnly: true },
     ];
     return (
         <SidebarMenu>
             {settings.map((item) => {
+                // システム管理者専用項目
+                if ((item as any).superAdminOnly && !isSuperAdmin) return null;
                 // システム管理者は全て表示
                 if (!isSuperAdmin && item.permission && !permissions.includes(item.permission)) {
                     return null;
