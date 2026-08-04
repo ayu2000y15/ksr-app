@@ -32,9 +32,7 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
 
     const currentPath = window.location.pathname;
     const { auth } = usePage<SharedData>().props;
-    const isSystemAdmin =
-        Array.isArray((auth?.user as any)?.roles) &&
-        (auth?.user as any).roles.some((r: any) => r && (r.name === 'システム管理者' || r.name === 'System Administrator' || r.name === 'admin'));
+    const isSystemAdmin = (auth as any)?.isSuperAdmin === true;
 
     return (
         <div className="px-4 py-6">
