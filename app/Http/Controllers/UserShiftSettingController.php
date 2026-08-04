@@ -15,7 +15,7 @@ class UserShiftSettingController extends Controller
         $this->authorize('viewAny', UserShiftSetting::class);
         // 閲覧中シーズンのユーザーのみ表示
         $viewingSeason = Season::viewing();
-        $query = User::where('status', 'active')->orderBy('position')->orderBy('id');
+        $query = User::where('status', 'active')->orderByRaw('season_no IS NULL')->orderBy('season_no')->orderBy('position')->orderBy('id');
         if ($viewingSeason) {
             $query->where('season_id', $viewingSeason->id);
         }

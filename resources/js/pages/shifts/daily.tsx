@@ -367,7 +367,7 @@ export default function Daily() {
 
             // Process each work shift
             workShifts.forEach((shift: any) => {
-                const userPosition = shift.user?.position ?? shift.user_id ?? (shift.user && shift.user.id) ?? '';
+                const userPosition = shift.user?.season_no ?? (shift.user && shift.user.id) ?? shift.user_id ?? '';
                 const actualUserId = shift.user_id ?? (shift.user && shift.user.id) ?? '';
                 const userName = shift.user?.name ?? '';
                 const workDate = date ? String(date).slice(0, 10).replace(/-/g, '/') : '';
@@ -933,8 +933,8 @@ export default function Daily() {
                                                 const rb = rank(b);
                                                 if (ra !== rb) return ra - rb;
 
-                                                const aKey = Number(a.user?.position ?? a.user_id ?? (a.user && a.user.id) ?? 0);
-                                                const bKey = Number(b.user?.position ?? b.user_id ?? (b.user && b.user.id) ?? 0);
+                                                const aKey = Number(a.user?.season_no ?? a.user?.position ?? a.user_id ?? (a.user && a.user.id) ?? 0);
+                                                const bKey = Number(b.user?.season_no ?? b.user?.position ?? b.user_id ?? (b.user && b.user.id) ?? 0);
                                                 if (aKey !== bKey) return aKey - bKey;
 
                                                 const aStart = String(a.start_time ?? a.startRaw ?? '');
@@ -1215,8 +1215,12 @@ export default function Daily() {
                                                     const ra = rank(a);
                                                     const rb = rank(b);
                                                     if (ra !== rb) return ra - rb;
-                                                    const aKey = Number(a.user?.position ?? a.user_id ?? (a.user && a.user.id) ?? 0);
-                                                    const bKey = Number(b.user?.position ?? b.user_id ?? (b.user && b.user.id) ?? 0);
+                                                    const aKey = Number(
+                                                        a.user?.season_no ?? a.user?.position ?? a.user_id ?? (a.user && a.user.id) ?? 0,
+                                                    );
+                                                    const bKey = Number(
+                                                        b.user?.season_no ?? b.user?.position ?? b.user_id ?? (b.user && b.user.id) ?? 0,
+                                                    );
                                                     if (aKey !== bKey) return aKey - bKey;
                                                     const aStart = String(a.start_time ?? a.startRaw ?? '');
                                                     const bStart = String(b.start_time ?? b.startRaw ?? '');
@@ -1235,8 +1239,7 @@ export default function Daily() {
                                             const combined = sdBreaks
                                                 .map((s: any) => ({
                                                     id: s.id,
-                                                    // display user's position number from users table
-                                                    user_position: s.user?.position ?? '—',
+                                                    user_position: s.user?.season_no ?? s.user?.id ?? '—',
                                                     user_id: s.user_id ?? (s.user && s.user.id) ?? '—',
                                                     start_time: s.start_time,
                                                     end_time: s.end_time,
@@ -1961,7 +1964,7 @@ function EditableShiftRow({
             )}
             <TableCell>
                 <div className="flex items-center gap-2">
-                    <span className="w-10 text-right font-mono text-sm">{sd.user?.position ?? '—'}</span>
+                    <span className="w-10 text-right font-mono text-sm">{sd.user?.season_no ?? sd.user?.id ?? '—'}</span>
                     <span className={`truncate ${isAbsent ? 'text-gray-600 line-through opacity-60' : ''}`}>{sd.user ? sd.user.name : '—'}</span>
                 </div>
             </TableCell>

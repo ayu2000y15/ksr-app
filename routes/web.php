@@ -130,6 +130,8 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
     Route::post('/admin/seasons', [App\Http\Controllers\Admin\SeasonController::class, 'store'])->name('admin.seasons.store');
     Route::post('/admin/seasons/{season}/end', [App\Http\Controllers\Admin\SeasonController::class, 'end'])->name('admin.seasons.end');
     Route::post('/admin/seasons/{season}/activate', [App\Http\Controllers\Admin\SeasonController::class, 'activate'])->name('admin.seasons.activate');
+    Route::get('/admin/seasons/{season}/users', [App\Http\Controllers\Admin\SeasonController::class, 'users'])->name('admin.seasons.users');
+    Route::post('/admin/seasons/{season}/import-users', [App\Http\Controllers\Admin\SeasonController::class, 'importUsers'])->name('admin.seasons.import_users');
 
     // --- 管理: デフォルトシフト設定 ---
     Route::get('/admin/default-shifts', [App\Http\Controllers\DefaultShiftController::class, 'index'])->name('admin.default-shifts.index');

@@ -17,7 +17,7 @@ import Toast from '@/components/ui/toast';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 
 type InventoryItemOption = { id: number; name: string; category?: { id: number; name: string } | null };
-type UserOption = { id: number; name: string; position?: number };
+type UserOption = { id: number; name: string; position?: number; season_no?: number | null };
 type DamageConditionOption = { id: number; condition: string };
 
 type Att = { file_path?: string; original_name?: string };
@@ -687,11 +687,11 @@ export default function DamagedIndexPage() {
                                                 options={(() => {
                                                     const maxLen =
                                                         users && users.length > 0
-                                                            ? Math.max(...users.map((u: UserOption) => String(u.position ?? u.id ?? '').length))
+                                                            ? Math.max(...users.map((u: UserOption) => String(u.season_no ?? u.id ?? '').length))
                                                             : 0;
                                                     return users.map((u: UserOption) => ({
                                                         value: u.id,
-                                                        label: `${String(u.position ?? u.id ?? '').padStart(maxLen, ' ')} ${u.name}`,
+                                                        label: `${String(u.season_no ?? u.id ?? '').padStart(maxLen, ' ')} ${u.name}`,
                                                     }));
                                                 })()}
                                                 selected={form.handler_user_id || null}
@@ -1188,7 +1188,7 @@ export default function DamagedIndexPage() {
                                                             </div>
                                                             <div className="mt-1 text-sm text-gray-500">
                                                                 {it.handler_user
-                                                                    ? `${it.handler_user.position ?? it.handler_user.id} ${it.handler_user.name}`
+                                                                    ? `${it.handler_user.season_no ?? it.handler_user.id} ${it.handler_user.name}`
                                                                     : ''}
                                                             </div>
                                                         </div>
@@ -1430,7 +1430,7 @@ export default function DamagedIndexPage() {
                                                             </td>
                                                             <td className="p-2 align-middle text-sm">
                                                                 {it.handler_user
-                                                                    ? `${it.handler_user.position ?? it.handler_user.id} ${it.handler_user.name}`
+                                                                    ? `${it.handler_user.season_no ?? it.handler_user.id} ${it.handler_user.name}`
                                                                     : ''}
                                                             </td>
                                                             <td className="p-2 align-middle text-sm">
@@ -1479,7 +1479,7 @@ export default function DamagedIndexPage() {
                                                                                     <dt className="w-1/3 text-gray-600">対応者</dt>
                                                                                     <dd className="w-2/3">
                                                                                         {it.handler_user
-                                                                                            ? `${it.handler_user.position ?? it.handler_user.id} ${it.handler_user.name}`
+                                                                                            ? `${it.handler_user.season_no ?? it.handler_user.id} ${it.handler_user.name}`
                                                                                             : '—'}
                                                                                     </dd>
                                                                                 </div>

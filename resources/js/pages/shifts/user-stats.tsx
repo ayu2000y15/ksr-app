@@ -75,7 +75,7 @@ export default function UserStats(props: any) {
                                             <TableCell>
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-14 text-right font-mono text-sm whitespace-pre text-muted-foreground">
-                                                        {String(u.position).padStart(4, ' ')}
+                                                        {String(u.season_no ?? u.id ?? '').padStart(4, ' ')}
                                                     </div>
                                                     <Link
                                                         href={route('users.show', u.id)}
@@ -157,7 +157,7 @@ export default function UserStats(props: any) {
                                     <div className="mb-2 flex items-center justify-between">
                                         <div className="flex items-center gap-3">
                                             <div className="w-10 text-right font-mono text-sm text-muted-foreground">
-                                                {String(u.position).padStart(4, ' ')}
+                                                {String(u.season_no ?? u.id ?? '').padStart(4, ' ')}
                                             </div>
                                             <Link
                                                 href={route('users.show', u.id)}

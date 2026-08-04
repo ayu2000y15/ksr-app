@@ -41,8 +41,8 @@ class ShiftController extends Controller
 
         // only include active users in the month editor (prefer position ordering then id)
         $viewingSeason = Season::viewing();
-        $usersQuery = User::select('id', 'name', 'position', 'preferred_week_days', 'has_car', 'employment_start_date', 'employment_end_date')
-            ->where('status', 'active')->orderBy('position')->orderBy('id');
+        $usersQuery = User::select('id', 'name', 'position', 'season_no', 'preferred_week_days', 'has_car', 'employment_start_date', 'employment_end_date')
+            ->where('status', 'active')->orderByRaw('season_no IS NULL')->orderBy('season_no')->orderBy('position')->orderBy('id');
         if ($viewingSeason) {
             $usersQuery->where('season_id', $viewingSeason->id);
         }
@@ -198,7 +198,7 @@ class ShiftController extends Controller
         $shortBreaks = \App\Models\ShortBreak::where('date', $d)->get()->keyBy('user_id');
 
         $viewingSeason = Season::viewing();
-        $dailyUsersQuery = User::select('id', 'name', 'status', 'position')->where('status', 'active')->orderBy('position')->orderBy('id');
+        $dailyUsersQuery = User::select('id', 'name', 'status', 'position', 'season_no')->where('status', 'active')->orderByRaw('season_no IS NULL')->orderBy('season_no')->orderBy('position')->orderBy('id');
         if ($viewingSeason) {
             $dailyUsersQuery->where('season_id', $viewingSeason->id);
         }
@@ -939,7 +939,7 @@ class ShiftController extends Controller
         $end = $month->copy()->endOfMonth();
 
         $viewingSeason = Season::viewing();
-        $usersQuery = User::where('status', 'active')->orderBy('position')->orderBy('id');
+        $usersQuery = User::where('status', 'active')->orderByRaw('season_no IS NULL')->orderBy('season_no')->orderBy('position')->orderBy('id');
         if ($viewingSeason) {
             $usersQuery->where('season_id', $viewingSeason->id);
         }

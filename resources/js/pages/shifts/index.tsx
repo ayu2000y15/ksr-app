@@ -451,8 +451,8 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                                         if (aDate !== bDate) return aDate < bDate ? -1 : 1;
 
                                         // same date: prefer user.position, then user_id, then user.id (ascending)
-                                        const aKey = Number(a.user?.position ?? a.user_id ?? (a.user && a.user.id) ?? 0);
-                                        const bKey = Number(b.user?.position ?? b.user_id ?? (b.user && b.user.id) ?? 0);
+                                        const aKey = Number(a.user?.season_no ?? a.user?.position ?? a.user_id ?? (a.user && a.user.id) ?? 0);
+                                        const bKey = Number(b.user?.season_no ?? b.user?.position ?? b.user_id ?? (b.user && b.user.id) ?? 0);
                                         if (aKey !== bKey) return aKey - bKey;
 
                                         // final tiebreaker: start_time (string compare of wall-clock)
@@ -494,7 +494,7 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                                                 {sd.user ? (
                                                     <>
                                                         <span className="mr-2 inline-block w-10 text-right font-mono tabular-nums">
-                                                            {sd.user.position ?? sd.user.id}
+                                                            {sd.user.season_no ?? sd.user.id}
                                                         </span>
                                                         <span>{sd.user.name}</span>
                                                     </>

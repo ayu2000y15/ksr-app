@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { BreadcrumbItem } from '@/types';
 import { Head, router, usePage } from '@inertiajs/react';
-import { AlertTriangle, Calendar, CheckCircle, PlusCircle, XCircle } from 'lucide-react';
+import { AlertTriangle, Calendar, CheckCircle, PlusCircle, UserPlus, XCircle } from 'lucide-react';
 import { useState } from 'react';
 
 interface Season {
@@ -16,6 +16,17 @@ interface Season {
     note: string | null;
     users_count: number;
     created_at: string;
+}
+
+interface SeasonUser {
+    id: number;
+    name: string;
+    furigana: string | null;
+    email: string;
+    position: number | null;
+    gender: string | null;
+    roles: string[];
+    already_imported: boolean;
 }
 
 interface PageProps {
@@ -38,6 +49,62 @@ export default function SeasonsPage() {
     const [newNote, setNewNote] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [confirmEnd, setConfirmEnd] = useState<Season | null>(null);
+
+    // ユーザー再利用モーダル
+    const [importSeason, setImportSeason] = useState<Season | null>(null);
+    const [seasonUsers, setSeasonUsers] = useState<SeasonUser[]>([]);
+    const [loadingUsers, setLoadingUsers] = useState(false);
+    const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
+
+    const openImportModal = async (season: Season) => {
+        setImportSeason(season);
+        setSelectedUserIds([]);
+        setLoadingUsers(true);
+        try {
+            const res = await fetch(`/admin/seasons/${season.id}/users`, {
+                credentials: 'same-origin',
+                headers: { Accept: 'application/json' },
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data: unknown = await res.json();
+            setSeasonUsers(Array.isArray(data) ? data : []);
+        } catch (e) {
+            console.error('ユーザー一覧の取得に失敗しました', e);
+            setSeasonUsers([]);
+        } finally {
+            setLoadingUsers(false);
+        }
+    };
+
+    const closeImportModal = () => {
+        setImportSeason(null);
+        setSeasonUsers([]);
+        setSelectedUserIds([]);
+    };
+
+    const toggleUser = (id: number) => {
+        setSelectedUserIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    };
+
+    const toggleAll = () => {
+        const selectable = seasonUsers.filter((u) => !u.already_imported).map((u) => u.id);
+        setSelectedUserIds((prev) => (prev.length === selectable.length ? [] : selectable));
+    };
+
+    const handleImport = () => {
+        if (!importSeason || selectedUserIds.length === 0) return;
+        setSubmitting(true);
+        router.post(
+            `/admin/seasons/${importSeason.id}/import-users`,
+            { user_ids: selectedUserIds },
+            {
+                onFinish: () => {
+                    setSubmitting(false);
+                    closeImportModal();
+                },
+            },
+        );
+    };
 
     const handleCreate = () => {
         if (!newName.trim()) return;
@@ -235,11 +302,24 @@ export default function SeasonsPage() {
                                         <TableCell>{formatDate(season.ended_at)}</TableCell>
                                         <TableCell>{formatDate(season.created_at)}</TableCell>
                                         <TableCell>
-                                            {!season.is_active && !season.ended_at && (
-                                                <Button size="sm" variant="outline" onClick={() => handleActivate(season)} disabled={submitting}>
-                                                    アクティブ化
-                                                </Button>
-                                            )}
+                                            <div className="flex items-center gap-2">
+                                                {!season.is_active && !season.ended_at && (
+                                                    <Button size="sm" variant="outline" onClick={() => handleActivate(season)} disabled={submitting}>
+                                                        アクティブ化
+                                                    </Button>
+                                                )}
+                                                {!season.is_active && activeSeason && (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="flex items-center gap-1"
+                                                        onClick={() => openImportModal(season)}
+                                                    >
+                                                        <UserPlus className="h-3.5 w-3.5" />
+                                                        ユーザーを再利用
+                                                    </Button>
+                                                )}
+                                            </div>
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -272,6 +352,108 @@ export default function SeasonsPage() {
                                         シーズンを終了する
                                     </Button>
                                     <Button variant="outline" onClick={() => setConfirmEnd(null)}>
+                                        キャンセル
+                                    </Button>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+                )}
+                {/* ユーザー再利用モーダル */}
+                {importSeason && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                        <Card className="flex max-h-[80vh] w-full max-w-2xl flex-col">
+                            <CardHeader className="shrink-0 pb-3">
+                                <CardTitle className="flex items-center gap-2 text-base">
+                                    <UserPlus className="h-5 w-5" />「{importSeason.name}」のユーザーを再利用
+                                </CardTitle>
+                                <p className="text-sm text-muted-foreground">
+                                    選択したユーザーを現在のアクティブシーズンにコピーします。新しい一時パスワードが発行されます。
+                                </p>
+                            </CardHeader>
+                            <CardContent className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+                                {loadingUsers ? (
+                                    <div className="py-8 text-center text-sm text-muted-foreground">読み込み中...</div>
+                                ) : seasonUsers.length === 0 ? (
+                                    <div className="py-8 text-center text-sm text-muted-foreground">ユーザーが存在しません</div>
+                                ) : (
+                                    <>
+                                        <div className="flex items-center justify-between text-sm">
+                                            <button type="button" className="text-blue-600 hover:underline" onClick={toggleAll}>
+                                                {selectedUserIds.length === seasonUsers.filter((u) => !u.already_imported).length
+                                                    ? 'すべて解除'
+                                                    : 'すべて選択'}
+                                            </button>
+                                            <span className="text-muted-foreground">{selectedUserIds.length}人選択中</span>
+                                        </div>
+                                        <div className="overflow-y-auto rounded-md border">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead className="w-10"></TableHead>
+                                                        <TableHead>名前</TableHead>
+                                                        <TableHead>メールアドレス</TableHead>
+                                                        <TableHead>ロール</TableHead>
+                                                        <TableHead className="w-28">状態</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {seasonUsers.map((user) => (
+                                                        <TableRow
+                                                            key={user.id}
+                                                            className={user.already_imported ? 'opacity-40' : 'cursor-pointer hover:bg-muted/50'}
+                                                            onClick={() => !user.already_imported && toggleUser(user.id)}
+                                                        >
+                                                            <TableCell>
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={selectedUserIds.includes(user.id)}
+                                                                    disabled={user.already_imported}
+                                                                    onChange={() => toggleUser(user.id)}
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    className="h-4 w-4"
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <div className="font-medium">{user.name}</div>
+                                                                {user.furigana && (
+                                                                    <div className="text-xs text-muted-foreground">{user.furigana}</div>
+                                                                )}
+                                                            </TableCell>
+                                                            <TableCell className="text-sm">{user.email}</TableCell>
+                                                            <TableCell>
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {user.roles.map((r) => (
+                                                                        <Badge key={r} variant="outline" className="text-xs">
+                                                                            {r}
+                                                                        </Badge>
+                                                                    ))}
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                {user.already_imported ? (
+                                                                    <span className="text-xs text-muted-foreground">登録済み</span>
+                                                                ) : (
+                                                                    <span className="text-xs text-green-700">インポート可</span>
+                                                                )}
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    </>
+                                )}
+                                <div className="flex shrink-0 gap-2 pt-1">
+                                    <Button
+                                        onClick={handleImport}
+                                        disabled={selectedUserIds.length === 0 || submitting || loadingUsers}
+                                        className="flex items-center gap-2"
+                                    >
+                                        <UserPlus className="h-4 w-4" />
+                                        {selectedUserIds.length}人をインポート
+                                    </Button>
+                                    <Button variant="outline" onClick={closeImportModal}>
                                         キャンセル
                                     </Button>
                                 </div>

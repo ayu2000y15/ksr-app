@@ -37,7 +37,7 @@ export default function UserRolesPage() {
     }, []);
 
     // compute max digits for user position/id so we can align names
-    const maxIdDigits = Math.max(2, ...(users || []).map((u) => String(u.position ?? u.id).length));
+    const maxIdDigits = Math.max(2, ...(users || []).map((u) => String(u.season_no ?? u.id).length));
 
     const fetchUsers = async () => {
         const res = await axios.get('/api/users');
@@ -102,7 +102,7 @@ export default function UserRolesPage() {
                                                     className="inline-block text-right font-mono text-sm text-muted-foreground"
                                                     style={{ width: `${maxIdDigits}ch` }}
                                                 >
-                                                    {String(u.position)}
+                                                    {String(u.season_no ?? u.id)}
                                                 </span>
                                                 <span className="ml-3 truncate">{u.name}</span>
                                             </div>

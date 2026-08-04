@@ -19,6 +19,7 @@ class User extends BaseAuthenticatable
      */
     protected $fillable = [
         'season_id',
+        'season_no',
         'position',
         'name',
         'furigana',

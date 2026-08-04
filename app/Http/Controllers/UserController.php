@@ -47,8 +47,8 @@ class UserController extends Controller
             $query->where('season_id', $viewingSeason->id);
         }
         if ($sort === 'id') {
-            // prefer explicit position ordering, fallback to id
-            $query = $query->orderBy('position', $direction)->orderBy('id', $direction);
+            // season_no で並び替え（nullは末尾）、同値は position、id でブレーク
+            $query = $query->orderByRaw('season_no IS NULL')->orderBy('season_no', $direction)->orderBy('position', $direction)->orderBy('id', $direction);
         } else {
             $query = $query->orderBy($sort, $direction);
         }
@@ -85,7 +85,7 @@ class UserController extends Controller
             $query->where('season_id', $viewingSeason->id);
         }
         if ($sort === 'id') {
-            $query = $query->orderBy('position', $direction)->orderBy('id', $direction);
+            $query = $query->orderByRaw('season_no IS NULL')->orderBy('season_no', $direction)->orderBy('position', $direction)->orderBy('id', $direction);
         } else {
             $query = $query->orderBy($sort, $direction);
         }
@@ -653,6 +653,7 @@ class UserController extends Controller
 
         $user = User::create([
             'season_id' => $activeSeason?->id,
+            'season_no' => $this->nextSeasonNo($activeSeason?->id),
             'position' => $maxPosition + 1,
             'name' => $request->name,
             'furigana' => $request->furigana,
@@ -1353,6 +1354,7 @@ class UserController extends Controller
         ]);
 
         try {
+            $activeSeason = Season::where('is_active', true)->first();
             $file = $request->file('csv_file');
             $path = $file->getRealPath();
 
@@ -1525,6 +1527,7 @@ class UserController extends Controller
                         // 現在の最大position値を取得して+1
                         $maxPosition = User::max('position') ?? 0;
                         $userData['position'] = $maxPosition + 1;
+                        $userData['season_no'] = $this->nextSeasonNo($activeSeason?->id);
 
                         $user = User::create($userData);
 
@@ -1575,5 +1578,12 @@ class UserController extends Controller
         } catch (\Exception $e) {
             return Redirect::route('users.index')->with('error', 'CSVの読み込みに失敗しました: ' . $e->getMessage());
         }
+    }
+
+    /** シーズン内の次の連番を返す */
+    private function nextSeasonNo(?int $seasonId): int
+    {
+        $max = User::where('season_id', $seasonId)->max('season_no') ?? 0;
+        return $max + 1;
     }
 }

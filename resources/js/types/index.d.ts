@@ -38,6 +38,7 @@ export interface PaginatedResponse<T> {
 // ユーザー・権限関連
 export interface User {
     id: number;
+    season_no?: number | null;
     name: string;
     email: string;
     phone_number: string | null;

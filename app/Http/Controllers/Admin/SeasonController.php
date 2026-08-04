@@ -4,9 +4,12 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Season;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 
 class SeasonController extends Controller
@@ -100,6 +103,118 @@ class SeasonController extends Controller
 
         return redirect()->route('admin.seasons.index')
             ->with('success', "シーズン「{$season->name}」をアクティブにしました。");
+    }
+
+    /**
+     * 指定シーズンのユーザー一覧を返す（再利用候補選択用）
+     */
+    public function users(Season $season)
+    {
+        $this->authorizeAdmin();
+
+        $activeSeason = Season::where('is_active', true)->first();
+        $existingEmails = $activeSeason
+            ? User::where('season_id', $activeSeason->id)->pluck('email')->toArray()
+            : [];
+
+        $users = User::where('season_id', $season->id)
+            ->with('roles')
+            ->orderBy('position')
+            ->orderBy('id')
+            ->get()
+            ->map(fn($u) => [
+                'id'               => $u->id,
+                'name'             => $u->name,
+                'furigana'         => $u->furigana,
+                'email'            => $u->email,
+                'position'         => $u->position,
+                'gender'           => $u->gender,
+                'roles'            => $u->roles->pluck('name'),
+                'already_imported' => in_array($u->email, $existingEmails),
+            ]);
+
+        return response()->json($users);
+    }
+
+    /**
+     * 選択したユーザーをアクティブシーズンへコピー（アカウント再利用）
+     */
+    public function importUsers(Request $request, Season $season)
+    {
+        $this->authorizeAdmin();
+
+        $request->validate([
+            'user_ids'   => 'required|array|min:1',
+            'user_ids.*' => 'integer|exists:users,id',
+        ]);
+
+        $activeSeason = Season::where('is_active', true)->first();
+        if (! $activeSeason) {
+            return back()->with('error', 'アクティブなシーズンがありません。先に新しいシーズンを作成してください。');
+        }
+        if ($activeSeason->id === $season->id) {
+            return back()->with('error', '同じシーズンへのインポートはできません。');
+        }
+
+        $sourceUsers = User::whereIn('id', $request->user_ids)
+            ->where('season_id', $season->id)
+            ->with('roles')
+            ->get();
+
+        $imported = 0;
+        $skipped  = 0;
+
+        DB::transaction(function () use ($sourceUsers, $activeSeason, &$imported, &$skipped) {
+            foreach ($sourceUsers as $source) {
+                $exists = User::where('season_id', $activeSeason->id)
+                    ->where('email', $source->email)
+                    ->exists();
+                if ($exists) {
+                    $skipped++;
+                    continue;
+                }
+
+                $temporaryPassword = Str::random(10);
+
+                $newUser = User::create([
+                    'season_id'                 => $activeSeason->id,
+                    'season_no'                 => User::where('season_id', $activeSeason->id)->max('season_no') + 1,
+                    'name'                      => $source->name,
+                    'furigana'                  => $source->furigana,
+                    'email'                     => $source->email,
+                    'password'                  => Hash::make($temporaryPassword),
+                    'temporary_password'        => $temporaryPassword,
+                    'phone_number'              => $source->phone_number,
+                    'line_name'                 => $source->line_name,
+                    'position'                  => $source->position,
+                    'gender'                    => $source->gender,
+                    'has_car'                   => $source->has_car,
+                    'status'                    => 'active',
+                    'memo'                      => $source->memo,
+                    'must_change_password'      => true,
+                    'employment_condition'      => $source->employment_condition,
+                    'commute_method'            => $source->commute_method,
+                    'default_start_time'        => $source->default_start_time,
+                    'default_end_time'          => $source->default_end_time,
+                    'preferred_week_days'       => $source->preferred_week_days,
+                    'preferred_week_days_count' => $source->preferred_week_days_count,
+                ]);
+
+                $roleNames = $source->roles->pluck('name')->toArray();
+                if (! empty($roleNames)) {
+                    $newUser->assignRole($roleNames);
+                }
+
+                $imported++;
+            }
+        });
+
+        $message = "{$imported}人のユーザーをインポートしました。";
+        if ($skipped > 0) {
+            $message .= "（{$skipped}人は既に登録済みのためスキップ）";
+        }
+
+        return redirect()->route('admin.seasons.index')->with('success', $message);
     }
 
     private function authorizeAdmin(): void

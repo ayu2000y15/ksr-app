@@ -470,7 +470,7 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                     <CardContent>
                         {/* Mobile: stacked card list (no horizontal scroll) */}
                         <div className="space-y-3 md:hidden">
-                            {filteredUsers.map((user: any) => (
+                            {filteredUsers.map((user: any, idx: number) => (
                                 <div key={user.id} className={`relative cursor-pointer rounded-md border p-4 hover:bg-gray-50`}>
                                     <div onClick={() => toggleExpand(user.id)}>
                                         <div className="flex items-start justify-between gap-4">
@@ -509,7 +509,7 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                             </div>
 
                                             <div className="flex flex-col items-end space-y-2">
-                                                <div className="text-xs text-muted-foreground">ID: {user.position ?? user.id}</div>
+                                                <div className="text-xs text-muted-foreground">ID: {user.season_no ?? user.id}</div>
                                                 <div>{renderStatusBadge(user)}</div>
                                                 <div className="text-xs text-muted-foreground">{new Date(user.created_at).toLocaleDateString()}</div>
                                             </div>
@@ -742,7 +742,7 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {filteredUsers.map((user: any) => (
+                                    {filteredUsers.map((user: any, idx: number) => (
                                         <Fragment key={`user-${user.id}`}>
                                             <TableRow
                                                 key={user.id}
@@ -811,7 +811,7 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                                         <GripVertical className="h-4 w-4" />
                                                     </button>
                                                 </TableCell>
-                                                <TableCell>{user.position ?? user.id}</TableCell>
+                                                <TableCell>{user.season_no ?? user.id}</TableCell>
                                                 <TableCell>
                                                     <div className="flex w-full items-center gap-3">
                                                         <div className={`flex items-center gap-3`}>

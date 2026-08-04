@@ -160,13 +160,21 @@ Route::middleware(['web', 'auth'])->group(function () {
     // アプリ内のアクティブユーザー一覧（入寮・退寮フォーム用）
     Route::get('/active-users', function () {
         $viewingSeason = \App\Models\Season::viewing();
-        $q = User::where('status', 'active')->orderBy('position')->orderBy('id');
+        $q = User::where('status', 'active')
+            ->orderByRaw('season_no IS NULL')
+            ->orderBy('season_no')
+            ->orderBy('position')
+            ->orderBy('id');
         if ($viewingSeason) {
             $q->where('season_id', $viewingSeason->id);
         }
         $users = $q->get();
         if ($users->count() === 0) {
-            $fallback = User::orderBy('position')->orderBy('id');
+            $fallback = User::where('status', 'active')
+                ->orderByRaw('season_no IS NULL')
+                ->orderBy('season_no')
+                ->orderBy('position')
+                ->orderBy('id');
             if ($viewingSeason) {
                 $fallback->where('season_id', $viewingSeason->id);
             }

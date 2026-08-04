@@ -164,7 +164,7 @@ export default function Index({ properties }: any) {
 
     // 入寮者登録フォーム状態
     const [showMoveInForm, setShowMoveInForm] = useState(false);
-    const [users, setUsers] = useState<{ id: number; name: string }[]>([]);
+    const [users, setUsers] = useState<{ id: number; name: string; season_no?: number | null }[]>([]);
     const initialUsersFromProps = (page.props && (page.props as any).users) || null;
     const [allUsersMap, setAllUsersMap] = useState<Record<number, { name: string; gender?: string | null; has_car?: boolean }>>(() => {
         const map: Record<number, { name: string; gender?: string | null; has_car?: boolean }> = {};
@@ -522,11 +522,11 @@ export default function Index({ properties }: any) {
                                                 options={(() => {
                                                     const maxLen =
                                                         users && users.length > 0
-                                                            ? Math.max(...users.map((u: any) => String(u.position ?? u.id ?? '').length))
+                                                            ? Math.max(...users.map((u: any) => String(u.season_no ?? u.id ?? '').length))
                                                             : 0;
                                                     return users.map((u: any) => ({
                                                         value: u.id,
-                                                        label: `${String(u.position ?? u.id ?? '').padStart(maxLen, ' ')} ${u.name}`,
+                                                        label: `${String(u.season_no ?? u.id ?? '').padStart(maxLen, ' ')} ${u.name}`,
                                                     }));
                                                 })()}
                                                 selected={form.user_ids}
@@ -565,11 +565,11 @@ export default function Index({ properties }: any) {
                                                 const baseOptions = (() => {
                                                     const maxLen =
                                                         users && users.length > 0
-                                                            ? Math.max(...users.map((u: any) => String(u.position ?? u.id ?? '').length))
+                                                            ? Math.max(...users.map((u: any) => String(u.season_no ?? u.id ?? '').length))
                                                             : 0;
                                                     return users.map((u: any) => ({
                                                         value: u.id,
-                                                        label: `${String(u.position ?? u.id ?? '').padStart(maxLen, ' ')} ${u.name}`,
+                                                        label: `${String(u.season_no ?? u.id ?? '').padStart(maxLen, ' ')} ${u.name}`,
                                                     }));
                                                 })();
                                                 const selectedCid = form.move_out_confirm_user_id || '';
@@ -579,7 +579,7 @@ export default function Index({ properties }: any) {
                                                     // try to resolve position from SSR-provided users if available
                                                     const ssUsers = (page.props as any).users || [];
                                                     const found = ssUsers.find((x: any) => Number(x.id) === Number(selectedCid));
-                                                    const selectedPosition = found ? (found.position ?? found.id) : selectedCid;
+                                                    const selectedPosition = found ? (found.season_no ?? found.id) : selectedCid;
                                                     confirmOptions = [
                                                         { value: selectedCid as number, label: `${selectedPosition} ${name}` },
                                                         ...baseOptions,

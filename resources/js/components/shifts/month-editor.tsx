@@ -22,7 +22,7 @@ export default function MonthEditor({
     onMonthChange,
     accentClass,
 }: {
-    users: Array<{ id: number; name: string; position?: number; [k: string]: any }>;
+    users: Array<{ id: number; name: string; position?: number; season_no?: number | null; [k: string]: any }>;
     days: string[];
     holidays?: string[];
     existingShifts?: Record<number, Record<string, Cell>>;
@@ -896,7 +896,9 @@ export default function MonthEditor({
                                                             />
                                                         )}
                                                     </span>
-                                                    <span className="inline-block w-3 text-right font-mono text-sm md:w-6">{u.position}</span>
+                                                    <span className="inline-block w-3 text-right font-mono text-sm md:w-6">
+                                                        {u.season_no ?? u.id}
+                                                    </span>
 
                                                     <Link
                                                         href={route('users.show', { user: u.id })}

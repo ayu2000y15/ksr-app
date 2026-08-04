@@ -732,13 +732,13 @@ export default function Dashboard() {
                         }
                     });
 
-                // sort: day shifts first, then by user position ascending
+                // sort: day shifts first, then by season_no ascending
                 annotatedWorks.sort((a: any, b: any) => {
                     const aIsNight = String(a.shift_type ?? a.type ?? '') === 'night';
                     const bIsNight = String(b.shift_type ?? b.type ?? '') === 'night';
                     if (aIsNight !== bIsNight) return aIsNight ? 1 : -1; // day (not night) first
-                    const aPos = Number(a.user?.position ?? 0);
-                    const bPos = Number(b.user?.position ?? 0);
+                    const aPos = Number(a.user?.season_no ?? a.user?.position ?? 0);
+                    const bPos = Number(b.user?.season_no ?? b.user?.position ?? 0);
                     return aPos - bPos;
                 });
 
@@ -1511,7 +1511,7 @@ export default function Dashboard() {
                                                                     <span
                                                                         className={`mr-2 inline-block text-right font-mono md:w-12 ${absent ? 'text-gray-500 line-through' : ''}`}
                                                                     >
-                                                                        {String(s.user?.position ?? s.user_id)}
+                                                                        {String(s.user?.season_no ?? s.user?.id ?? s.user_id)}
                                                                     </span>
                                                                     <div className="flex min-w-0 items-center">
                                                                         <span

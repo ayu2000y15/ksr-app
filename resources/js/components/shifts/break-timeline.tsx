@@ -152,8 +152,8 @@ export default function BreakTimeline(props: {
                     const ra = rank(a);
                     const rb = rank(b);
                     if (ra !== rb) return ra - rb;
-                    const aPos = Number(a.user?.position ?? a.user_id ?? (a.user && (a.user as { id?: number }).id) ?? 0);
-                    const bPos = Number(b.user?.position ?? b.user_id ?? (b.user && (b.user as { id?: number }).id) ?? 0);
+                    const aPos = Number(a.user?.season_no ?? a.user?.position ?? a.user_id ?? (a.user && (a.user as { id?: number }).id) ?? 0);
+                    const bPos = Number(b.user?.season_no ?? b.user?.position ?? b.user_id ?? (b.user && (b.user as { id?: number }).id) ?? 0);
                     if (aPos !== bPos) return aPos - bPos;
                     const aStart = String(a.startRaw ?? '');
                     const bStart = String(b.startRaw ?? '');
@@ -530,7 +530,7 @@ export default function BreakTimeline(props: {
                         {(visibleItems || []).map((it) => (
                             <div key={`label-${it.id}`} className="flex h-10 items-center gap-1 border-b bg-white pr-2">
                                 <span className="mr-1 w-6 flex-shrink-0 text-right font-mono text-sm">
-                                    {it.user?.position ?? it.user_id ?? (it.user && it.user.id) ?? '—'}
+                                    {it.user?.season_no ?? it.user?.id ?? it.user_id ?? '—'}
                                 </span>
                                 <span className="min-w-0 flex-1 truncate text-sm">{it.user ? it.user.name : '—'}</span>
                                 {(() => {

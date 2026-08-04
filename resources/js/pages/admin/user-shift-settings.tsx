@@ -12,7 +12,7 @@ export default function UserShiftSettings(): JSX.Element {
     const settings = page.props.settings || {};
 
     // 最大ID桁数を計算して、ID表示部分の幅を固定する（名前の頭を揃えるため）
-    const maxIdDigits = Math.max(2, ...(users || []).map((u: any) => String(u.id).length));
+    const maxIdDigits = Math.max(2, ...(users || []).map((u: any) => String(u.season_no ?? u.id).length));
 
     const breadcrumbs = [
         { title: '各種設定', href: route('admin.role-permissions') },
@@ -20,12 +20,17 @@ export default function UserShiftSettings(): JSX.Element {
     ];
 
     const [rows, setRows] = useState(() =>
-        users.map((u: any) => ({
-            user_id: u.id,
-            user_name: u.name,
-            monthly_leave_limit: settings[u.id]?.monthly_leave_limit ?? settings[u.id]?.vacation_limit ?? 0,
-            setting_id: settings[u.id]?.id ?? null,
-        })),
+        users.map((u: any) => {
+            const existingLimit = settings[u.id]?.monthly_leave_limit ?? settings[u.id]?.vacation_limit;
+            // 寮採用で未設定の場合はデフォルト4
+            const defaultLimit = u.employment_condition === 'dormitory' ? 4 : 0;
+            return {
+                user_id: u.id,
+                user_name: u.name,
+                monthly_leave_limit: existingLimit ?? defaultLimit,
+                setting_id: settings[u.id]?.id ?? null,
+            };
+        }),
     );
 
     const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' | 'info' } | null>(null);
@@ -112,7 +117,7 @@ export default function UserShiftSettings(): JSX.Element {
                                                     className="inline-block text-right font-mono text-sm text-muted-foreground"
                                                     style={{ width: `${maxIdDigits}ch` }}
                                                 >
-                                                    {String(r.user_id)}
+                                                    {String(users.find((u: any) => u.id === r.user_id)?.season_no ?? r.user_id)}
                                                 </span>
                                                 <span className="ml-3 truncate">{r.user_name}</span>
                                             </div>

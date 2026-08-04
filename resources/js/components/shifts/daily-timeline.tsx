@@ -80,7 +80,7 @@ export default function DailyTimeline(props: {
     // compute max id/position width for simple alignment in the select options
     const maxIdLen =
         Array.isArray(availableUsers) && availableUsers.length > 0
-            ? Math.max(...availableUsers.map((u: any) => String(u.position ?? u.id ?? '').length))
+            ? Math.max(...availableUsers.map((u: any) => String(u.season_no ?? u.id ?? '').length))
             : 0;
 
     const [interval] = useState<number>(initialInterval);
@@ -153,8 +153,8 @@ export default function DailyTimeline(props: {
                 if (aType !== 'night' && bType === 'night') return 1;
 
                 // Secondary sort: prefer user.position, then user_id, then user.id (ascending)
-                const aKey = Number(a.user?.position ?? a.user_id ?? (a.user && (a.user as { id?: number }).id) ?? 0);
-                const bKey = Number(b.user?.position ?? b.user_id ?? (b.user && (b.user as { id?: number }).id) ?? 0);
+                const aKey = Number(a.user?.season_no ?? a.user?.position ?? a.user_id ?? (a.user && (a.user as { id?: number }).id) ?? 0);
+                const bKey = Number(b.user?.season_no ?? b.user?.position ?? b.user_id ?? (b.user && (b.user as { id?: number }).id) ?? 0);
                 if (aKey !== bKey) return aKey - bKey;
 
                 // Tertiary: start time asc
@@ -853,7 +853,9 @@ export default function DailyTimeline(props: {
                                             />
                                         </div>
                                         {/* show original user's position to the left of the name */}
-                                        <span className="mr-2 w-6 flex-shrink-0 text-right font-mono text-sm">{it.user?.position ?? '—'}</span>
+                                        <span className="mr-2 w-6 flex-shrink-0 text-right font-mono text-sm">
+                                            {it.user?.season_no ?? it.user?.id ?? '—'}
+                                        </span>
                                         {/* user name + 中抜けバッジ - fixed width to align position buttons */}
                                         <div className="flex w-32 flex-shrink-0 items-center gap-1">
                                             <span
@@ -1277,7 +1279,7 @@ export default function DailyTimeline(props: {
                                     <option value="">-- ユーザーを選択 --</option>
                                     {(availableUsers || []).map((u: any) => (
                                         <option key={u.id} value={u.id}>
-                                            {`${String(u.position ?? u.id ?? '').padStart(maxIdLen, ' ')} ${u.name}`}
+                                            {`${String(u.season_no ?? u.id ?? '').padStart(maxIdLen, ' ')} ${u.name}`}
                                         </option>
                                     ))}
                                 </select>
