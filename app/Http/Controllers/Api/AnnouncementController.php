@@ -67,7 +67,7 @@ class AnnouncementController extends Controller
         if (!$ann) return response()->json(['message' => 'not_found'], 404);
 
         $user = Auth::user();
-        if (!$user || $ann->user_id !== $user->id) {
+        if (!$user || ($ann->user_id !== $user->id && !$user->hasRole('システム管理者'))) {
             return response()->json(['message' => 'forbidden'], 403);
         }
 
@@ -85,7 +85,7 @@ class AnnouncementController extends Controller
         if (!$ann) return response()->json(['message' => 'not_found'], 404);
 
         $user = Auth::user();
-        if (!$user || $ann->user_id !== $user->id) {
+        if (!$user || ($ann->user_id !== $user->id && !$user->hasRole('システム管理者'))) {
             return response()->json(['message' => 'forbidden'], 403);
         }
 
