@@ -158,8 +158,20 @@ Route::middleware(['web', 'auth'])->group(function () {
     });
 
     // アプリ内のアクティブユーザー一覧（入寮・退寮フォーム用）
-    Route::get('/active-users', function () {
+    Route::get('/active-users', function (Request $request) {
         $viewingSeason = \App\Models\Season::viewing();
+        // date が指定された場合は、その日に出勤（day/night）するユーザーのみに絞る
+        $date = $request->query('date');
+        $applyDateFilter = function ($query) use ($date) {
+            if ($date) {
+                $query->whereIn('id', function ($sub) use ($date) {
+                    $sub->select('user_id')
+                        ->from('shifts')
+                        ->where('date', $date)
+                        ->whereIn('shift_type', ['day', 'night']); // leave は除外
+                });
+            }
+        };
         $q = User::where('status', 'active')
             ->orderByRaw('season_no IS NULL')
             ->orderBy('season_no')
@@ -168,8 +180,9 @@ Route::middleware(['web', 'auth'])->group(function () {
         if ($viewingSeason) {
             $q->where('season_id', $viewingSeason->id);
         }
+        $applyDateFilter($q);
         $users = $q->get();
-        if ($users->count() === 0) {
+        if ($users->count() === 0 && !$date) {
             $fallback = User::where('status', 'active')
                 ->orderByRaw('season_no IS NULL')
                 ->orderBy('season_no')

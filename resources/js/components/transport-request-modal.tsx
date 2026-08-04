@@ -58,13 +58,13 @@ export default function TransportRequestModal({ dateIso, trigger, onSuccess }: P
             setUserHasFrom(false);
             (async () => {
                 try {
-                    const res = await axios.get('/api/active-users');
+                    const res = await axios.get('/api/active-users', { params: { date: dateIso } });
                     const list = (res.data && res.data.users) || res.data || [];
-                    type UserShape = { id: number | string; name?: string; has_car?: number | boolean };
+                    type UserShape = { id: number | string; season_no?: number | string | null; name?: string; has_car?: number | boolean };
                     const opts = Array.isArray(list)
                         ? (list as UserShape[])
                               .filter((u) => u && u.id != null && (u.has_car === 0 || u.has_car === false))
-                              .map((u) => ({ label: `${u.id} ${u.name || ''}`, value: Number(u.id) }))
+                              .map((u) => ({ label: `${u.season_no ?? u.id} ${u.name || ''}`, value: Number(u.id) }))
                         : [];
                     setOptions(opts);
                 } catch {
