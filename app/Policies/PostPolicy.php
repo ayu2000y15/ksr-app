@@ -50,12 +50,12 @@ class PostPolicy
     /** Determine whether the user can update the post. */
     public function update(User $user, Post $post)
     {
-        return $user->id === $post->user_id;
+        return $user->id === $post->user_id || $user->hasRole('システム管理者');
     }
 
     /** Determine whether the user can delete the post. */
     public function delete(User $user, Post $post)
     {
-        return $user->id === $post->user_id;
+        return $user->id === $post->user_id || $user->hasRole('システム管理者');
     }
 }
