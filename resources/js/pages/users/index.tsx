@@ -548,6 +548,22 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                                         </div>
                                                     </div>
                                                     <div className="flex">
+                                                        <div className="w-36 text-sm text-muted-foreground">メールアドレス</div>
+                                                        <div className="flex-1 break-all">
+                                                            {user.email ? (
+                                                                <a
+                                                                    href={`mailto:${user.email}`}
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    className="text-indigo-600 hover:underline"
+                                                                >
+                                                                    {user.email}
+                                                                </a>
+                                                            ) : (
+                                                                '—'
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex">
                                                         <div className="w-36 text-sm text-muted-foreground">採用条件</div>
                                                         <div className="flex-1">
                                                             {user.employment_condition === 'dormitory'
@@ -891,6 +907,22 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                                                                 className="text-indigo-600 hover:underline"
                                                                             >
                                                                                 {user.phone_number}
+                                                                            </a>
+                                                                        ) : (
+                                                                            '—'
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex">
+                                                                    <div className="w-36 text-sm text-muted-foreground">メールアドレス</div>
+                                                                    <div className="flex-1 break-all">
+                                                                        {user.email ? (
+                                                                            <a
+                                                                                href={`mailto:${user.email}`}
+                                                                                onClick={(e) => e.stopPropagation()}
+                                                                                className="text-indigo-600 hover:underline"
+                                                                            >
+                                                                                {user.email}
                                                                             </a>
                                                                         ) : (
                                                                             '—'
