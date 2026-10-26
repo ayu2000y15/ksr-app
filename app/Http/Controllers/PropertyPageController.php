@@ -14,11 +14,21 @@ class PropertyPageController extends Controller
     {
         $this->authorize('viewAny', Property::class);
 
+        // 選択中シーズン（セッション or アクティブ）でフィルタリング（物件マスタ管理と同じ条件）
+        $viewingSeason = Season::viewing();
+
         // load properties with their room occupancies and optionally related users
-        $properties = Property::with(['roomOccupancies' => function ($q) {
+        $propertiesQuery = Property::with(['roomOccupancies' => function ($q) {
             // eager-load only relevant related users (checkout/final move-out); single-user relation removed
             $q->with(['checkoutUser', 'finalMoveOutUser'])->orderBy('move_in_date');
-        }])->orderBy('order_column')->orderBy('name')->get();
+        }]);
+        if ($viewingSeason) {
+            $propertiesQuery->where(function ($q) use ($viewingSeason) {
+                $q->where('season_id', $viewingSeason->id)
+                    ->orWhereNull('season_id');
+            });
+        }
+        $properties = $propertiesQuery->orderBy('order_column')->orderBy('name')->get();
 
         // map properties to arrays and add server-controlled display_label used by the frontend
         // Pre-collect all user_ids referenced by occupancies so we can resolve names in one query
@@ -99,7 +109,6 @@ class PropertyPageController extends Controller
             ->toArray();
 
         // send minimal users list (id, name, gender, has_car) so frontend can render icons on initial SSR
-        $viewingSeason = Season::viewing();
         $usersQuery = \App\Models\User::where('status', 'active')->orderBy('position')->orderBy('id');
         if ($viewingSeason) {
             $usersQuery->where('season_id', $viewingSeason->id);
