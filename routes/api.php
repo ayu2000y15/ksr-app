@@ -87,11 +87,61 @@ Route::middleware(['web', 'auth'])->group(function () {
                 'ids.*' => 'required|integer|exists:users,id',
             ]);
 
-            $ids = $data['ids'];
+            $ids = array_map('intval', $data['ids']);
 
             \Illuminate\Support\Facades\DB::transaction(function () use ($ids) {
-                foreach ($ids as $idx => $id) {
-                    \App\Models\User::where('id', $id)->update(['position' => $idx + 1]);
+                // 送信された（表示中の）ユーザーを season_id ごとに分類（送信順を保持）
+                $seasonById = \App\Models\User::whereIn('id', $ids)->pluck('season_id', 'id'); // id => season_id
+
+                $submittedBySeason = [];
+                foreach ($ids as $id) {
+                    $sid = $seasonById[$id] ?? null;
+                    $key = $sid === null ? '__null__' : (string) $sid;
+                    $submittedBySeason[$key][] = $id;
+                }
+
+                foreach ($submittedBySeason as $key => $submittedIds) {
+                    $seasonId = $key === '__null__' ? null : (int) $key;
+
+                    // このシーズンの全ユーザーを「現在の並び順」で取得
+                    $q = \App\Models\User::query();
+                    if ($seasonId === null) {
+                        $q->whereNull('season_id');
+                    } else {
+                        $q->where('season_id', $seasonId);
+                    }
+                    $fullOrder = $q->orderByRaw('season_no IS NULL')
+                        ->orderBy('season_no')
+                        ->orderBy('position')
+                        ->orderBy('id')
+                        ->pluck('id')
+                        ->map(fn ($v) => (int) $v)
+                        ->toArray();
+
+                    // ドラッグ対象ユーザーが占めるスロット位置に、送信された新しい順序を流し込む
+                    // （ページネーションで表示外のユーザーは現在の位置に据え置き）
+                    $submittedSet = array_flip($submittedIds);
+                    $result = $fullOrder;
+                    $slotIndices = [];
+                    foreach ($fullOrder as $i => $uid) {
+                        if (isset($submittedSet[$uid])) {
+                            $slotIndices[] = $i;
+                        }
+                    }
+                    foreach ($slotIndices as $k => $slotIdx) {
+                        $result[$slotIdx] = $submittedIds[$k];
+                    }
+
+                    // 二段階更新で unique(season_id, season_no) の衝突を回避
+                    // Phase 1: 対象シーズンの season_no を一旦 NULL にしてスロットを空ける
+                    \App\Models\User::whereIn('id', $result)->update(['season_no' => null]);
+                    // Phase 2: 表示順に 1..N を採番し、position も揃える
+                    foreach ($result as $idx => $uid) {
+                        \App\Models\User::where('id', $uid)->update([
+                            'season_no' => $idx + 1,
+                            'position' => $idx + 1,
+                        ]);
+                    }
                 }
             });
 

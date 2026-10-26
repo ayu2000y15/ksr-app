@@ -111,6 +111,32 @@ export default function MonthEditor({
         return out;
     }, [currentYear, currentMonth]);
 
+    // 去年の同月同日 (YYYY-MM-DD)
+    const lastYearOf = useCallback((iso: string) => {
+        const [y, m, d] = iso.split('-');
+        return `${Number(y) - 1}-${m}-${d}`;
+    }, []);
+
+    // 去年の日別 昼/夜 出勤人数（出勤数フッターの参考値）
+    const [lastYearCounts, setLastYearCounts] = useState<Record<string, { day: number; night: number }>>({});
+    useEffect(() => {
+        if (!visibleDays.length) return;
+        let cancelled = false;
+        const from = lastYearOf(visibleDays[0]);
+        const to = lastYearOf(visibleDays[visibleDays.length - 1]);
+        axios
+            .get('/shifts/attendance-counts', { params: { from, to } })
+            .then((res) => {
+                if (!cancelled) setLastYearCounts((res.data && res.data.counts) || {});
+            })
+            .catch(() => {
+                if (!cancelled) setLastYearCounts({});
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [visibleDays, lastYearOf]);
+
     // state grid: userId -> date -> value
     const buildInitialGrid = useCallback(
         (dayList: string[]) => {
@@ -1158,12 +1184,14 @@ export default function MonthEditor({
                                             const v = grid[numericUid]?.[d] ?? '';
                                             return acc + (v === 'night' ? 1 : 0);
                                         }, 0);
+                                        const lyDate = lastYearOf(d);
+                                        const ly = lastYearCounts[lyDate] || { day: 0, night: 0 };
                                         return (
                                             <div
                                                 key={d}
                                                 className="flex h-full w-12 flex-shrink-0 items-center justify-center border-r p-1 text-center"
                                             >
-                                                <div className="flex flex-col items-center gap-1">
+                                                <div className="flex flex-col items-center gap-0.5">
                                                     <div className="text-[11px]">
                                                         <span className="inline-block rounded bg-yellow-100 px-1 py-0.5 text-black">
                                                             昼 {dayCount}
@@ -1174,6 +1202,14 @@ export default function MonthEditor({
                                                             夜 {nightCount}
                                                         </span>
                                                     </div>
+                                                    <Link
+                                                        href={`/shifts/daily?date=${lyDate}`}
+                                                        title={`${lyDate} の日間タイムライン（昨年参考）`}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        className="text-[9px] leading-tight text-indigo-600 underline hover:text-indigo-800"
+                                                    >
+                                                        昨 {ly.day}/{ly.night}
+                                                    </Link>
                                                 </div>
                                             </div>
                                         );

@@ -105,7 +105,7 @@ export default function TasksCalendarPage() {
     const taskPerm = pageProps?.permissions?.task ?? { view: false, create: false, update: false, delete: false };
 
     // 編集フォーム用 state
-    const [users, setUsers] = useState<{ id: number; name: string }[]>([]);
+    const [users, setUsers] = useState<{ id: number; name: string; season_no?: number | null }[]>([]);
     const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
     const [availableRoles, setAvailableRoles] = useState<{ id: number; name: string }[]>([]);
     // 祝日: サーバから取得するマップ (YYYY-MM-DD -> 名前)
@@ -998,7 +998,7 @@ export default function TasksCalendarPage() {
                                     担当者 <span className="ml-1 text-sm text-gray-400"></span>
                                 </Label>
                                 <MultiSelectCombobox
-                                    options={users.map((u) => ({ value: u.id, label: `${u.id} ${u.name}` }))}
+                                    options={users.map((u) => ({ value: u.id, label: `${u.season_no ?? u.id} ${u.name}` }))}
                                     selected={editForm.user_ids}
                                     onChange={(vals) => setEditForm({ ...editForm, user_ids: vals })}
                                 />
@@ -1229,7 +1229,7 @@ export default function TasksCalendarPage() {
                         <div>
                             <Label>担当者</Label>
                             <MultiSelectCombobox
-                                options={users.map((u) => ({ value: u.id, label: `${u.id} ${u.name}` }))}
+                                options={users.map((u) => ({ value: u.id, label: `${u.season_no ?? u.id} ${u.name}` }))}
                                 selected={editForm.user_ids}
                                 onChange={(vals) => setEditForm({ ...editForm, user_ids: vals })}
                             />

@@ -153,6 +153,9 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
     // 専用の日間タイムラインページ（クエリ or param で日付指定）
     Route::get('/shifts/daily', [App\Http\Controllers\ShiftController::class, 'daily'])->name('shifts.daily');
 
+    // 日別の昼/夜 出勤人数（昨年参考カレンダー用, JSON）
+    Route::get('/shifts/attendance-counts', [App\Http\Controllers\ShiftController::class, 'attendanceCounts'])->name('shifts.attendance_counts');
+
     // CSV エクスポート（期間指定）
     Route::get('/shifts/export-csv', [App\Http\Controllers\ShiftController::class, 'exportCsv'])->name('shifts.export-csv');
 

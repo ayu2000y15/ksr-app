@@ -116,6 +116,58 @@ class ShiftController extends Controller
     }
 
     /**
+     * 指定月の日別「昼/夜」出勤人数を返す（昨年参考カレンダー用）。
+     * Accepts ?month=YYYY-MM(-DD) and returns per-date day/night counts + holidays.
+     * シーズンに関わらず、その月に存在する全シフトを集計する（過去実績の参考値）。
+     */
+    public function attendanceCounts(Request $request)
+    {
+        if (Auth::user()->hasRole('システム管理者')) {
+            // システム管理者は全て閲覧可
+        } else {
+            $this->authorize('viewAny', Shift::class);
+        }
+
+        // 期間は from/to（日付範囲）優先。無ければ month（その月の月初〜月末）。
+        if ($request->filled('from') && $request->filled('to')) {
+            $rangeStart = Carbon::parse($request->get('from'))->toDateString();
+            $rangeEnd = Carbon::parse($request->get('to'))->toDateString();
+        } else {
+            $month = $request->get('month') ? Carbon::parse($request->get('month')) : Carbon::now();
+            $rangeStart = $month->copy()->startOfMonth()->toDateString();
+            $rangeEnd = $month->copy()->endOfMonth()->toDateString();
+        }
+
+        $rows = Shift::query()
+            ->whereBetween('date', [$rangeStart, $rangeEnd])
+            ->whereIn('shift_type', ['day', 'night'])
+            ->selectRaw('DATE(date) as d, shift_type, COUNT(*) as cnt')
+            ->groupBy('d', 'shift_type')
+            ->get();
+
+        $counts = [];
+        foreach ($rows as $r) {
+            $d = Carbon::parse($r->d)->toDateString();
+            if (!isset($counts[$d])) {
+                $counts[$d] = ['day' => 0, 'night' => 0];
+            }
+            $counts[$d][$r->shift_type] = (int) $r->cnt;
+        }
+
+        $holidays = Holiday::whereBetween('date', [$rangeStart, $rangeEnd])
+            ->get(['date', 'name'])
+            ->map(fn ($h) => ['date' => Carbon::parse($h->date)->toDateString(), 'name' => $h->name])
+            ->values();
+
+        return response()->json([
+            'from' => $rangeStart,
+            'to' => $rangeEnd,
+            'counts' => $counts,
+            'holidays' => $holidays,
+        ]);
+    }
+
+    /**
      * Return a dedicated daily timeline page for a single date.
      * Accepts ?date=YYYY-MM-DD and returns shiftDetails filtered to that date.
      */

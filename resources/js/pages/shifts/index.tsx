@@ -1,5 +1,6 @@
 import HeadingSmall from '@/components/heading-small';
 import MonthEditor from '@/components/shifts/month-editor';
+import ReferenceCalendar from '@/components/shifts/reference-calendar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -58,6 +59,7 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
     const [shifts, setShifts] = useState(() => initialShifts?.data ?? []);
     const [nextPageUrl, setNextPageUrl] = useState(() => initialShifts?.next_page_url ?? null);
     const [loading, setLoading] = useState(false);
+    const [refOpen, setRefOpen] = useState(false);
 
     useEffect(() => {
         setShifts(initialShifts?.data ?? []);
@@ -94,6 +96,22 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
 
     const page = usePage();
     const { permissions } = page.props as any;
+    // 現在エディタで表示中の月の「去年の同月」(YYYY-MM-01)。昨年参考カレンダーの初期表示に使う
+    const lastYearMonthIso = useMemo(() => {
+        const serverMonth = (page.props as any).queryParams?.month as string | undefined;
+        let year: number;
+        let month: number; // 0-based
+        if (serverMonth && typeof serverMonth === 'string') {
+            const parts = serverMonth.split('-').map((p) => parseInt(p, 10));
+            year = Number.isNaN(parts[0]) ? new Date().getFullYear() : parts[0];
+            month = Number.isNaN(parts[1]) ? new Date().getMonth() : parts[1] - 1;
+        } else {
+            const now = new Date();
+            year = now.getFullYear();
+            month = now.getMonth();
+        }
+        return `${year - 1}-${String(month + 1).padStart(2, '0')}-01`;
+    }, [page.props]);
     const upcomingApplications = useMemo(() => {
         try {
             return ((page.props as any).upcomingApplications as any[]) || [];
@@ -343,6 +361,10 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                             </Button>
                         </div>
 
+                        <Button aria-label="昨年参考" variant="outline" onClick={() => setRefOpen(true)}>
+                            昨年参考
+                        </Button>
+
                         <Button
                             aria-label="ユーザー別統計"
                             variant="outline"
@@ -358,6 +380,8 @@ export default function Index({ shifts: initialShifts, queryParams = {} }: PageP
                         </Button>
                     </div>
                 </div>
+
+                <ReferenceCalendar open={refOpen} onClose={() => setRefOpen(false)} initialMonthIso={lastYearMonthIso} />
                 {/* 月間エディタ（表形式） */}
                 {page.props.users && (
                     <MonthEditor

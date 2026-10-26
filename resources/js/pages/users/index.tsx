@@ -803,7 +803,8 @@ export default function Index({ users: initialUsers, queryParams = {} }: any) {
                                                     old.splice(toIndex, 0, moved);
 
                                                     // Optimistically update UI
-                                                    const reordered = old.map((u, i) => ({ ...u, position: i + 1 }));
+                                                    // 表示ID(season_no)も並び順に合わせて即時振り直す（サーバー側と同じ採番）
+                                                    const reordered = old.map((u, i) => ({ ...u, position: i + 1, season_no: i + 1 }));
                                                     setUsers(reordered);
 
                                                     // send updated order to server (ids array)
