@@ -904,12 +904,14 @@ class UserController extends Controller
         }
 
         try {
+            // 貸出(rentals)は外部キーにより自動処理される:
+            //   ・本人(user_id)の貸出記録は一緒に削除(cascade)
+            //   ・対応者(rental_user_id)/返却対応者(return_user_id)は null 化
             $user->delete();
         } catch (QueryException $e) {
-            // 外部キー制約（貸出記録など、ON DELETE RESTRICT で参照されているデータがある場合）
-            // により削除できないときは 500 ではなく分かりやすいエラーを返す。
+            // 想定外の外部キー制約で削除できない場合は 500 ではなく分かりやすいエラーを返す。
             if ($e->getCode() === '23000') {
-                return Redirect::back()->with('error', 'このユーザーは貸出記録などの関連データで参照されているため削除できません。関連データを削除・付け替えてから再度お試しください。退職扱いにする場合はステータスを変更してください。');
+                return Redirect::back()->with('error', 'このユーザーは他のデータから参照されているため削除できません。退職扱いにする場合はステータスを変更してください。');
             }
             throw $e;
         }
