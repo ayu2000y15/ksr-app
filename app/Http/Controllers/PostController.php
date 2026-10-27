@@ -118,7 +118,9 @@ class PostController extends Controller
             });
         }
 
-        $posts = $query->paginate(15);
+        // withQueryString() でフィルタ・ソート等のクエリパラメータを next_page_url に引き継ぐ
+        // （これが無いと「もっとみる」で絞り込みが外れて別条件の投稿を取得してしまう）
+        $posts = $query->paginate(15)->withQueryString();
 
         // 各投稿に対して、現在のユーザーが閲覧記録を持っているかを示す単純な真偽値フラグを付与する
         $posts->getCollection()->transform(function ($post) use ($user) {
