@@ -17,6 +17,7 @@ use App\Mail\TemporaryCredentialsMail;
 use Illuminate\Validation\Rules;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Database\QueryException;
 use Carbon\Carbon;
 
 class UserController extends Controller
@@ -901,7 +902,17 @@ class UserController extends Controller
         } else {
             $this->authorize('delete', $user);
         }
-        $user->delete();
+
+        try {
+            $user->delete();
+        } catch (QueryException $e) {
+            // 外部キー制約（貸出記録など、ON DELETE RESTRICT で参照されているデータがある場合）
+            // により削除できないときは 500 ではなく分かりやすいエラーを返す。
+            if ($e->getCode() === '23000') {
+                return Redirect::back()->with('error', 'このユーザーは貸出記録などの関連データで参照されているため削除できません。関連データを削除・付け替えてから再度お試しください。退職扱いにする場合はステータスを変更してください。');
+            }
+            throw $e;
+        }
 
         return Redirect::route('users.index')->with('success', 'ユーザーを削除しました。');
     }
