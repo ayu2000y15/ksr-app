@@ -28,8 +28,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // 本番環境で強制的にURLをhttpsにする
-        if (config('app.env') === 'production') {
+        // 本番環境、または APP_URL が https の場合は、生成URL（ページネーションの next_page_url 等）を
+        // 強制的に https にする。これが無いと HTTPS ページから http:// のURLを叩いて Mixed Content でブロックされる。
+        if (config('app.env') === 'production' || str_starts_with((string) config('app.url'), 'https://')) {
             \Illuminate\Support\Facades\URL::forceScheme('https');
         }
         // Note: auth.permissions is now shared from the SharePermissions middleware

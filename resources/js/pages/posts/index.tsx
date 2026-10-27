@@ -245,7 +245,16 @@ export default function PostsIndex() {
     const loadMore = () => {
         if (!nextPageUrl) return;
         setLoading(true);
-        fetch(nextPageUrl, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+        // サーバーが返す next_page_url が http:// の場合、HTTPSページからだと Mixed Content でブロックされる。
+        // 現在のページと同一オリジンの相対URL（path + query）に変換して取得する。
+        let fetchUrl = nextPageUrl;
+        try {
+            const u = new URL(nextPageUrl, window.location.origin);
+            fetchUrl = u.pathname + u.search;
+        } catch {
+            // パース失敗時はそのまま使う
+        }
+        fetch(fetchUrl, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
             .then((r) => r.json())
             .then((payload) => {
                 const newPosts = payload.data || [];
