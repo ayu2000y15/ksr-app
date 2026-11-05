@@ -100,9 +100,19 @@ export default function Index({
     const loadMore = () => {
         if (!nextPageUrl) return;
 
+        // next_page_url が http:// で返るとHTTPSページから叩いて Mixed Content でブロックされるため、
+        // 現在のページと同一オリジンの相対URL（path + query）に変換してから取得する。
+        let fetchUrl = nextPageUrl;
+        try {
+            const u = new URL(nextPageUrl, window.location.origin);
+            fetchUrl = u.pathname + u.search;
+        } catch {
+            // パース失敗時はそのまま使う
+        }
+
         setLoading(true);
         router.get(
-            nextPageUrl,
+            fetchUrl,
             {},
             {
                 preserveState: true,
