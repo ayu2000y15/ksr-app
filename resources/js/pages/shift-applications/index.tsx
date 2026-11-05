@@ -170,6 +170,8 @@ export default function Index({
         leave_request_deadline_days = 14,
         // 各種申請ページの注意書き（HTML、各種設定「その他」ページで編集）
         shift_applications_notice = '',
+        // 当月で既に休暇申請済み（却下以外）の日付 → その日は休暇申請ボタンを押せないようにする
+        userLeaveApplicationDates = [],
         userShiftDates = [],
         userEmploymentCondition = null,
     } = props || {};
@@ -197,6 +199,11 @@ export default function Index({
     const [modalDate, setModalDate] = useState('');
     const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' | 'info' } | null>(null);
     const [localUserLeaves, setLocalUserLeaves] = useState<string[]>(props.userLeaves || []);
+    // 既に休暇申請済み（却下以外）の日付。申請直後にもボタンを無効化できるようローカルで保持。
+    const [localAppliedDates, setLocalAppliedDates] = useState<string[]>(props.userLeaveApplicationDates || []);
+    useEffect(() => {
+        setLocalAppliedDates(props.userLeaveApplicationDates || []);
+    }, [props.userLeaveApplicationDates]);
     // local copy of remaining leave days (null === unlimited)
     const [localRemainingDays, setLocalRemainingDays] = useState<number | null>(() => {
         try {
@@ -362,10 +369,15 @@ export default function Index({
             try {
                 const dateStr = e?.detail?.date;
                 if (!dateStr) return;
-                const d = new Date(dateStr);
-                const isWeekendOrHoliday = isHoliday(d) || d.getDay() === 0 || d.getDay() === 6;
-                setLocalUserLeaves((prev) => (prev.includes(dateStr) ? prev : [...prev, dateStr]));
-                if (!isWeekendOrHoliday) setLocalRemainingDays((prev) => (prev === null ? null : prev - 1));
+                // 休暇申請は承認制のため「休」表示は行わない（承認時に実際の休が入る）。
+                // 申請済みの日としてボタンを無効化し、残りの休暇（＝申請日数ベース）を1減らす（土日祝は除く）。
+                const alreadyApplied = localAppliedDates.includes(dateStr);
+                setLocalAppliedDates((prev) => (prev.includes(dateStr) ? prev : [...prev, dateStr]));
+                if (!alreadyApplied) {
+                    const d = new Date(dateStr);
+                    const isWeekendOrHoliday = isHoliday(d) || d.getDay() === 0 || d.getDay() === 6;
+                    if (!isWeekendOrHoliday) setLocalRemainingDays((prev) => (prev === null ? null : Math.max(0, prev - 1)));
+                }
             } catch {
                 // ignore
             }
@@ -374,7 +386,7 @@ export default function Index({
         return () => {
             if (typeof window !== 'undefined') window.removeEventListener('leave:created', handler as EventListener);
         };
-    }, [isHoliday]);
+    }, [isHoliday, localAppliedDates]);
 
     return (
         <AppSidebarLayout breadcrumbs={breadcrumbs}>
@@ -556,6 +568,8 @@ export default function Index({
                                         typeof leave_request_deadline_days === 'number' ? leave_request_deadline_days : 14;
                                     const showLeaveRequestBtn =
                                         leaveRequestDeadlineDays <= 0 ? true : daysUntil >= leaveRequestDeadlineDays;
+                                    // その日に既に休暇申請済み（却下以外）なら、休暇申請ボタンは押せないようにする
+                                    const alreadyAppliedLeave = (localAppliedDates || []).includes(iso);
                                     if (isToday) rowBg = 'bg-green-100';
                                     // show time only when NOT marked as leave. Calculation moved after shift detection to consider deadline window.
 
@@ -803,7 +817,9 @@ export default function Index({
                                                                                 {showLeaveRequestBtn ? (
                                                                                     <Button
                                                                                         size="sm"
-                                                                                        className="bg-green-600 text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500"
+                                                                                        disabled={alreadyAppliedLeave}
+                                                                                        title={alreadyAppliedLeave ? '既にこの日は休暇申請済みです' : undefined}
+                                                                                        className="bg-green-600 text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500 disabled:cursor-not-allowed disabled:opacity-60"
                                                                                         onClick={() => {
                                                                                             if (
                                                                                                 localRemainingDays !== null &&
@@ -835,7 +851,9 @@ export default function Index({
                                                                     return (
                                                                         <Button
                                                                             size="sm"
-                                                                            className="bg-green-600 text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500"
+                                                                            disabled={alreadyAppliedLeave}
+                                                                            title={alreadyAppliedLeave ? '既にこの日は休暇申請済みです' : undefined}
+                                                                            className="bg-green-600 text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500 disabled:cursor-not-allowed disabled:opacity-60"
                                                                             onClick={() => {
                                                                                 if (localRemainingDays !== null && localRemainingDays <= 0) {
                                                                                     setToast({
@@ -1074,8 +1092,17 @@ export default function Index({
                                                                                 {showLeaveRequestBtn ? (
                                                                                     <Button
                                                                                         size="sm"
-                                                                                        className="bg-green-600 text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500"
+                                                                                        disabled={alreadyAppliedLeave}
+                                                                                        title={alreadyAppliedLeave ? '既にこの日は休暇申請済みです' : undefined}
+                                                                                        className="bg-green-600 text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500 disabled:cursor-not-allowed disabled:opacity-60"
                                                                                         onClick={() => {
+                                                                                            if (localRemainingDays !== null && localRemainingDays <= 0) {
+                                                                                                setToast({
+                                                                                                    message: '残りの休暇が不足しているため申請できません。',
+                                                                                                    type: 'error',
+                                                                                                });
+                                                                                                return;
+                                                                                            }
                                                                                             setModalDate(iso);
                                                                                             setModalOpen(true);
                                                                                         }}
@@ -1094,8 +1121,17 @@ export default function Index({
                                                                     return (
                                                                         <Button
                                                                             size="sm"
-                                                                            className="bg-green-600 text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500"
+                                                                            disabled={alreadyAppliedLeave}
+                                                                            title={alreadyAppliedLeave ? '既にこの日は休暇申請済みです' : undefined}
+                                                                            className="bg-green-600 text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500 disabled:cursor-not-allowed disabled:opacity-60"
                                                                             onClick={() => {
+                                                                                if (localRemainingDays !== null && localRemainingDays <= 0) {
+                                                                                    setToast({
+                                                                                        message: '残りの休暇が不足しているため申請できません。',
+                                                                                        type: 'error',
+                                                                                    });
+                                                                                    return;
+                                                                                }
                                                                                 setModalDate(iso);
                                                                                 setModalOpen(true);
                                                                             }}

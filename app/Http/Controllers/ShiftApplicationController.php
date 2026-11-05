@@ -55,14 +55,17 @@ class ShiftApplicationController extends Controller
         $setting = UserShiftSetting::where('user_id', $user->id)->first();
         $monthlyLimit = $setting ? (int) $setting->monthly_leave_limit : 0; // 0 => unlimited
 
-        // Count used leave days excluding weekends and declared holidays
-        $leaveDates = Shift::where('user_id', $user->id)
-            ->where('shift_type', 'leave')
+        // 「残りの休暇」は休暇申請の日数でカウントする（却下以外の休暇申請＝pending/approved）。
+        // 承認済みの休シフトは申請から作られるため、申請を数えれば二重計上にならない。
+        $leaveDates = ShiftApplication::where('user_id', $user->id)
+            ->where('type', 'leave')
+            ->where('status', '!=', 'rejected')
             ->whereBetween('date', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
             ->pluck('date')
             ->map(function ($d) {
                 return Carbon::parse($d)->toDateString();
             })
+            ->unique()
             ->toArray();
 
         // filter out weekend days (Sat=6, Sun=0) and holidays
@@ -93,6 +96,17 @@ class ShiftApplicationController extends Controller
         $shiftApplicationsNotice = $shiftSetting && $shiftSetting->shift_applications_notice !== null && $shiftSetting->shift_applications_notice !== ''
             ? $shiftSetting->shift_applications_notice
             : \App\Http\Controllers\OtherSettingController::DEFAULT_SHIFT_APPLICATIONS_NOTICE;
+
+        // 当月で、ログインユーザーが既に休暇申請している日付（却下以外）。
+        // これらの日は休暇申請ボタンを押せないようにする。
+        $userLeaveApplicationDates = ShiftApplication::where('user_id', $user->id)
+            ->where('type', 'leave')
+            ->where('status', '!=', 'rejected')
+            ->whereBetween('date', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
+            ->pluck('date')
+            ->map(function ($d) {
+                return Carbon::parse($d)->toDateString();
+            })->toArray();
 
         // collect current user's leave dates in the month for calendar marking
         $userLeaves = Shift::where('user_id', $user->id)->where('shift_type', 'leave')
@@ -157,6 +171,7 @@ class ShiftApplicationController extends Controller
             'application_deadline_days' => $deadlineDays,
             'leave_request_deadline_days' => $leaveRequestDeadlineDays,
             'shift_applications_notice' => $shiftApplicationsNotice,
+            'userLeaveApplicationDates' => $userLeaveApplicationDates,
             'userLeaves' => $userLeaves,
             'userShiftDates' => $userShiftDates,
             'shiftDetails' => $shiftDetails,
@@ -205,6 +220,62 @@ class ShiftApplicationController extends Controller
 
         if ($target->lt($today)) {
             return Redirect::back()->withErrors(['date' => '過去の日付には申請できません。'])->withInput();
+        }
+
+        // 二重申請の防止: 同じユーザー・同じ日付で、却下以外の休暇申請が既にあれば受け付けない。
+        $applicationType = $data['type'] ?? null;
+        if ($applicationType === 'leave' || $applicationType === null) {
+            $exists = ShiftApplication::where('user_id', $data['user_id'])
+                ->where('type', 'leave')
+                ->where('status', '!=', 'rejected')
+                ->whereRaw('date(date) = ?', [$targetDateString])
+                ->exists();
+            if ($exists) {
+                return Redirect::back()->withErrors(['date' => 'この日は既に休暇申請済みです。'])->withInput();
+            }
+
+            // 残りの休暇（月の上限）を超える申請はできない。
+            // 上限は UserShiftSetting.monthly_leave_limit（0 は無制限）。土日祝はカウントしない。
+            $setting = UserShiftSetting::where('user_id', $data['user_id'])->first();
+            $monthlyLimit = $setting ? (int) $setting->monthly_leave_limit : 0;
+            if ($monthlyLimit > 0) {
+                $targetCarbon = Carbon::createFromFormat('Y-m-d', $targetDateString);
+                $monthStart = $targetCarbon->copy()->startOfMonth();
+                $monthEnd = $targetCarbon->copy()->endOfMonth();
+
+                // 対象月の祝日
+                $monthHolidays = Holiday::whereBetween('date', [$monthStart, $monthEnd])
+                    ->pluck('date')
+                    ->map(function ($d) {
+                        return Carbon::parse($d)->toDateString();
+                    })
+                    ->toArray();
+
+                $isCountedDay = function ($dateStr) use ($monthHolidays) {
+                    $dow = (int) Carbon::createFromFormat('Y-m-d', $dateStr)->dayOfWeek; // 0=Sun,6=Sat
+                    if ($dow === 0 || $dow === 6) return false;
+                    if (in_array($dateStr, $monthHolidays)) return false;
+                    return true;
+                };
+
+                // 既存の却下以外の休暇申請日（対象月、重複除外、土日祝除外）
+                $usedCount = ShiftApplication::where('user_id', $data['user_id'])
+                    ->where('type', 'leave')
+                    ->where('status', '!=', 'rejected')
+                    ->whereBetween('date', [$monthStart, $monthEnd])
+                    ->pluck('date')
+                    ->map(function ($d) {
+                        return Carbon::parse($d)->toDateString();
+                    })
+                    ->unique()
+                    ->filter($isCountedDay)
+                    ->count();
+
+                // 新しい対象日がカウント対象（平日かつ非祝日）で、既に上限に達している場合はブロック
+                if ($isCountedDay($targetDateString) && $usedCount >= $monthlyLimit) {
+                    return Redirect::back()->withErrors(['date' => '残りの休暇が不足しているため申請できません。'])->withInput();
+                }
+            }
         }
 
         $data['status'] = 'pending';
