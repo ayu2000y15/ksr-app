@@ -34,10 +34,12 @@ class ShiftApplicationController extends Controller
             $sort = 'date';
         }
 
+        // 「休暇申請一覧」は休暇申請のみ表示するため、サーバー側で type='leave' に絞り込む。
+        // （全種類を返すと中抜け・食券不要などがページを埋め、過去の休暇申請が後ろのページに押し出されてしまう）
         if (Auth::user()->hasRole('システム管理者')) {
-            $applications = ShiftApplication::with('user')->orderBy($sort, $direction)->simplePaginate(50)->withQueryString();
+            $applications = ShiftApplication::with('user')->where('type', 'leave')->orderBy($sort, $direction)->simplePaginate(50)->withQueryString();
         } else {
-            $applications = ShiftApplication::with('user')->where('user_id', $user->id)->orderBy($sort, $direction)->simplePaginate(50)->withQueryString();
+            $applications = ShiftApplication::with('user')->where('user_id', $user->id)->where('type', 'leave')->orderBy($sort, $direction)->simplePaginate(50)->withQueryString();
         }
 
         // holidays in the month
