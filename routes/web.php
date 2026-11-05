@@ -122,6 +122,10 @@ Route::middleware(['auth', EnsureNotRetired::class, EnsurePasswordChanged::class
     Route::inertia('/admin/role-permissions', 'admin/role-permissions')->name('admin.role-permissions');
     Route::inertia('/admin/user-roles', 'admin/user-roles')->name('admin.user-roles');
 
+    // --- 管理: その他設定（グローバル設定） ---
+    Route::get('/admin/other-settings', [App\Http\Controllers\OtherSettingController::class, 'index'])->name('admin.other-settings.index');
+    Route::patch('/admin/other-settings', [App\Http\Controllers\OtherSettingController::class, 'update'])->name('admin.other-settings.update');
+
     // --- シーズン切り替え（全認証ユーザー向け） ---
     Route::post('/season/switch', [App\Http\Controllers\SeasonSwitchController::class, 'store'])->name('season.switch');
 

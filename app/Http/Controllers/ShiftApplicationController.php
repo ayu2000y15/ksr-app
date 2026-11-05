@@ -82,6 +82,16 @@ class ShiftApplicationController extends Controller
 
         $deadlineDays = (int) config('shift.application_deadline_days', 0);
 
+        // 休暇申請ボタンを表示する日数（対象日の N 日前まで表示）。
+        // 各種設定の「その他」ページ（shift_settings.apply_deadline_days）で編集可能。未設定時は 14。
+        $shiftSetting = \App\Models\ShiftSetting::first();
+        $leaveRequestDeadlineDays = $shiftSetting ? (int) $shiftSetting->apply_deadline_days : 14;
+
+        // 各種申請ページの注意書き（HTML）。「その他」ページで編集可能。未設定時は既定値。
+        $shiftApplicationsNotice = $shiftSetting && $shiftSetting->shift_applications_notice !== null && $shiftSetting->shift_applications_notice !== ''
+            ? $shiftSetting->shift_applications_notice
+            : \App\Http\Controllers\OtherSettingController::DEFAULT_SHIFT_APPLICATIONS_NOTICE;
+
         // collect current user's leave dates in the month for calendar marking
         $userLeaves = Shift::where('user_id', $user->id)->where('shift_type', 'leave')
             ->whereBetween('date', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
@@ -143,6 +153,8 @@ class ShiftApplicationController extends Controller
                 'remaining' => $remaining,
             ],
             'application_deadline_days' => $deadlineDays,
+            'leave_request_deadline_days' => $leaveRequestDeadlineDays,
+            'shift_applications_notice' => $shiftApplicationsNotice,
             'userLeaves' => $userLeaves,
             'userShiftDates' => $userShiftDates,
             'shiftDetails' => $shiftDetails,

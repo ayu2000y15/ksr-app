@@ -62,6 +62,41 @@ export default function Index({
         }
     }, [items]);
 
+    // 「もっと前を見る」: true のとき過去日（今日より前）の申請も表示する
+    const [showPastApplications, setShowPastApplications] = useState(false);
+
+    const parseDayStart = (dateStr: string): number | null => {
+        try {
+            const d = new Date(dateStr);
+            if (isNaN(d.getTime())) return null;
+            return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+        } catch {
+            return null;
+        }
+    };
+
+    // 今日より前の申請が（読み込み済みの中に）存在するか（ボタン表示判定）
+    const hasPastApplications = useMemo(() => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return (leaveItems || []).some((a: any) => {
+            const t = parseDayStart(a?.date);
+            return t !== null && t < today.getTime();
+        });
+    }, [leaveItems]);
+
+    // 既定では当日以降のみ表示。showPastApplications のときは過去日も表示。
+    const visibleLeaveItems = useMemo(() => {
+        if (showPastApplications) return leaveItems;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return (leaveItems || []).filter((a: any) => {
+            const t = parseDayStart(a?.date);
+            // 日付が解釈できないものは念のため表示する
+            return t === null || t >= today.getTime();
+        });
+    }, [leaveItems, showPastApplications]);
+
     const loadMore = () => {
         if (!nextPageUrl) return;
 
@@ -104,6 +139,10 @@ export default function Index({
         holidays = [],
         currentUserLeave = null,
         application_deadline_days = 0,
+        // 休暇申請ボタンを表示する日数（対象日の N 日前まで表示 = daysUntil >= N の間表示）。0 の場合は全期間表示。
+        leave_request_deadline_days = 14,
+        // 各種申請ページの注意書き（HTML、各種設定「その他」ページで編集）
+        shift_applications_notice = '',
         userShiftDates = [],
         userEmploymentCondition = null,
     } = props || {};
@@ -177,13 +216,29 @@ export default function Index({
     const startOfMonth = useMemo(() => new Date(monthDate.getFullYear(), monthDate.getMonth(), 1), [monthDate]);
     const endOfMonth = useMemo(() => new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0), [monthDate]);
 
+    // 「もっと前を見る」: true のとき当日より前（過去日）も表示する
+    const [showPast, setShowPast] = useState(false);
+
+    // この月に過去日（今日より前）が含まれるか（ボタン表示判定に使用）
+    const hasPastDaysInMonth = useMemo(() => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const firstDay = new Date(startOfMonth.getFullYear(), startOfMonth.getMonth(), startOfMonth.getDate());
+        return firstDay.getTime() < today.getTime();
+    }, [startOfMonth]);
+
     const daysInMonth = useMemo(() => {
+        // 当日を過ぎた日付（今日より前）は通常は表示しない。showPast のときは過去日も表示。
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
         const days: Date[] = [];
         for (let d = new Date(startOfMonth); d <= endOfMonth; d.setDate(d.getDate() + 1)) {
+            const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+            if (!showPast && day.getTime() < today.getTime()) continue;
             days.push(new Date(d));
         }
         return days;
-    }, [startOfMonth, endOfMonth]);
+    }, [startOfMonth, endOfMonth, showPast]);
 
     const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
     const pad = (n: number) => String(n).padStart(2, '0');
@@ -272,33 +327,7 @@ export default function Index({
     };
     */
 
-    const postImmediateLeave = async (dateStr: string) => {
-        // call mark-break endpoint to create Shift + ShiftDetail(type=break)
-        if (!authUser) {
-            setToast({ message: 'ログイン情報が取得できません。', type: 'error' });
-            return;
-        }
-        // check remaining locally
-        if (localRemainingDays !== null && localRemainingDays <= 0) {
-            setToast({ message: '残りの休暇が不足しているため登録できません。', type: 'error' });
-            return;
-        }
-        try {
-            await axios.post(route('shifts.mark_break'), { user_id: authUser.id, date: dateStr });
-            // update local leaves so UI reflects change without full reload
-            setLocalUserLeaves((prev) => (prev.includes(dateStr) ? prev : [...prev, dateStr]));
-            // decrement remaining locally if numeric, but skip weekends/holidays
-            try {
-                const d = new Date(dateStr);
-                const isWeekendOrHoliday = isHoliday(d) || d.getDay() === 0 || d.getDay() === 6;
-                if (!isWeekendOrHoliday) setLocalRemainingDays((prev) => (prev === null ? null : prev - 1));
-            } catch {}
-            setToast({ message: '休暇に変更しました。', type: 'success' });
-        } catch (err) {
-            console.error(err);
-            setToast({ message: '休暇に変更できませんでした。', type: 'error' });
-        }
-    };
+    // 休暇登録（即時 mark-break）は廃止し、休暇はすべて休暇申請（承認制）に統一した。
 
     // listen for leave creations from modal and update local state (skip weekends/holidays)
     useEffect(() => {
@@ -349,7 +378,7 @@ export default function Index({
                             ))}
                     </CardHeader>
                     <CardContent>
-                        {!leaveItems || leaveItems.length === 0 ? (
+                        {!visibleLeaveItems || visibleLeaveItems.length === 0 ? (
                             <div className="py-8 text-center text-sm text-muted-foreground">申請がありません</div>
                         ) : (
                             <>
@@ -367,17 +396,20 @@ export default function Index({
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {leaveItems.map((a: any) => (
+                                        {visibleLeaveItems.map((a: any) => (
                                             <TableRow key={a.id} className="hover:bg-gray-50">
                                                 {permissions?.is_system_admin && <TableCell>{a.user ? a.user.name : '—'}</TableCell>}
                                                 <TableCell>
                                                     {(() => {
                                                         try {
                                                             const d = new Date(a.date);
+                                                            const y = d.getFullYear();
                                                             const m = d.getMonth() + 1;
                                                             const dd = d.getDate();
                                                             const jp = ['日', '月', '火', '水', '木', '金', '土'];
-                                                            return `${m}/${dd} (${jp[d.getDay()]})`;
+                                                            // 当年以外（過去の年など）は年も表示して誤認を防ぐ
+                                                            const prefix = y !== new Date().getFullYear() ? `${y}/` : '';
+                                                            return `${prefix}${m}/${dd} (${jp[d.getDay()]})`;
                                                         } catch (e) {
                                                             return a.date || '—';
                                                         }
@@ -405,6 +437,13 @@ export default function Index({
                                     </div>
                                 )}
                             </>
+                        )}
+                        {hasPastApplications && (
+                            <div className="mt-4 flex justify-center">
+                                <Button variant="outline" size="sm" onClick={() => setShowPastApplications((prev) => !prev)}>
+                                    {showPastApplications ? '過去を隠す' : 'もっと前を見る'}
+                                </Button>
+                            </div>
                         )}
                     </CardContent>
                 </Card>
@@ -435,34 +474,31 @@ export default function Index({
                                 {typeof localRemainingDays === 'number' ? `${localRemainingDays}日` : localRemainingDays === null ? '無制限' : '—'}
                             </div>
                             <div className="mt-2 space-y-1">
-                                <div className="rounded border-l-4 border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-900">
-                                    <div>
-                                        ・ <strong className="font-semibold">「残りの休暇」</strong>を超えての登録はできません。
-                                    </div>
-                                    <div className="mt-1">
-                                        ・<strong className="font-semibold">休暇登録</strong>は基本的に{application_deadline_days}
-                                        日前までに行ってください。
-                                    </div>
-                                    <div className="mt-1">
-                                        ・{application_deadline_days}日前を過ぎた場合、既にシフトが登録されている場合は
-                                        <strong className="font-semibold">休暇申請</strong>が行えません。
-                                    </div>
-                                    <div className="mt-1">
-                                        ・土日祝日は基本的に出勤していただきますが、事情がある場合は社員に直接連絡してください。
-                                    </div>
-                                    <div className="mt-1">・その他やむを得ない事情がある場合、社員に直接連絡してください。</div>
-                                    <div className="mt-1">
-                                        ・<strong className="font-semibold">中抜け申請</strong>は前日までに行ってください。当日の申請はできません。
-                                    </div>
-                                    <div className="mt-1">
-                                        ・<strong className="font-semibold">食券不要申請</strong>
-                                        は2日前までに行ってください。それ以降は受け付けません。
-                                    </div>
-                                </div>
+                                <style>{`
+                                    .shift-applications-notice p { margin: 0 0 0.25rem; line-height: 1.4; }
+                                    .shift-applications-notice p:last-child { margin-bottom: 0; }
+                                    .shift-applications-notice strong { font-weight: 700; }
+                                    .shift-applications-notice ul { list-style: disc; padding-left: 1.25rem; margin: 0.25rem 0; }
+                                    .shift-applications-notice ol { list-style: decimal; padding-left: 1.25rem; margin: 0.25rem 0; }
+                                    .shift-applications-notice a { text-decoration: underline; }
+                                `}</style>
+                                {shift_applications_notice && String(shift_applications_notice).trim() !== '' && (
+                                    <div
+                                        className="shift-applications-notice rounded border-l-4 border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-900"
+                                        dangerouslySetInnerHTML={{ __html: shift_applications_notice }}
+                                    />
+                                )}
                             </div>
                         </div>
 
                         <CardContent className="max-h-[70vh] overflow-y-auto">
+                            {hasPastDaysInMonth && (
+                                <div className="mb-2 flex justify-center">
+                                    <Button variant="outline" size="sm" onClick={() => setShowPast((prev) => !prev)}>
+                                        {showPast ? '過去を隠す' : 'もっと前を見る'}
+                                    </Button>
+                                </div>
+                            )}
                             <div className="flex flex-col">
                                 {daysInMonth.map((d) => {
                                     const iso = formatLocalIso(d);
@@ -487,6 +523,12 @@ export default function Index({
                                     const daysUntil = Math.ceil((tDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
                                     // If application_deadline_days == 0, treat as no deadline (always allow immediate registration)
                                     const withinDeadline = application_deadline_days > 0 && daysUntil <= application_deadline_days;
+                                    // 休暇申請ボタンの表示判定: 対象日の N 日前まで（daysUntil >= N）表示。N=0 は全期間表示。
+                                    // （外側で !pastOrToday が担保されているため未来日のみ）
+                                    const leaveRequestDeadlineDays =
+                                        typeof leave_request_deadline_days === 'number' ? leave_request_deadline_days : 14;
+                                    const showLeaveRequestBtn =
+                                        leaveRequestDeadlineDays <= 0 ? true : daysUntil >= leaveRequestDeadlineDays;
                                     if (isToday) rowBg = 'bg-green-100';
                                     // show time only when NOT marked as leave. Calculation moved after shift detection to consider deadline window.
 
@@ -535,7 +577,7 @@ export default function Index({
                                                         // If not pastOrToday, decide actions in this order:
                                                         // 1) If user has a leave already -> show cancel
                                                         // 2) If user has a scheduled shift (出勤日) -> show meal-ticket / 中抜け (regardless of weekend/holiday)
-                                                        // 3) If no shift: if withinDeadline -> show 休暇申請 (申請), else -> show 休暇登録
+                                                        // 3) If no shift: show 休暇申請 only (表示期間内)。休暇登録は廃止。
                                                         if (!pastOrToday) {
                                                             if (isUserLeave) {
                                                                 // Do not show cancel button when the date is within the application deadline window.
@@ -724,14 +766,14 @@ export default function Index({
                                                                                 </Button>
                                                                             )
                                                                         ) : null}
-                                                                        {/* 休暇登録ボタン: シフトが存在しても表示 */}
+                                                                        {/* 休暇申請ボタン: シフトが存在しても表示（表示期間内のみ） */}
                                                                         {(isCommuteUser || (!holiday && dayIndex !== 0 && dayIndex !== 6)) && (
                                                                             <>
                                                                                 {(mealTicketButton ||
                                                                                     (showShiftActionsByDeadline && isStepOut !== undefined)) && (
                                                                                     <div className="w-1" />
                                                                                 )}
-                                                                                {withinDeadline ? (
+                                                                                {showLeaveRequestBtn ? (
                                                                                     <Button
                                                                                         size="sm"
                                                                                         className="bg-green-600 text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500"
@@ -753,10 +795,6 @@ export default function Index({
                                                                                     >
                                                                                         休暇申請
                                                                                     </Button>
-                                                                                ) : canCreate ? (
-                                                                                    <Button size="sm" onClick={() => postImmediateLeave(iso)}>
-                                                                                        休暇登録
-                                                                                    </Button>
                                                                                 ) : null}
                                                                             </>
                                                                         )}
@@ -764,10 +802,9 @@ export default function Index({
                                                                 );
                                                             }
 
-                                                            // No shift exists on this date -> decide between 申請 (withinDeadline) and 登録 (after deadline)
+                                                            // シフト未登録日 -> 休暇申請ボタン（表示期間内のみ）。休暇登録は廃止。
                                                             if (isCommuteUser || (!holiday && dayIndex !== 0 && dayIndex !== 6)) {
-                                                                if (withinDeadline) {
-                                                                    // within deadline window: show 休暇申請
+                                                                if (showLeaveRequestBtn) {
                                                                     return (
                                                                         <Button
                                                                             size="sm"
@@ -789,12 +826,7 @@ export default function Index({
                                                                     );
                                                                 }
 
-                                                                // after deadline: show 休暇登録 (immediate)
-                                                                return canCreate ? (
-                                                                    <Button size="sm" onClick={() => postImmediateLeave(iso)}>
-                                                                        休暇登録
-                                                                    </Button>
-                                                                ) : null;
+                                                                return null;
                                                             }
 
                                                             return null;
@@ -1012,7 +1044,7 @@ export default function Index({
                                                                                     (showShiftActionsByDeadline && isStepOut !== undefined)) && (
                                                                                     <div className="w-1" />
                                                                                 )}
-                                                                                {withinDeadline ? (
+                                                                                {showLeaveRequestBtn ? (
                                                                                     <Button
                                                                                         size="sm"
                                                                                         className="bg-green-600 text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500"
@@ -1023,11 +1055,7 @@ export default function Index({
                                                                                     >
                                                                                         休暇申請
                                                                                     </Button>
-                                                                                ) : (
-                                                                                    <Button size="sm" onClick={() => postImmediateLeave(iso)}>
-                                                                                        休暇登録
-                                                                                    </Button>
-                                                                                )}
+                                                                                ) : null}
                                                                             </>
                                                                         )}
                                                                     </>
@@ -1035,7 +1063,7 @@ export default function Index({
                                                             }
 
                                                             if (isCommuteUser || (!holiday && dayIndex !== 0 && dayIndex !== 6)) {
-                                                                if (withinDeadline) {
+                                                                if (showLeaveRequestBtn) {
                                                                     return (
                                                                         <Button
                                                                             size="sm"
@@ -1050,11 +1078,7 @@ export default function Index({
                                                                     );
                                                                 }
 
-                                                                return canCreate ? (
-                                                                    <Button size="sm" onClick={() => postImmediateLeave(iso)}>
-                                                                        休暇登録
-                                                                    </Button>
-                                                                ) : null;
+                                                                return null;
                                                             }
 
                                                             return null;
