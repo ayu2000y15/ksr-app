@@ -9,7 +9,7 @@ import { BreadcrumbItem, PageProps, PaginatedResponse } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { LoaderCircle, Plus, Trash } from 'lucide-react';
-import { ReactNode, useEffect, useMemo, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: '各種申請', href: route('shift-applications.index') }];
 
@@ -47,10 +47,27 @@ export default function Index({
     const [items, setItems] = useState(initialApplications.data);
     const [nextPageUrl, setNextPageUrl] = useState(initialApplications.next_page_url);
     const [loading, setLoading] = useState(false);
+    // 「もっとみる」による読み込みかどうか（true のときは既存一覧へ追記、false のときは置き換え）
+    const isLoadMore = useRef(false);
 
     useEffect(() => {
-        setItems(initialApplications.data);
-        setNextPageUrl(initialApplications.next_page_url);
+        if (isLoadMore.current) {
+            // もっとみる: 既存の一覧に新しいページ分を追記（id重複は除外）
+            isLoadMore.current = false;
+            setItems((prev) => {
+                const existingIds = new Set((prev || []).map((x: any) => x?.id));
+                const merged = [...(prev || [])];
+                (initialApplications.data || []).forEach((it: any) => {
+                    if (!existingIds.has(it?.id)) merged.push(it);
+                });
+                return merged;
+            });
+            setNextPageUrl(initialApplications.next_page_url);
+        } else {
+            // 月移動・並び替え・初期表示: 一覧を置き換え
+            setItems(initialApplications.data);
+            setNextPageUrl(initialApplications.next_page_url);
+        }
     }, [initialApplications]);
 
     // only show applications of type 'leave' in the vacation list
@@ -111,20 +128,20 @@ export default function Index({
         }
 
         setLoading(true);
+        isLoadMore.current = true;
         router.get(
             fetchUrl,
             {},
             {
                 preserveState: true,
                 preserveScroll: true,
-                onSuccess: (page) => {
-                    const newItems = (page.props.applications as PaginatedResponse<any>).data;
-                    const nextPage = (page.props.applications as PaginatedResponse<any>).next_page_url;
-                    setItems((prev) => [...prev, ...newItems]);
-                    setNextPageUrl(nextPage);
+                only: ['applications'],
+                // 追記処理は initialApplications の変更を見る useEffect 側で行う
+                onSuccess: () => setLoading(false),
+                onError: () => {
+                    isLoadMore.current = false;
                     setLoading(false);
                 },
-                onError: () => setLoading(false),
             },
         );
     };
